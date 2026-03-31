@@ -23,4 +23,13 @@ program
     await runDoctor();
   });
 
+program
+  .command('index')
+  .description('Index a codebase: parse, chunk, embed, and store in LanceDB')
+  .argument('[path]', 'Directory to index (defaults to current directory)')
+  .action(async (path?: string) => {
+    const { runIndex } = await import('../workflows/index.js');
+    await runIndex(path);
+  });
+
 program.parse();
