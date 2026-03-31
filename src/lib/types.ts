@@ -14,3 +14,25 @@ export const CapabilityProfileSchema = z.object({
 });
 
 export type CapabilityProfile = z.infer<typeof CapabilityProfileSchema>;
+
+export const CodeChunkSchema = z.object({
+  id:         z.string(),
+  filePath:   z.string(),
+  chunkType:  z.enum(['function', 'class', 'method', 'file']),
+  scope:      z.string().nullable(),
+  name:       z.string().nullable(),
+  content:    z.string(),
+  startLine:  z.number().int(),
+  endLine:    z.number().int(),
+});
+export type CodeChunk = z.infer<typeof CodeChunkSchema>;
+
+export const IndexStateSchema = z.object({
+  version:        z.literal(1),
+  embeddingModel: z.string(),
+  dimension:      z.number().int(),
+  indexedAt:      z.string().datetime(),
+  fileCount:      z.number().int(),
+  chunkCount:     z.number().int(),
+});
+export type IndexState = z.infer<typeof IndexStateSchema>;

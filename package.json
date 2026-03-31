@@ -12,9 +12,18 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@lancedb/lancedb": "^0.27.1",
+    "apache-arrow": "^18.1.0",
     "commander": "14.0.3",
+    "fast-glob": "^3.3.3",
+    "ignore": "^7.0.5",
     "ollama": "^0.6.3",
     "pino": "^9.0.0",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-typescript": "^0.23.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
