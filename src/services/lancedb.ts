@@ -1,0 +1,147 @@
+import * as lancedb from '@lancedb/lancedb';
+import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow';
+import { join } from 'node:path';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { PROJECT_DATA_DIR } from '../lib/config.js';
+import { childLogger } from './logger.js';
+import type { CodeChunk, IndexState } from '../lib/types.js';
+import { IndexStateSchema } from '../lib/types.js';
+
+const log = childLogger('lancedb');
+
+/**
+ * Builds the Apache Arrow schema for the chunks table.
+ * The vector column is FixedSizeList<Float32> with the given dimension
+ * (768 for nomic-embed-text, 1024 for mxbai-embed-large).
+ */
+export function chunkSchema(dim: number): Schema {
+  return new Schema([
+    new Field('id',         new Utf8(),  false),
+    new Field('file_path',  new Utf8(),  false),
+    new Field('chunk_type', new Utf8(),  false),
+    new Field('scope',      new Utf8(),  true),
+    new Field('name',       new Utf8(),  true),
+    new Field('content',    new Utf8(),  false),
+    new Field('start_line', new Int32(), false),
+    new Field('end_line',   new Int32(), false),
+    new Field('vector',
+      new FixedSizeList(dim, new Field('item', new Float32(), true)),
+      false
+    ),
+  ]);
+}
+
+/**
+ * Opens a LanceDB connection at <projectRoot>/.brain-cache/index.
+ * Creates the .brain-cache directory if it does not exist.
+ */
+export async function openDatabase(projectRoot: string): Promise<lancedb.Connection> {
+  const dataDir = join(projectRoot, PROJECT_DATA_DIR);
+  await mkdir(dataDir, { recursive: true });
+  const dbPath = join(dataDir, 'index');
+  return lancedb.connect(dbPath);
+}
+
+/**
+ * Shape of a row stored in the LanceDB chunks table.
+ * Field names use snake_case to match the Arrow schema column names.
+ */
+export interface ChunkRow {
+  id: string;
+  file_path: string;
+  chunk_type: string;
+  scope: string | null;
+  name: string | null;
+  content: string;
+  start_line: number;
+  end_line: number;
+  vector: number[];
+}
+
+/**
+ * Opens the 'chunks' table if it already exists and its index state matches
+ * the requested model and dimension. If the model or dimension has changed,
+ * the old table is dropped and a fresh one is created.
+ * If the table does not yet exist, it is created with an explicit Arrow schema.
+ *
+ * @param db          - LanceDB connection (opened via openDatabase)
+ * @param projectRoot - Absolute path to the indexed project root (needed to read index_state.json)
+ * @param model       - Embedding model name (e.g. 'nomic-embed-text')
+ * @param dim         - Embedding dimension (768 or 1024)
+ */
+export async function openOrCreateChunkTable(
+  db: lancedb.Connection,
+  projectRoot: string,
+  model: string,
+  dim: number
+): Promise<lancedb.Table> {
+  const tableNames = await db.tableNames();
+
+  if (tableNames.includes('chunks')) {
+    const state = await readIndexState(projectRoot);
+    const mismatch =
+      state === null ||
+      state.embeddingModel !== model ||
+      state.dimension !== dim;
+
+    if (mismatch) {
+      log.warn(
+        { storedModel: state?.embeddingModel, storedDim: state?.dimension, model, dim },
+        'Embedding model or dimension changed — dropping and recreating chunks table'
+      );
+      await db.dropTable('chunks');
+    } else {
+      log.info({ model, dim }, 'Opened existing chunks table');
+      return db.openTable('chunks');
+    }
+  }
+
+  // Create new table with explicit Arrow schema
+  const schema = chunkSchema(dim);
+  const emptyData = lancedb.makeArrowTable([], { schema });
+  const table = await db.createTable('chunks', emptyData, { mode: 'overwrite' });
+  log.info({ model, dim }, 'Created new chunks table');
+  return table;
+}
+
+/**
+ * Inserts a batch of chunk rows into the LanceDB table.
+ * No-ops if rows is empty.
+ */
+export async function insertChunks(table: lancedb.Table, rows: ChunkRow[]): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+  await table.add(rows);
+  log.debug({ count: rows.length }, 'Inserted chunk rows');
+}
+
+/**
+ * Reads and validates the index state JSON file from
+ * <projectRoot>/.brain-cache/index_state.json.
+ * Returns null if the file is missing or invalid.
+ */
+export async function readIndexState(projectRoot: string): Promise<IndexState | null> {
+  const statePath = join(projectRoot, PROJECT_DATA_DIR, 'index_state.json');
+  try {
+    const raw = await readFile(statePath, 'utf-8');
+    const parsed = IndexStateSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Writes the index state to <projectRoot>/.brain-cache/index_state.json.
+ * Creates the directory if it does not exist.
+ */
+export async function writeIndexState(projectRoot: string, state: IndexState): Promise<void> {
+  const dataDir = join(projectRoot, PROJECT_DATA_DIR);
+  await mkdir(dataDir, { recursive: true });
+  const statePath = join(dataDir, 'index_state.json');
+  await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+// Re-export CodeChunk for consumers of this module that only import from lancedb.ts
+export type { CodeChunk };
