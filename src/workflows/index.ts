@@ -1,2 +1,3 @@
 // Workflows barrel export
-export {};
+export { runInit } from './init.js';
+export { runDoctor } from './doctor.js';
