@@ -2,3 +2,5 @@
 node_modules/
 dist/
 .brain-cache/
+.claude/
+.devcontainer/
