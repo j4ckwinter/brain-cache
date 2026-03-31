@@ -44,23 +44,14 @@ describe('embedBatch', () => {
   });
 
   it('rejects after EMBED_TIMEOUT_MS when ollama.embed never resolves', async () => {
-    // Mock ollama.embed to never resolve
+    // Use a real short timeout (1ms) rather than fake timers to avoid
+    // vitest fake-timer PromiseRejectionHandledWarning edge case
     mockOllama.embed.mockImplementation(
-      () => new Promise(() => {}) // never resolves
+      () => new Promise<never>(() => {}) // never resolves
     );
 
-    // Override EMBED_TIMEOUT_MS by importing with short timeout
-    // We test the timeout logic by using fake timers
-    vi.useFakeTimers();
-
-    const embedPromise = embedBatch('nomic-embed-text', ['text'], 100); // 100ms timeout override
-
-    // Advance time past the timeout
-    await vi.advanceTimersByTimeAsync(200);
-
-    await expect(embedPromise).rejects.toThrow(/timeout/i);
-
-    vi.useRealTimers();
+    // Pass 1ms timeout — in real time this will fire almost immediately
+    await expect(embedBatch('nomic-embed-text', ['text'], 1)).rejects.toThrow(/timeout/i);
   });
 });
 
@@ -113,17 +104,23 @@ describe('embedBatchWithRetry', () => {
   });
 
   it('throws on second failure (no infinite retry)', async () => {
+    vi.useFakeTimers();
+
     const connectionError = new Error('ECONNRESET');
 
     mockOllama.embed
       .mockRejectedValueOnce(connectionError)
       .mockRejectedValueOnce(connectionError);
 
-    vi.useFakeTimers();
-    const resultPromise = embedBatchWithRetry('nomic-embed-text', ['hello']);
+    // Use catch to consume the rejection before asserting
+    let caughtError: Error | undefined;
+    const resultPromise = embedBatchWithRetry('nomic-embed-text', ['hello']).catch((e) => {
+      caughtError = e;
+    });
     await vi.advanceTimersByTimeAsync(6000);
+    await resultPromise;
 
-    await expect(resultPromise).rejects.toThrow('ECONNRESET');
+    expect(caughtError?.message).toBe('ECONNRESET');
     expect(mockOllama.embed).toHaveBeenCalledTimes(2);
   });
 
