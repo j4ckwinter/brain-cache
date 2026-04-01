@@ -42,7 +42,6 @@ describe('runStatus', () => {
   let stdoutOutput: string[];
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
   let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     stderrOutput = [];
@@ -55,9 +54,6 @@ describe('runStatus', () => {
     stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation((data: unknown) => {
       stdoutOutput.push(String(data));
       return true;
-    });
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: unknown) => {
-      throw new Error(`process.exit(${_code})`);
     });
 
     // Default happy path
@@ -82,22 +78,14 @@ describe('runStatus', () => {
     expect(combined).toContain('mxbai-embed-large'); // embeddingModel
   });
 
-  it('prints "No profile found" and exits 1 when no profile', async () => {
+  it('throws with "No profile found" message when no profile', async () => {
     mockReadProfile.mockResolvedValue(null);
-    await expect(runStatus()).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-    const combined = stderrOutput.join('');
-    expect(combined).toContain("No profile found");
-    expect(combined).toContain("brain-cache init");
+    await expect(runStatus()).rejects.toThrow("No profile found. Run 'brain-cache init' first.");
   });
 
-  it('prints "No index found" with actionable message and exits 1 when profile exists but no index', async () => {
+  it('throws with "No index found" message when profile exists but no index', async () => {
     mockReadIndexState.mockResolvedValue(null);
-    await expect(runStatus()).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-    const combined = stderrOutput.join('');
-    expect(combined).toContain("No index found");
-    expect(combined).toContain("brain-cache index");
+    await expect(runStatus()).rejects.toThrow("No index found");
   });
 
   it('prints VRAM tier from profile', async () => {

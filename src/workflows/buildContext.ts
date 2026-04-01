@@ -27,37 +27,27 @@ export async function runBuildContext(
   // 1. Read profile
   const profile = await readProfile();
   if (profile === null) {
-    process.stderr.write("No profile found. Run 'brain-cache init' first.\n");
-    process.exit(1);
+    throw new Error("No profile found. Run 'brain-cache init' first.");
   }
 
   // 2. Check Ollama
   const running = await isOllamaRunning();
   if (!running) {
-    process.stderr.write(
-      "Error: Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.\n"
-    );
-    process.exit(1);
+    throw new Error("Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.");
   }
 
   // 3. Resolve project root and read index state
   const rootDir = resolve(opts?.path ?? '.');
   const indexState = await readIndexState(rootDir);
   if (indexState === null) {
-    process.stderr.write(
-      `Error: No index found at ${rootDir}. Run 'brain-cache index' first.\n`
-    );
-    process.exit(1);
+    throw new Error(`No index found at ${rootDir}. Run 'brain-cache index' first.`);
   }
 
   // 4. Open database and table
   const db = await openDatabase(rootDir);
   const tableNames = await db.tableNames();
   if (!tableNames.includes('chunks')) {
-    process.stderr.write(
-      `Error: No chunks table found. Run 'brain-cache index' first.\n`
-    );
-    process.exit(1);
+    throw new Error("No chunks table found. Run 'brain-cache index' first.");
   }
   const table = await db.openTable('chunks');
 

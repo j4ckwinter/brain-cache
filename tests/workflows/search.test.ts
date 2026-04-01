@@ -97,7 +97,6 @@ describe('runSearch', () => {
   let stdoutOutput: string[];
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
   let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     stderrOutput = [];
@@ -110,9 +109,6 @@ describe('runSearch', () => {
     stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation((data: unknown) => {
       stdoutOutput.push(String(data));
       return true;
-    });
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: unknown) => {
-      throw new Error(`process.exit(${code})`);
     });
 
     // Happy path defaults
@@ -197,32 +193,19 @@ describe('runSearch', () => {
     expect(stdoutWriteSpy).not.toHaveBeenCalled();
   });
 
-  it('exits with code 1 when no profile found', async () => {
+  it('throws when no profile found', async () => {
     mockReadProfile.mockResolvedValue(null);
-    await expect(runSearch('test query')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runSearch('test query')).rejects.toThrow("No profile found. Run 'brain-cache init' first.");
   });
 
-  it('writes error to stderr when no profile found', async () => {
-    mockReadProfile.mockResolvedValue(null);
-    try {
-      await runSearch('test query');
-    } catch {
-      // expected
-    }
-    expect(stderrOutput.join('')).toContain('brain-cache init');
-  });
-
-  it('exits with code 1 when Ollama is not running', async () => {
+  it('throws when Ollama is not running', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
-    await expect(runSearch('test query')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runSearch('test query')).rejects.toThrow('Ollama is not running');
   });
 
-  it('exits with code 1 when no index found', async () => {
+  it('throws when no index found', async () => {
     mockReadIndexState.mockResolvedValue(null);
-    await expect(runSearch('test query')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runSearch('test query')).rejects.toThrow("Run 'brain-cache index' first.");
   });
 
   it('applies custom limit option', async () => {

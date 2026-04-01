@@ -36,17 +36,13 @@ export async function runIndex(targetPath?: string): Promise<void> {
   // Step 2: Read profile
   const profile = await readProfile();
   if (profile === null) {
-    process.stderr.write("No profile found. Run 'brain-cache init' first.\n");
-    process.exit(1);
+    throw new Error("No profile found. Run 'brain-cache init' first.");
   }
 
   // Step 3: Check Ollama is running
   const running = await isOllamaRunning();
   if (!running) {
-    process.stderr.write(
-      "Error: Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.\n"
-    );
-    process.exit(1);
+    throw new Error("Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.");
   }
 
   // Step 4: Determine dimensions

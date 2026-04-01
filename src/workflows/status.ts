@@ -17,17 +17,13 @@ export async function runStatus(targetPath?: string): Promise<void> {
   // Step 1: Read capability profile
   const profile = await readProfile();
   if (!profile) {
-    process.stderr.write("No profile found. Run 'brain-cache init' first.\n");
-    process.exit(1);
+    throw new Error("No profile found. Run 'brain-cache init' first.");
   }
 
   // Step 2: Read index state
   const indexState = await readIndexState(rootDir);
   if (!indexState) {
-    process.stderr.write(
-      `No index found at ${rootDir}. Run 'brain-cache index [path]' first.\n`
-    );
-    process.exit(1);
+    throw new Error(`No index found at ${rootDir}. Run 'brain-cache index [path]' first.`);
   }
 
   // Step 3: Print status report to stderr

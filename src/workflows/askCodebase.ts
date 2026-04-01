@@ -30,11 +30,7 @@ export async function runAskCodebase(
 ): Promise<AskCodebaseResult> {
   // 1. Check ANTHROPIC_API_KEY early
   if (!process.env.ANTHROPIC_API_KEY) {
-    process.stderr.write(
-      'Error: ANTHROPIC_API_KEY environment variable is not set.\n' +
-      'Set it with: export ANTHROPIC_API_KEY=sk-ant-...\n'
-    );
-    process.exit(1);
+    throw new Error('ANTHROPIC_API_KEY environment variable is not set.');
   }
 
   // 2. Build context locally (all local GPU work happens here)

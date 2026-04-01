@@ -281,11 +281,9 @@ describe('runDoctor', () => {
     expect(mockReadProfile).toHaveBeenCalledOnce();
   });
 
-  it('exits with code 1 and prints message when no profile found', async () => {
+  it('throws with message when no profile found', async () => {
     mockReadProfile.mockResolvedValue(null);
-    await expect(runDoctor()).rejects.toThrow('process.exit(1)');
-    const combined = stderrOutput.join('');
-    expect(combined).toContain("brain-cache init");
+    await expect(runDoctor()).rejects.toThrow("No profile found. Run 'brain-cache init' first.");
   });
 
   it('re-detects capabilities (fresh detection)', async () => {

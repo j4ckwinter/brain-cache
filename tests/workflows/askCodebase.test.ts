@@ -65,7 +65,6 @@ const mockClaudeResponse = {
 describe('runAskCodebase', () => {
   let stderrOutput: string[];
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
   const originalApiKey = process.env.ANTHROPIC_API_KEY;
   const originalModel = process.env.BRAIN_CACHE_CLAUDE_MODEL;
 
@@ -75,9 +74,6 @@ describe('runAskCodebase', () => {
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
       return true;
-    });
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: unknown) => {
-      throw new Error(`process.exit(${code})`);
     });
 
     // Set required env by default
@@ -94,7 +90,6 @@ describe('runAskCodebase', () => {
     // Use clearAllMocks (not restoreAllMocks) to avoid restoring vi.mock() factories
     vi.clearAllMocks();
     stderrWriteSpy.mockRestore();
-    processExitSpy.mockRestore();
     // Restore env
     if (originalApiKey === undefined) {
       delete process.env.ANTHROPIC_API_KEY;
@@ -108,13 +103,10 @@ describe('runAskCodebase', () => {
     }
   });
 
-  it('exits with code 1 when ANTHROPIC_API_KEY is not set', async () => {
+  it('throws when ANTHROPIC_API_KEY is not set', async () => {
     delete process.env.ANTHROPIC_API_KEY;
     const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
-    await expect(runAskCodebase('how does hello work')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-    const combined = stderrOutput.join('');
-    expect(combined).toContain('ANTHROPIC_API_KEY');
+    await expect(runAskCodebase('how does hello work')).rejects.toThrow('ANTHROPIC_API_KEY environment variable is not set.');
   });
 
   it('calls runBuildContext with question and path option', async () => {

@@ -22,8 +22,7 @@ export async function runDoctor(): Promise<void> {
   // Step 1: Read saved profile
   const saved = await readProfile();
   if (!saved) {
-    process.stderr.write("No profile found. Run 'brain-cache init' first.\n");
-    process.exit(1);
+    throw new Error("No profile found. Run 'brain-cache init' first.");
   }
 
   // Step 2: Re-detect capabilities (does not overwrite saved profile per D-02)

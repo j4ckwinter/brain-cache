@@ -111,7 +111,6 @@ let runBuildContext: typeof import('../../src/workflows/buildContext.js').runBui
 describe('runBuildContext', () => {
   let stderrOutput: string[];
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   const chunk1 = fakeChunk('c1', '/project/src/auth.ts');
   const chunk2 = fakeChunk('c2', '/project/src/router.ts');
@@ -123,9 +122,6 @@ describe('runBuildContext', () => {
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
       return true;
-    });
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: unknown) => {
-      throw new Error(`process.exit(${code})`);
     });
 
     // Happy path defaults
@@ -262,22 +258,19 @@ describe('runBuildContext', () => {
     expect(result.metadata.estimatedWithoutBraincache).toBe(500);
   });
 
-  it('exits with code 1 when no profile found', async () => {
+  it('throws when no profile found', async () => {
     mockReadProfile.mockResolvedValue(null);
-    await expect(runBuildContext('test query')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runBuildContext('test query')).rejects.toThrow("No profile found. Run 'brain-cache init' first.");
   });
 
-  it('exits with code 1 when Ollama is not running', async () => {
+  it('throws when Ollama is not running', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
-    await expect(runBuildContext('test query')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runBuildContext('test query')).rejects.toThrow('Ollama is not running');
   });
 
-  it('exits with code 1 when no index found', async () => {
+  it('throws when no index found', async () => {
     mockReadIndexState.mockResolvedValue(null);
-    await expect(runBuildContext('test query')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runBuildContext('test query')).rejects.toThrow("Run 'brain-cache index' first.");
   });
 
   it('writes progress messages to stderr', async () => {

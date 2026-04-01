@@ -103,7 +103,6 @@ describe('runIndex', () => {
   let stdoutOutput: string[];
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
   let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
-  let processExitSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     stderrOutput = [];
@@ -116,9 +115,6 @@ describe('runIndex', () => {
     stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation((data: unknown) => {
       stdoutOutput.push(String(data));
       return true;
-    });
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: unknown) => {
-      throw new Error(`process.exit(${code})`);
     });
 
     // Happy path defaults
@@ -204,46 +200,20 @@ describe('runIndex', () => {
     );
   });
 
-  it('exits with code 1 when no profile found', async () => {
+  it('throws with message when no profile found', async () => {
     mockReadProfile.mockResolvedValue(null);
-    await expect(runIndex('/project')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runIndex('/project')).rejects.toThrow("No profile found. Run 'brain-cache init' first.");
   });
 
-  it('writes error message to stderr when no profile found', async () => {
-    mockReadProfile.mockResolvedValue(null);
-    try {
-      await runIndex('/project');
-    } catch {
-      // expected
-    }
-    const combined = stderrOutput.join('');
-    expect(combined).toContain("brain-cache init");
-  });
-
-  it('exits with code 1 when Ollama is not running', async () => {
+  it('throws with message when Ollama is not running', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
-    await expect(runIndex('/project')).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-  });
-
-  it('writes Ollama error message to stderr when not running', async () => {
-    mockIsOllamaRunning.mockResolvedValue(false);
-    try {
-      await runIndex('/project');
-    } catch {
-      // expected
-    }
-    const combined = stderrOutput.join('');
-    expect(combined).toContain('Ollama');
-    expect(combined).toContain('ollama serve');
+    await expect(runIndex('/project')).rejects.toThrow('Ollama is not running');
   });
 
   it('handles zero source files gracefully: returns without calling embedBatchWithRetry', async () => {
     mockCrawlSourceFiles.mockResolvedValue([]);
     await runIndex('/project');
     expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
-    expect(processExitSpy).not.toHaveBeenCalled();
   });
 
   it('handles zero source files: does not call writeIndexState', async () => {
