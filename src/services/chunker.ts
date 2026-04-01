@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import { extname } from 'node:path';
 import { childLogger } from './logger.js';
 import type { CodeChunk } from '../lib/types.js';
-import type Parser from 'tree-sitter';
-type SyntaxNode = Parser.SyntaxNode;
+import type TreeSitter from 'tree-sitter';
+type SyntaxNode = TreeSitter.SyntaxNode;
 
 // CJS require workaround for tree-sitter packages.
 //
@@ -138,7 +138,10 @@ function classifyChunkType(nodeType: string): 'function' | 'class' | 'method' {
 function* walkNodes(node: SyntaxNode): Generator<SyntaxNode> {
   yield node;
   for (let i = 0; i < node.childCount; i++) {
-    yield* walkNodes(node.child(i));
+    const child = node.child(i);
+    if (child !== null) {
+      yield* walkNodes(child);
+    }
   }
 }
 
