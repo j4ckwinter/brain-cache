@@ -90,10 +90,12 @@ export async function runIndex(targetPath?: string): Promise<void> {
   );
 
   // Step 8: Batch embed + store
+  let totalChunkTokens = 0;
   let processedCount = 0;
   for (let offset = 0; offset < allChunks.length; offset += DEFAULT_BATCH_SIZE) {
     const batch = allChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
     const texts = batch.map((chunk) => chunk.content);
+    totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
     const vectors = await embedBatchWithRetry(profile.embeddingModel, texts);
 
     const rows: ChunkRow[] = batch.map((chunk, i) => ({
@@ -127,9 +129,6 @@ export async function runIndex(targetPath?: string): Promise<void> {
   });
 
   // Step 10: Print summary with token savings stats
-  const totalChunkTokens = allChunks.reduce(
-    (sum, chunk) => sum + countChunkTokens(chunk.content), 0
-  );
   const reductionPct = totalRawTokens > 0
     ? Math.round((1 - totalChunkTokens / totalRawTokens) * 100)
     : 0;
