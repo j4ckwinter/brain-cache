@@ -64,11 +64,11 @@ Plans:
   3. Assembled context is trimmed to a configurable token budget, with chunks ranked by relevance score determining what is kept
   4. Every `build_context` response includes: tokens sent, estimated tokens without Braincache, reduction percentage, local tasks performed, and cloud calls made
   5. Queries phrased as diagnostic questions ("why is X broken") select chunks differently than knowledge queries ("how does Y work")
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 03-01-PLAN.md — Install tokenizer dep, extend types/config, create retriever service (search, dedup, intent)
-- [ ] 03-02-PLAN.md — Create token counter service with budget-based context assembly
+- [x] 03-02-PLAN.md — Create token counter service with budget-based context assembly
 - [ ] 03-03-PLAN.md — Search and buildContext workflows, CLI command wiring
 
 ### Phase 4: MCP Server and Claude Integration
@@ -103,7 +103,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-03-31 |
 | 2. Storage and Indexing | 4/4 | Complete   | 2026-03-31 |
-| 3. Retrieval and Context Assembly | 1/3 | In Progress|  |
+| 3. Retrieval and Context Assembly | 2/3 | In Progress|  |
 | 4. MCP Server and Claude Integration | 0/? | Not started | - |
 | 5. CLI Completion | 0/? | Not started | - |
 

@@ -19,7 +19,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **RET-01**: User can search the indexed codebase with a natural language query and receive the top-N most relevant code chunks with similarity scores
 - [x] **RET-02**: Retrieved chunks are deduplicated (no repeated functions appearing multiple times in results)
-- [ ] **RET-03**: Context is assembled within a configurable token budget, ranked by relevance score
+- [x] **RET-03**: Context is assembled within a configurable token budget, ranked by relevance score
 - [ ] **RET-04**: Every `build_context` response includes metadata: tokens sent, estimated tokens without Braincache, reduction percentage, local tasks performed, cloud calls made
 - [x] **RET-05**: Different query types (e.g., "why is X broken" vs "how does Y work") use different retrieval strategies for optimal chunk selection
 
@@ -102,7 +102,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IDX-05 | Phase 2 | Complete |
 | RET-01 | Phase 3 | Complete |
 | RET-02 | Phase 3 | Complete |
-| RET-03 | Phase 3 | Pending |
+| RET-03 | Phase 3 | Complete |
 | RET-04 | Phase 3 | Pending |
 | RET-05 | Phase 3 | Complete |
 | MCP-01 | Phase 4 | Pending |
