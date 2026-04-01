@@ -11,6 +11,7 @@ export const EMBEDDING_DIMENSIONS: Record<string, number> = {
   'mxbai-embed-large': 1024,
 };
 export const DEFAULT_BATCH_SIZE = 32;
+export const VECTOR_INDEX_THRESHOLD = 10_000;
 export const EMBED_TIMEOUT_MS = 120_000;
 export const COLD_START_RETRY_DELAY_MS = 5_000;
 export const DEFAULT_SEARCH_LIMIT = 10;
