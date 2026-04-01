@@ -19,7 +19,7 @@ The result: Claude gives you a sharper answer, and your API bill stops looking l
 
 - [Node.js](https://nodejs.org/) 22.x
 - [Ollama](https://ollama.com/) running locally with an embedding model pulled:
-  ```
+  ```bash
   ollama pull nomic-embed-text
   ```
 - An Anthropic API key (for the `ask` command)
@@ -32,6 +32,12 @@ No GPU? No problem. brain-cache falls back to CPU automatically. It's slower, bu
 npm install -g brain-cache
 ```
 
+Verify it installed correctly:
+
+```bash
+brain-cache --help
+```
+
 Or run from source:
 
 ```bash
@@ -42,15 +48,29 @@ npm run build
 npm run link     # registers the `brain-cache` command in your shell
 ```
 
-> `npm run link` runs `npm link` under the hood. It symlinks `dist/cli.js` into your global bin directory so `brain-cache` is available anywhere in your shell. Run it once after the initial clone. After that, `npm run build` is enough to pick up code changes.
+> `npm run link` runs `npm link` under the hood. It symlinks `dist/cli.js` into your global bin directory so `brain-cache` is available anywhere. Run it once after the initial clone. After that, `npm run build` is enough to pick up changes.
+
+## Environment setup
+
+The `ask` command needs an Anthropic API key to call Claude:
+
+```bash
+export ANTHROPIC_API_KEY=your_api_key
+```
+
+Add this to your shell profile (`~/.zshrc`, `~/.bashrc`) to persist it across sessions.
+
+Local-only commands (`init`, `index`, `search`, `context`, `doctor`) work without it.
 
 ## Getting started
+
+Three commands to go from zero to answers:
 
 ```bash
 # 1. Initialize brain-cache in your project
 brain-cache init
 
-# 2. Index your codebase (go grab a coffee)
+# 2. Index your codebase (first run takes a minute — grab a coffee)
 brain-cache index
 
 # 3. Ask a question
@@ -63,17 +83,33 @@ That's it. brain-cache handles the retrieval, Claude handles the reasoning.
 
 | Command | What it does |
 |---------|-------------|
-| `brain-cache init` | Set up brain-cache in the current directory, pull the embedding model |
+| `brain-cache init` | Set up brain-cache in the current directory and pull the embedding model |
 | `brain-cache index` | Crawl, chunk, and embed your codebase into a local vector store |
-| `brain-cache search <query>` | Retrieve relevant code chunks for a query (no Claude call) |
-| `brain-cache context <query>` | Build and preview the context that would be sent to Claude |
-| `brain-cache ask <question>` | Full pipeline: retrieve context, ask Claude, get an answer |
+| `brain-cache search <query>` | Retrieve relevant code chunks locally (no Claude call) |
+| `brain-cache context <query>` | Preview the context that would be sent to Claude |
+| `brain-cache ask <question>` | Full pipeline: retrieve context, call Claude, get an answer |
 | `brain-cache status` | Show index stats, model info, and token savings to date |
 | `brain-cache doctor` | Diagnose connection issues with Ollama, LanceDB, and the Anthropic API |
 
+## How the token savings work
+
+Every `ask` response includes a savings report:
+
+```
+🧠 brain-cache optimisation
+
+Tokens sent to Claude:   1,240
+Without brain-cache:     18,600
+Reduction:               93%
+```
+
+Token counts are calculated locally before anything is sent to Claude — no surprise overages.
+
 ## MCP integration (Claude Code)
 
-brain-cache ships an MCP server that makes its tools available directly inside Claude Code. Add this to your `.mcp.json`:
+brain-cache ships an MCP server that exposes its tools directly inside Claude Code. Claude can call them without you manually copying context.
+
+Add this to your `.mcp.json`:
 
 ```json
 {
@@ -86,19 +122,7 @@ brain-cache ships an MCP server that makes its tools available directly inside C
 }
 ```
 
-Claude Code can then call `index_repo`, `search_codebase`, `build_context`, and `doctor` as native tools — no manual context pasting required.
-
-## How the token savings work
-
-Every `ask` response includes a savings report:
-
-```
-Tokens sent to Claude:   1,240
-Estimated without cache: 18,600
-Reduction:               93%
-```
-
-brain-cache counts tokens locally before sending anything, so there are no surprise overages.
+This gives Claude Code access to `index_repo`, `search_codebase`, `build_context`, and `doctor` as native tools.
 
 ## Supported languages
 
