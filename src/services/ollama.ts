@@ -38,28 +38,67 @@ export async function isOllamaRunning(): Promise<boolean> {
  * Returns true if Ollama becomes ready, false if timeout is reached.
  */
 export async function startOllama(): Promise<boolean> {
+  // Pre-spawn guard: reduces the TOCTOU race window (but does not eliminate it
+  // entirely — Ollama itself handles EADDRINUSE safely if a race still occurs).
+  const alreadyRunning = await isOllamaRunning();
+  if (alreadyRunning) {
+    log.info('Ollama is already running, skipping spawn');
+    return true;
+  }
+
   log.info('Starting Ollama server...');
 
   const child = spawn('ollama', ['serve'], {
     detached: true,
     stdio: 'ignore',
   });
+
+  // Capture PID before unreffing so we can kill on timeout or signal
+  const pid = child.pid;
   child.unref();
 
   const MAX_ATTEMPTS = 10;
   const POLL_INTERVAL_MS = 500;
 
+  // Register signal handlers so that if brain-cache is killed mid-startup,
+  // we clean up the spawned Ollama process instead of leaving it as an orphan.
+  const cleanup = () => {
+    try {
+      if (pid !== undefined) process.kill(pid, 'SIGTERM');
+    } catch {
+      // Ignore ESRCH (process already gone) and other errors
+    }
+  };
+  process.once('SIGINT', cleanup);
+  process.once('SIGTERM', cleanup);
+
+  let succeeded = false;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     const running = await isOllamaRunning();
     if (running) {
-      log.info({ attempt: attempt + 1 }, 'Ollama is now running');
-      return true;
+      log.info({ pid, attempt: attempt + 1 }, 'Ollama is now running');
+      succeeded = true;
+      break;
     }
     log.debug({ attempt: attempt + 1, maxAttempts: MAX_ATTEMPTS }, 'Waiting for Ollama to start...');
   }
 
-  log.warn('Ollama did not start within timeout');
+  // Remove signal handlers regardless of outcome
+  process.removeListener('SIGINT', cleanup);
+  process.removeListener('SIGTERM', cleanup);
+
+  if (succeeded) {
+    return true;
+  }
+
+  // Timeout path: kill the spawned process to prevent it becoming an orphan
+  try {
+    if (pid !== undefined) process.kill(pid, 'SIGTERM');
+  } catch {
+    // Ignore ESRCH (process already gone) and other errors
+  }
+  log.warn({ pid }, 'Ollama did not start within timeout — killed spawned process (PID: ' + pid + ')');
   return false;
 }
 
