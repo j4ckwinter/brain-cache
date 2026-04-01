@@ -20,3 +20,4 @@ export const DEFAULT_DISTANCE_THRESHOLD = 0.3; // cosine distance; 0.3 = 0.7 sim
 export const DIAGNOSTIC_DISTANCE_THRESHOLD = 0.4; // looser for diagnostic queries (0.6 similarity)
 export const DIAGNOSTIC_SEARCH_LIMIT = 20;
 export const DEFAULT_TOKEN_BUDGET = 4096;
+export const FILE_HASHES_FILENAME = 'file-hashes.json';

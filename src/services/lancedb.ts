@@ -3,7 +3,7 @@ import { Index } from '@lancedb/lancedb';
 import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS } from '../lib/config.js';
+import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, FILE_HASHES_FILENAME } from '../lib/config.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
@@ -196,6 +196,51 @@ export async function writeIndexState(projectRoot: string, state: IndexState): P
   await mkdir(dataDir, { recursive: true });
   const statePath = join(dataDir, 'index_state.json');
   await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
+}
+
+/**
+ * Reads the file hash manifest from <projectRoot>/.brain-cache/file-hashes.json.
+ * Returns a Record<string, string> (filePath -> sha256 hex) or empty object
+ * if the file is missing or contains invalid JSON.
+ */
+export async function readFileHashes(projectRoot: string): Promise<Record<string, string>> {
+  const hashPath = join(projectRoot, PROJECT_DATA_DIR, FILE_HASHES_FILENAME);
+  try {
+    const raw = await readFile(hashPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, string>;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Writes the file hash manifest to <projectRoot>/.brain-cache/file-hashes.json.
+ * Creates the directory if it does not exist.
+ */
+export async function writeFileHashes(
+  projectRoot: string,
+  hashes: Record<string, string>
+): Promise<void> {
+  const dataDir = join(projectRoot, PROJECT_DATA_DIR);
+  await mkdir(dataDir, { recursive: true });
+  const hashPath = join(dataDir, FILE_HASHES_FILENAME);
+  await writeFile(hashPath, JSON.stringify(hashes, null, 2), 'utf-8');
+}
+
+/**
+ * Deletes all LanceDB rows where file_path matches the given filePath.
+ * Uses SQL-style predicate with single-quote escaping.
+ */
+export async function deleteChunksByFilePath(
+  table: lancedb.Table,
+  filePath: string
+): Promise<void> {
+  const escaped = filePath.replace(/'/g, "''");
+  await table.delete(`file_path = '${escaped}'`);
 }
 
 // Re-export CodeChunk for consumers of this module that only import from lancedb.ts

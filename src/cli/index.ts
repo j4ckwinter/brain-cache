@@ -31,9 +31,10 @@ program
   .command('index')
   .description('Index a codebase: parse, chunk, embed, and store in LanceDB')
   .argument('[path]', 'Directory to index (defaults to current directory)')
-  .action(async (path?: string) => {
+  .option('-f, --force', 'Force full reindex, ignoring cached file hashes')
+  .action(async (path: string | undefined, opts: { force?: boolean }) => {
     const { runIndex } = await import('../workflows/index.js');
-    await runIndex(path);
+    await runIndex(path, { force: opts.force });
   });
 
 program
