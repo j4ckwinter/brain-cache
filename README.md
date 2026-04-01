@@ -39,7 +39,10 @@ git clone <repo>
 cd brain-cache
 npm install
 npm run build
+npm run link     # registers the `brain-cache` command in your shell
 ```
+
+> `npm run link` runs `npm link` under the hood. It symlinks `dist/cli.js` into your global bin directory so `brain-cache` is available anywhere in your shell. Run it once after the initial clone. After that, `npm run build` is enough to pick up code changes.
 
 ## Getting started
 
@@ -129,9 +132,10 @@ All the heavy lifting happens on your machine. Claude gets a clean brief, not a 
 ## Development
 
 ```bash
-npm run dev      # Run CLI with tsx (no build step)
-npm test         # Run test suite (vitest)
 npm run build    # Compile to dist/
+npm run link     # Register brain-cache in your shell (once after first clone)
+npm run dev      # Run CLI directly with tsx (no build step needed)
+npm test         # Run test suite (vitest)
 ```
 
 ## License

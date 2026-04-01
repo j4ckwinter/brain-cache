@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
+    "link": "npm link",
     "test": "vitest run",
     "test:watch": "vitest"
   },
