@@ -22,23 +22,27 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 - ✓ Claude integration via Anthropic SDK for ask-codebase workflow — v1.0
 - ✓ Token savings metadata reporting (tokens sent, estimated without, reduction %) — v1.0
 
+- ✓ Hardened error propagation — thrown errors replace process.exit in workflows — v1.1
+- ✓ Type safety — all `any` types replaced with concrete interfaces — v1.1
+- ✓ Ollama process security — PID tracking, signal handlers, remote host guard — v1.1
+- ✓ Concurrent file I/O — Promise.all groups of 20 for file reads — v1.1
+- ✓ Streaming chunk pipeline — group-based embed+store, no unbounded accumulator — v1.1
+- ✓ IVF-PQ vector index — auto-created at 10K+ rows — v1.1
+- ✓ Incremental indexing — SHA-256 content-hash diffing, only re-embed changed files — v1.1
+- ✓ Intent classification — three-tier with bigrams and exclusion patterns — v1.1
+- ✓ MCP force reindex — --force option exposed in MCP index_repo tool — v1.1
+- ✓ API key leak prevention — pino redact config on all sensitive fields — v1.1
+
 ### Active
 
-- [ ] Incremental indexing — file watcher + content-hash stale detection (INC-01, INC-02)
 - [ ] Custom exclusion patterns via `.braincacheignore` (EXC-01)
 - [ ] Configurable retrieval depth per query type (ADV-01)
 - [ ] Cross-file dependency-aware retrieval (ADV-02)
+- [ ] File watcher for live re-indexing (INC-02)
 
-## Current Milestone: v1.1 Hardening
+## Current State
 
-**Goal:** Fix tech debt, bugs, security issues, performance bottlenecks, and fragile code patterns identified in the codebase concerns audit.
-
-**Target features:**
-- Fix 6 tech debt items (incremental indexing, hardcoded values, empty barrels, any types, redundant token counting)
-- Fix 1 known bug (model name prefix matching)
-- Address 2 security concerns (API key handling, detached Ollama process management)
-- Fix 4 performance bottlenecks (sequential I/O, memory accumulation, vector index creation, separator counting)
-- Harden 4 fragile areas (replace process.exit with thrown errors, document tree-sitter CJS hack, improve arrow function heuristic, improve intent classification)
+Shipped v1.1 Hardening on 2026-04-01. All 16 requirements satisfied across 7 phases. No outstanding gaps.
 
 ### Out of Scope
 
@@ -56,11 +60,12 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 ## Context
 
-Shipped v1.0 MVP with 2,045 LOC TypeScript across 5 phases and 14 plans.
+Shipped v1.1 Hardening with 2,510 LOC TypeScript across 12 phases (v1.0 + v1.1) and 25 plans.
 Tech stack: Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, tree-sitter, pino, zod v4.
-224 tests passing across all subsystems.
+269 tests passing across 16 test files.
 Architecture: workflows-first (workflows > services > commands), strict folder layout.
 MCP server discoverable via `.mcp.json` with stdio transport.
+v1.1 addressed 16 hardening requirements: 6 tech debt, 2 security, 4 performance, 4 hardening items.
 
 ## Constraints
 
@@ -81,8 +86,11 @@ MCP server discoverable via `.mcp.json` with stdio transport.
 | tree-sitter AST chunking | Function-boundary chunks produce quality embeddings | ✓ Good — 5 languages supported |
 | zod v4 (not v3) | 14x faster parsing, smaller bundle | ✓ Good — used for MCP input validation |
 | Batch embedding (32-64 chunks) | Avoids N+1 embed pattern | ✓ Good — critical for indexing performance |
-| Keyword-based intent classification | Fast, fully local, no LLM round-trip | ✓ Good — diagnostic vs knowledge strategies |
+| Keyword-based intent classification | Fast, fully local, no LLM round-trip | ✓ Good — three-tier with bigrams (v1.1) |
 | tsup dual-config (CLI + MCP) | CLI gets shebang, MCP does not | ✓ Good — separate entry points |
+| SHA-256 content hashing for incremental indexing | Avoid re-embedding unchanged files | ✓ Good — dramatic speedup on re-index |
+| Group-based streaming pipeline | Bound memory to 20 files at a time | ✓ Good — eliminated unbounded allChunks array |
+| Remote OLLAMA_HOST guard | Prevent local spawn when remote configured | ✓ Good — throws descriptive error |
 
 ## Evolution
 
@@ -102,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v1.1 milestone started*
+*Last updated: 2026-04-01 after v1.1 Hardening milestone shipped*
