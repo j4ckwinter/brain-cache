@@ -10,7 +10,30 @@ function resolveLevel(): LogLevel {
 }
 
 export const logger = pino(
-  { level: resolveLevel() },
+  {
+    level: resolveLevel(),
+    redact: {
+      paths: [
+        'apiKey',
+        'api_key',
+        'secret',
+        'password',
+        'token',
+        'authorization',
+        'ANTHROPIC_API_KEY',
+        'OPENAI_API_KEY',
+        '*.apiKey',
+        '*.api_key',
+        '*.secret',
+        '*.password',
+        '*.token',
+        '*.authorization',
+        '*.ANTHROPIC_API_KEY',
+        '*.OPENAI_API_KEY',
+      ],
+      censor: '[Redacted]',
+    },
+  },
   pino.destination(2) // stderr, always — per D-16
 );
 

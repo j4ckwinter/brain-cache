@@ -7,6 +7,14 @@ const execFileAsync = promisify(execFile);
 const log = childLogger('ollama');
 
 /**
+ * Returns the Ollama host URL, respecting the OLLAMA_HOST environment variable.
+ * Falls back to http://localhost:11434 when not set.
+ */
+export function getOllamaHost(): string {
+  return process.env.OLLAMA_HOST ?? 'http://localhost:11434';
+}
+
+/**
  * Checks whether the Ollama binary is installed on this machine.
  * Uses 'which' on Unix/Mac, 'where' on Windows.
  */
@@ -21,11 +29,12 @@ export async function isOllamaInstalled(): Promise<boolean> {
 }
 
 /**
- * Checks whether the Ollama server is currently running by fetching localhost:11434.
+ * Checks whether the Ollama server is currently running.
+ * Uses OLLAMA_HOST env var when set, falls back to http://localhost:11434.
  */
 export async function isOllamaRunning(): Promise<boolean> {
   try {
-    const res = await fetch('http://localhost:11434');
+    const res = await fetch(getOllamaHost());
     return res.ok;
   } catch {
     return false;
