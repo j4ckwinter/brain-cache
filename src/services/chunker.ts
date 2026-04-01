@@ -2,7 +2,22 @@ import { createRequire } from 'node:module';
 import { extname } from 'node:path';
 import { childLogger } from './logger.js';
 import type { CodeChunk } from '../lib/types.js';
+import type TreeSitter from 'tree-sitter';
+type SyntaxNode = TreeSitter.SyntaxNode;
 
+// CJS require workaround for tree-sitter packages.
+//
+// tree-sitter and its language grammars (tree-sitter-typescript, tree-sitter-python,
+// etc.) are CommonJS packages that use module.exports. They do not provide ESM entry
+// points, so a standard `import` fails at runtime in this ESM project.
+//
+// createRequire() creates a CJS require() function anchored to this file's URL,
+// which is the official Node.js interop pattern for loading CJS from ESM.
+//
+// This workaround can be removed when:
+//   - tree-sitter ships an ESM entry point (tracked in tree-sitter >= 0.24.0), OR
+//   - the project migrates to web-tree-sitter (WASM-based, ships as ESM natively)
+//     — currently out of scope per REQUIREMENTS.md
 const _require = createRequire(import.meta.url);
 const Parser = _require('tree-sitter');
 const { typescript: tsLang, tsx: tsxLang } = _require('tree-sitter-typescript');
@@ -82,12 +97,12 @@ function getLanguageCategory(ext: string): string {
 }
 
 // Reads the name field from a tree-sitter node, or returns null.
-function extractName(node: any): string | null {
+function extractName(node: SyntaxNode): string | null {
   return node.childForFieldName?.('name')?.text ?? null;
 }
 
 // Walks up the parent chain looking for a class/impl parent and returns its name.
-function extractScope(node: any): string | null {
+function extractScope(node: SyntaxNode): string | null {
   let current = node.parent;
   while (current) {
     if (
@@ -120,10 +135,13 @@ function classifyChunkType(nodeType: string): 'function' | 'class' | 'method' {
 }
 
 // Recursively walks all nodes in the AST.
-function* walkNodes(node: any): Generator<any> {
+function* walkNodes(node: SyntaxNode): Generator<SyntaxNode> {
   yield node;
   for (let i = 0; i < node.childCount; i++) {
-    yield* walkNodes(node.child(i));
+    const child = node.child(i);
+    if (child !== null) {
+      yield* walkNodes(child);
+    }
   }
 }
 

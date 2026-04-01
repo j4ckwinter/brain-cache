@@ -56,6 +56,8 @@ export interface ChunkRow {
   start_line: number;
   end_line: number;
   vector: number[];
+  /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
+  [key: string]: unknown;
 }
 
 /**
