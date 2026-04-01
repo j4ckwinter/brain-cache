@@ -8,6 +8,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-04-01) — [archive](milestones/v1.0-ROADMAP.md)
+- **v1.1 Hardening** — Phases 6-10 (in progress)
 
 ## Phases
 
@@ -22,6 +23,14 @@
 
 </details>
 
+### v1.1 Hardening
+
+- [x] Phase 6: Foundation Cleanup (2/2 plans) — completed 2026-04-01
+- [x] Phase 7: Type Safety and Code Correctness (2/2 plans) — completed 2026-04-01
+- [ ] Phase 8: Ollama Process Security (1/1 plans complete — in progress)
+- [ ] Phase 9: Indexing and Retrieval Performance
+- [ ] Phase 10: Incremental Indexing and Intent Classification
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -31,7 +40,12 @@
 | 3. Retrieval and Context Assembly | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. MCP Server and Claude Integration | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. CLI Completion | v1.0 | 2/2 | Complete | 2026-04-01 |
+| 6. Foundation Cleanup | v1.1 | 2/2 | Complete | 2026-04-01 |
+| 7. Type Safety and Code Correctness | v1.1 | 2/2 | Complete | 2026-04-01 |
+| 8. Ollama Process Security | v1.1 | 1/1 | In progress | - |
+| 9. Indexing and Retrieval Performance | v1.1 | 0/? | Not started | - |
+| 10. Incremental Indexing and Intent Classification | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 after v1.0 milestone completion*
+*Last updated: 2026-04-01 after plan 08-01 complete*
