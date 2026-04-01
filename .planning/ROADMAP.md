@@ -12,7 +12,7 @@
 
 - [x] **Phase 1: Foundation** - Establish project scaffold, stderr-only logging, and hardware capability detection (completed 2026-03-31)
 - [x] **Phase 2: Storage and Indexing** - LanceDB schema, AST-aware chunking, and the full indexing pipeline (completed 2026-03-31)
-- [ ] **Phase 3: Retrieval and Context Assembly** - Query pipeline, deduplication, token budget enforcement, and savings metadata
+- [x] **Phase 3: Retrieval and Context Assembly** - Query pipeline, deduplication, token budget enforcement, and savings metadata (completed 2026-04-01)
 - [ ] **Phase 4: MCP Server and Claude Integration** - Expose all tools via stdio MCP and wire ask-codebase via Anthropic SDK
 - [ ] **Phase 5: CLI Completion** - All CLI commands as thin workflow adapters with actionable DX
 
@@ -64,12 +64,12 @@ Plans:
   3. Assembled context is trimmed to a configurable token budget, with chunks ranked by relevance score determining what is kept
   4. Every `build_context` response includes: tokens sent, estimated tokens without Braincache, reduction percentage, local tasks performed, and cloud calls made
   5. Queries phrased as diagnostic questions ("why is X broken") select chunks differently than knowledge queries ("how does Y work")
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Install tokenizer dep, extend types/config, create retriever service (search, dedup, intent)
 - [x] 03-02-PLAN.md — Create token counter service with budget-based context assembly
-- [ ] 03-03-PLAN.md — Search and buildContext workflows, CLI command wiring
+- [x] 03-03-PLAN.md — Search and buildContext workflows, CLI command wiring
 
 ### Phase 4: MCP Server and Claude Integration
 **Goal**: Claude Code can discover and call Braincache tools natively via MCP stdio, and the ask-codebase workflow sends minimal assembled context to Claude for reasoning
@@ -103,7 +103,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete   | 2026-03-31 |
 | 2. Storage and Indexing | 4/4 | Complete   | 2026-03-31 |
-| 3. Retrieval and Context Assembly | 2/3 | In Progress|  |
+| 3. Retrieval and Context Assembly | 3/3 | Complete   | 2026-04-01 |
 | 4. MCP Server and Claude Integration | 0/? | Not started | - |
 | 5. CLI Completion | 0/? | Not started | - |
 
