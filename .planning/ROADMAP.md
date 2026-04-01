@@ -79,7 +79,10 @@ Plans:
   2. Indexing a repo with 10,000 chunks does not accumulate all chunks in memory before embedding — chunk batches are processed and flushed as they are produced
   3. After indexing a table with more than the threshold chunk count (e.g., 10,000), a LanceDB IVF-PQ index exists on the table and vector search returns results in measurably less time
   4. The separator token count is computed once before the context assembly loop and reused — no per-chunk recomputation occurs (verified by code inspection or adding a counter)
-**Plans**: TBD
+**Plans**: 1/2 plans complete
+Plans:
+- [ ] 09-01-PLAN.md — Parallelize file reads and stream chunk pipeline
+- [x] 09-02-PLAN.md — LanceDB IVF-PQ vector index and separator token cache (completed 2026-04-01)
 
 ### Phase 10: Incremental Indexing and Intent Classification
 **Goal**: Re-indexing only processes changed files, and intent classification produces fewer false positives on mixed queries
@@ -104,9 +107,9 @@ Plans:
 | 6. Foundation Cleanup | v1.1 | 2/2 | Complete   | 2026-04-01 |
 | 7. Type Safety and Code Correctness | v1.1 | 2/? | In progress | - |
 | 8. Ollama Process Security | v1.1 | 0/? | Not started | - |
-| 9. Indexing and Retrieval Performance | v1.1 | 0/? | Not started | - |
+| 9. Indexing and Retrieval Performance | v1.1 | 1/2 | In progress | - |
 | 10. Incremental Indexing and Intent Classification | v1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 after plan 07-02 complete*
+*Last updated: 2026-04-01 after plan 09-02 complete*
