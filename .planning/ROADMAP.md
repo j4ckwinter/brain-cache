@@ -25,7 +25,7 @@
 
 ### v1.1 Hardening
 
-- [ ] **Phase 6: Foundation Cleanup** - Fix process.exit, env config, version sourcing, barrel files, and API key log hygiene
+- [x] **Phase 6: Foundation Cleanup** - Fix process.exit, env config, version sourcing, barrel files, and API key log hygiene (completed 2026-04-01)
 - [ ] **Phase 7: Type Safety and Code Correctness** - Replace any types, fix model name matching, eliminate redundant token counting, harden tree-sitter layer
 - [ ] **Phase 8: Ollama Process Security** - Fix detached process management with PID tracking, port checks, and race condition prevention
 - [ ] **Phase 9: Indexing and Retrieval Performance** - Parallelize I/O, stream chunk pipeline, add IVF-PQ index, cache separator count
@@ -43,9 +43,9 @@
   3. Running `brain-cache --version` prints the version from `package.json`, not a hardcoded string
   4. Importing any barrel file (`tools/index`, `services/index`, `lib/index`) exports the expected symbols with no empty re-export files remaining
   5. Running `brain-cache doctor` with `ANTHROPIC_API_KEY` set does not print the key value anywhere in stderr or stdout output
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 06-01-PLAN.md — Replace process.exit with thrown errors, add CLI catch wrapper, source version from package.json
+- [x] 06-01-PLAN.md — Replace process.exit with thrown errors, add CLI catch wrapper, source version from package.json
 - [x] 06-02-PLAN.md — Respect OLLAMA_HOST env var, populate barrel exports, add API key log redaction
 
 ### Phase 7: Type Safety and Code Correctness
@@ -101,7 +101,7 @@ Plans:
 | 3. Retrieval and Context Assembly | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. MCP Server and Claude Integration | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. CLI Completion | v1.0 | 2/2 | Complete | 2026-04-01 |
-| 6. Foundation Cleanup | v1.1 | 1/2 | In Progress|  |
+| 6. Foundation Cleanup | v1.1 | 2/2 | Complete   | 2026-04-01 |
 | 7. Type Safety and Code Correctness | v1.1 | 0/? | Not started | - |
 | 8. Ollama Process Security | v1.1 | 0/? | Not started | - |
 | 9. Indexing and Retrieval Performance | v1.1 | 0/? | Not started | - |
