@@ -25,6 +25,7 @@ vi.mock('../../src/services/lancedb.js', () => ({
   openDatabase: vi.fn(),
   openOrCreateChunkTable: vi.fn(),
   insertChunks: vi.fn(),
+  createVectorIndexIfNeeded: vi.fn(),
   writeIndexState: vi.fn(),
 }));
 
@@ -49,6 +50,7 @@ import {
   openDatabase,
   openOrCreateChunkTable,
   insertChunks,
+  createVectorIndexIfNeeded,
   writeIndexState,
 } from '../../src/services/lancedb.js';
 import { readFile } from 'node:fs/promises';
@@ -62,6 +64,7 @@ const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockOpenDatabase = vi.mocked(openDatabase);
 const mockOpenOrCreateChunkTable = vi.mocked(openOrCreateChunkTable);
 const mockInsertChunks = vi.mocked(insertChunks);
+const mockCreateVectorIndexIfNeeded = vi.mocked(createVectorIndexIfNeeded);
 const mockWriteIndexState = vi.mocked(writeIndexState);
 const mockReadFile = vi.mocked(readFile);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
@@ -131,6 +134,7 @@ describe('runIndex', () => {
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
     mockInsertChunks.mockResolvedValue(undefined);
+    mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
     mockWriteIndexState.mockResolvedValue(undefined);
 
     // Dynamically import after mocks are in place
