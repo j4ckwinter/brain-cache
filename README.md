@@ -204,6 +204,16 @@ All the heavy lifting happens on your machine. Claude gets a clean brief, not a 
 
 Because Claude receives only the most relevant code — not your entire repository — answers are more accurate, more consistent, and grounded in actual implementation details.
 
+## Claude interaction
+
+brain-cache doesn't just send context to Claude — it sends a system prompt that enforces grounded, accurate answers:
+
+- **Answer strictly from context** — Claude is instructed to use only the provided code, not general knowledge
+- **No hallucination** — if the context doesn't contain enough information, Claude says so rather than guessing
+- **Code-level precision** — answers reference specific files and functions from the retrieved context
+
+This means every `ask` response is constrained to what brain-cache actually found in your codebase. No vague generalities, no invented implementation details.
+
 ## Development
 
 ```bash
