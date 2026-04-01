@@ -43,10 +43,10 @@
   3. Running `brain-cache --version` prints the version from `package.json`, not a hardcoded string
   4. Importing any barrel file (`tools/index`, `services/index`, `lib/index`) exports the expected symbols with no empty re-export files remaining
   5. Running `brain-cache doctor` with `ANTHROPIC_API_KEY` set does not print the key value anywhere in stderr or stdout output
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
 - [ ] 06-01-PLAN.md — Replace process.exit with thrown errors, add CLI catch wrapper, source version from package.json
-- [ ] 06-02-PLAN.md — Respect OLLAMA_HOST env var, populate barrel exports, add API key log redaction
+- [x] 06-02-PLAN.md — Respect OLLAMA_HOST env var, populate barrel exports, add API key log redaction
 
 ### Phase 7: Type Safety and Code Correctness
 **Goal**: The codebase has no unsafe `any` types in interop layers, model name matching is exact, and token counting is computed once
@@ -101,7 +101,7 @@ Plans:
 | 3. Retrieval and Context Assembly | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. MCP Server and Claude Integration | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. CLI Completion | v1.0 | 2/2 | Complete | 2026-04-01 |
-| 6. Foundation Cleanup | v1.1 | 0/2 | Planned | - |
+| 6. Foundation Cleanup | v1.1 | 1/2 | In Progress|  |
 | 7. Type Safety and Code Correctness | v1.1 | 0/? | Not started | - |
 | 8. Ollama Process Security | v1.1 | 0/? | Not started | - |
 | 9. Indexing and Retrieval Performance | v1.1 | 0/? | Not started | - |
