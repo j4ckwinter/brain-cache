@@ -30,9 +30,13 @@ server.registerTool(
       'Index a codebase: parse source files, chunk at function boundaries, embed locally via Ollama, and store in LanceDB. Run this when the user wants to index or re-index their project.',
     inputSchema: {
       path: z.string().describe('Absolute or relative path to the directory to index'),
+      force: z
+        .boolean()
+        .optional()
+        .describe('If true, ignore cached file hashes and perform a full reindex (default false)'),
     },
   },
-  async ({ path }) => {
+  async ({ path, force }) => {
     // Guard: check profile exists
     const profile = await readProfile();
     if (!profile) {
@@ -60,7 +64,7 @@ server.registerTool(
       };
     }
     try {
-      await runIndex(path);
+      await runIndex(path, { force });
       // Read index state to get counts (runIndex returns void)
       // IMPORTANT: resolve() the path to match runIndex's internal resolution,
       // so readIndexState finds .brain-cache/index_state.json at the correct location.

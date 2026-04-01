@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock node:child_process before importing the module
 vi.mock('node:child_process', () => ({
@@ -314,6 +314,43 @@ describe('startOllama', () => {
     expect(result).toBe(false);
 
     killSpy.mockRestore();
+  });
+
+  it('throws when OLLAMA_HOST points to a remote address', async () => {
+    const originalHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://192.168.1.10:11434';
+
+    await expect(startOllama()).rejects.toThrow('cannot auto-start a remote Ollama server');
+
+    // Cleanup
+    if (originalHost === undefined) {
+      delete process.env.OLLAMA_HOST;
+    } else {
+      process.env.OLLAMA_HOST = originalHost;
+    }
+  });
+
+  it('does not throw when OLLAMA_HOST is http://127.0.0.1:11434', async () => {
+    const originalHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
+
+    // Should reach the pre-spawn check (isOllamaRunning), not throw
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const resultPromise = startOllama();
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result).toBe(true); // already running
+    expect(mockSpawn).not.toHaveBeenCalled();
+
+    // Cleanup
+    if (originalHost === undefined) {
+      delete process.env.OLLAMA_HOST;
+    } else {
+      process.env.OLLAMA_HOST = originalHost;
+    }
   });
 });
 

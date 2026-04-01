@@ -7,8 +7,8 @@ const execFileAsync = promisify(execFile);
 const log = childLogger('ollama');
 
 /**
- * Returns the Ollama host URL, respecting the OLLAMA_HOST environment variable.
- * Falls back to http://localhost:11434 when not set.
+ * Returns the configured Ollama host URL.
+ * Defaults to 'http://localhost:11434' when OLLAMA_HOST is not set.
  */
 export function getOllamaHost(): string {
   return process.env.OLLAMA_HOST ?? 'http://localhost:11434';
@@ -47,6 +47,22 @@ export async function isOllamaRunning(): Promise<boolean> {
  * Returns true if Ollama becomes ready, false if timeout is reached.
  */
 export async function startOllama(): Promise<boolean> {
+  // Guard: refuse to spawn a local server when OLLAMA_HOST points to a remote address.
+  // If the user configured a remote Ollama, spawning locally is wrong — the health
+  // checks would hit the remote host while a local server runs unsupervised.
+  const host = getOllamaHost();
+  const isLocalhost =
+    host === 'http://localhost:11434' ||
+    host === 'http://127.0.0.1:11434';
+
+  if (!isLocalhost) {
+    throw new Error(
+      `OLLAMA_HOST is set to a remote address (${host}). ` +
+      `brain-cache cannot auto-start a remote Ollama server. ` +
+      `Ensure Ollama is running at ${host} and try again.`
+    );
+  }
+
   // Pre-spawn guard: reduces the TOCTOU race window (but does not eliminate it
   // entirely — Ollama itself handles EADDRINUSE safely if a race still occurs).
   const alreadyRunning = await isOllamaRunning();

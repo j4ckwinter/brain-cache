@@ -199,6 +199,30 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Indexing failed');
       expect(result.content[0].text).toContain('Embedding failed');
     });
+
+    it('passes force option to runIndex when force is true', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunIndex.mockResolvedValue(undefined);
+      mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+
+      const { handler } = registeredTools.get('index_repo')!;
+      await handler({ path: '/some/project', force: true });
+
+      expect(mockRunIndex).toHaveBeenCalledWith('/some/project', { force: true });
+    });
+
+    it('passes force as undefined when not provided', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunIndex.mockResolvedValue(undefined);
+      mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+
+      const { handler } = registeredTools.get('index_repo')!;
+      await handler({ path: '/some/project' });
+
+      expect(mockRunIndex).toHaveBeenCalledWith('/some/project', { force: undefined });
+    });
   });
 
   // ---- search_codebase ----
