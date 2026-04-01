@@ -12,7 +12,7 @@ import {
   writeIndexState,
   type ChunkRow,
 } from '../services/lancedb.js';
-import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE } from '../lib/config.js';
+import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
 
@@ -67,52 +67,73 @@ export async function runIndex(targetPath?: string): Promise<void> {
     return;
   }
 
-  // Step 7: Chunk all files
-  const allChunks: CodeChunk[] = [];
+  // Step 7+8: Concurrent file read + streaming embed pipeline
+  // Files are read concurrently (up to FILE_READ_CONCURRENCY). Chunks are
+  // embedded and stored in batches as they accumulate, keeping memory bounded.
   let totalRawTokens = 0;
-  for (let i = 0; i < files.length; i++) {
-    const filePath = files[i];
-    const content = await readFile(filePath, 'utf-8');
-    totalRawTokens += countChunkTokens(content);
-    const chunks = chunkFile(filePath, content);
-    allChunks.push(...chunks);
+  let totalChunkTokens = 0;
+  let totalChunks = 0;
+  let processedFiles = 0;
+  let processedChunks = 0;
 
-    if ((i + 1) % 10 === 0) {
-      process.stderr.write(`brain-cache: chunked ${i + 1}/${files.length} files\n`);
+  // Process files in groups of FILE_READ_CONCURRENCY.
+  // After each group, flush accumulated chunks through embed+store.
+  for (let groupStart = 0; groupStart < files.length; groupStart += FILE_READ_CONCURRENCY) {
+    const group = files.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
+    const groupChunks: CodeChunk[] = [];
+
+    // Read files concurrently within the group
+    const results = await Promise.all(
+      group.map(async (filePath) => {
+        const content = await readFile(filePath, 'utf-8');
+        const rawTokens = countChunkTokens(content);
+        const chunks = chunkFile(filePath, content);
+        return { rawTokens, chunks };
+      })
+    );
+
+    // Collect results (sequential to maintain deterministic ordering)
+    for (const result of results) {
+      totalRawTokens += result.rawTokens;
+      groupChunks.push(...result.chunks);
+    }
+    processedFiles += group.length;
+    totalChunks += groupChunks.length;
+
+    if (processedFiles % 10 === 0 || groupStart + FILE_READ_CONCURRENCY >= files.length) {
+      process.stderr.write(`brain-cache: chunked ${processedFiles}/${files.length} files\n`);
+    }
+
+    // Embed and store this group's chunks in DEFAULT_BATCH_SIZE batches
+    for (let offset = 0; offset < groupChunks.length; offset += DEFAULT_BATCH_SIZE) {
+      const batch = groupChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
+      const texts = batch.map((chunk) => chunk.content);
+      totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
+      const vectors = await embedBatchWithRetry(profile.embeddingModel, texts);
+
+      const rows: ChunkRow[] = batch.map((chunk, i) => ({
+        id: chunk.id,
+        file_path: chunk.filePath,
+        chunk_type: chunk.chunkType,
+        scope: chunk.scope,
+        name: chunk.name,
+        content: chunk.content,
+        start_line: chunk.startLine,
+        end_line: chunk.endLine,
+        vector: vectors[i],
+      }));
+
+      await insertChunks(table, rows);
+      processedChunks += batch.length;
+      process.stderr.write(
+        `\rbrain-cache: embedding ${processedChunks}/${totalChunks} chunks (${Math.round((processedChunks / totalChunks) * 100)}%)`
+      );
     }
   }
-  process.stderr.write(
-    `brain-cache: ${allChunks.length} chunks from ${files.length} files\n`
-  );
-
-  // Step 8: Batch embed + store
-  let totalChunkTokens = 0;
-  let processedCount = 0;
-  for (let offset = 0; offset < allChunks.length; offset += DEFAULT_BATCH_SIZE) {
-    const batch = allChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
-    const texts = batch.map((chunk) => chunk.content);
-    totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
-    const vectors = await embedBatchWithRetry(profile.embeddingModel, texts);
-
-    const rows: ChunkRow[] = batch.map((chunk, i) => ({
-      id: chunk.id,
-      file_path: chunk.filePath,
-      chunk_type: chunk.chunkType,
-      scope: chunk.scope,
-      name: chunk.name,
-      content: chunk.content,
-      start_line: chunk.startLine,
-      end_line: chunk.endLine,
-      vector: vectors[i],
-    }));
-
-    await insertChunks(table, rows);
-    processedCount += batch.length;
-    process.stderr.write(
-      `\rbrain-cache: embedding ${processedCount}/${allChunks.length} chunks (${Math.round((processedCount / allChunks.length) * 100)}%)`
-    );
-  }
   process.stderr.write('\n');
+  process.stderr.write(
+    `brain-cache: ${totalChunks} chunks from ${files.length} files\n`
+  );
 
   // Step 9: Write index state
   await writeIndexState(rootDir, {
@@ -121,7 +142,7 @@ export async function runIndex(targetPath?: string): Promise<void> {
     dimension: dim,
     indexedAt: new Date().toISOString(),
     fileCount: files.length,
-    chunkCount: allChunks.length,
+    chunkCount: totalChunks,
   });
 
   // Step 10: Print summary with token savings stats
@@ -132,7 +153,7 @@ export async function runIndex(targetPath?: string): Promise<void> {
   process.stderr.write(
     `brain-cache: indexing complete\n` +
     `  Files:        ${files.length}\n` +
-    `  Chunks:       ${allChunks.length}\n` +
+    `  Chunks:       ${totalChunks}\n` +
     `  Model:        ${profile.embeddingModel}\n` +
     `  Raw tokens:   ${totalRawTokens.toLocaleString()}\n` +
     `  Chunk tokens: ${totalChunkTokens.toLocaleString()}\n` +
