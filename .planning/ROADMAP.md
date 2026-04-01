@@ -14,7 +14,7 @@
 - [x] **Phase 2: Storage and Indexing** - LanceDB schema, AST-aware chunking, and the full indexing pipeline (completed 2026-03-31)
 - [x] **Phase 3: Retrieval and Context Assembly** - Query pipeline, deduplication, token budget enforcement, and savings metadata (completed 2026-04-01)
 - [x] **Phase 4: MCP Server and Claude Integration** - Expose all tools via stdio MCP and wire ask-codebase via Anthropic SDK (completed 2026-04-01)
-- [ ] **Phase 5: CLI Completion** - All CLI commands as thin workflow adapters with actionable DX
+- [x] **Phase 5: CLI Completion** - All CLI commands as thin workflow adapters with actionable DX (completed 2026-04-01)
 
 ---
 
@@ -96,11 +96,11 @@ Plans:
   2. `braincache index [path]` displays a progress bar during indexing and prints token savings stats on completion
   3. `braincache doctor` outputs human-readable system health -- missing Ollama models produce an actionable fix message, not a stack trace
   4. `braincache status` reports files indexed, chunks stored, last indexed time, and active embedding model
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 05-01-PLAN.md -- Status command (new runStatus workflow) and doctor model presence check
-- [ ] 05-02-PLAN.md -- Init model warm-up and index progress/token savings stats
+- [x] 05-02-PLAN.md -- Init model warm-up and index progress/token savings stats
 
 ---
 
@@ -112,7 +112,7 @@ Plans:
 | 2. Storage and Indexing | 4/4 | Complete   | 2026-03-31 |
 | 3. Retrieval and Context Assembly | 3/3 | Complete   | 2026-04-01 |
 | 4. MCP Server and Claude Integration | 2/2 | Complete   | 2026-04-01 |
-| 5. CLI Completion | 1/2 | In Progress|  |
+| 5. CLI Completion | 2/2 | Complete   | 2026-04-01 |
 
 ---
 
