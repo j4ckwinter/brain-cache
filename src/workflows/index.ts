@@ -9,6 +9,7 @@ import {
   openDatabase,
   openOrCreateChunkTable,
   insertChunks,
+  createVectorIndexIfNeeded,
   writeIndexState,
   type ChunkRow,
 } from '../services/lancedb.js';
@@ -135,7 +136,10 @@ export async function runIndex(targetPath?: string): Promise<void> {
     `brain-cache: ${totalChunks} chunks from ${files.length} files\n`
   );
 
-  // Step 9: Write index state
+  // Step 9: Create vector index if table is large enough
+  await createVectorIndexIfNeeded(table, profile.embeddingModel);
+
+  // Step 10: Write index state
   await writeIndexState(rootDir, {
     version: 1,
     embeddingModel: profile.embeddingModel,
@@ -145,7 +149,7 @@ export async function runIndex(targetPath?: string): Promise<void> {
     chunkCount: totalChunks,
   });
 
-  // Step 10: Print summary with token savings stats
+  // Step 11: Print summary with token savings stats
   const reductionPct = totalRawTokens > 0
     ? Math.round((1 - totalChunkTokens / totalRawTokens) * 100)
     : 0;

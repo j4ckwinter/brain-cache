@@ -41,11 +41,12 @@ export function assembleContext(
   const kept: RetrievedChunk[] = [];
   let totalTokens = 0;
   const separator = '\n\n---\n\n';
+  const separatorTokens = countChunkTokens(separator); // compute once (4 tokens)
 
   for (const chunk of chunks) {
     const formatted = formatChunk(chunk);
     const chunkTokens = countChunkTokens(formatted);
-    const sepCost = kept.length > 0 ? countChunkTokens(separator) : 0;
+    const sepCost = kept.length > 0 ? separatorTokens : 0;
 
     if (totalTokens + chunkTokens + sepCost > opts.maxTokens) {
       log.debug({ totalTokens, chunkTokens, maxTokens: opts.maxTokens }, 'Token budget reached');
