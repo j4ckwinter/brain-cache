@@ -31,7 +31,9 @@
 | 3. Retrieval and Context Assembly | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. MCP Server and Claude Integration | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. CLI Completion | v1.0 | 2/2 | Complete | 2026-04-01 |
+| 6. Foundation Cleanup | v1.1 | 2/2 | Complete | 2026-04-01 |
+| 7. Type Safety and Code Correctness | v1.1 | 2/? | In progress | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 after v1.0 milestone completion*
+*Last updated: 2026-04-01 after plan 07-02 complete*
