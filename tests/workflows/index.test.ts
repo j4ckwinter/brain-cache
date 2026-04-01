@@ -36,6 +36,10 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/services/tokenCounter.js', () => ({
+  countChunkTokens: vi.fn().mockReturnValue(50),
+}));
+
 import { readProfile } from '../../src/services/capability.js';
 import { isOllamaRunning } from '../../src/services/ollama.js';
 import { crawlSourceFiles } from '../../src/services/crawler.js';
@@ -48,6 +52,7 @@ import {
   writeIndexState,
 } from '../../src/services/lancedb.js';
 import { readFile } from 'node:fs/promises';
+import { countChunkTokens } from '../../src/services/tokenCounter.js';
 
 const mockReadProfile = vi.mocked(readProfile);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
@@ -59,6 +64,7 @@ const mockOpenOrCreateChunkTable = vi.mocked(openOrCreateChunkTable);
 const mockInsertChunks = vi.mocked(insertChunks);
 const mockWriteIndexState = vi.mocked(writeIndexState);
 const mockReadFile = vi.mocked(readFile);
+const mockCountChunkTokens = vi.mocked(countChunkTokens);
 
 const mockProfile = {
   version: 1 as const,
@@ -264,5 +270,19 @@ describe('runIndex', () => {
     const combined = stderrOutput.join('');
     expect(combined).toContain(`found ${fakeFiles.length} source files`);
     expect(combined).toContain('indexing complete');
+  });
+
+  it('prints percentage progress during embedding', async () => {
+    await runIndex('/project');
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('(100%)');
+  });
+
+  it('prints token savings stats on completion', async () => {
+    await runIndex('/project');
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('Raw tokens:');
+    expect(combined).toContain('Chunk tokens:');
+    expect(combined).toContain('Reduction:');
   });
 });

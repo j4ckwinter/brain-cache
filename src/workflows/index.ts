@@ -13,6 +13,7 @@ import {
   type ChunkRow,
 } from '../services/lancedb.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE } from '../lib/config.js';
+import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
 
 /**
@@ -72,9 +73,11 @@ export async function runIndex(targetPath?: string): Promise<void> {
 
   // Step 7: Chunk all files
   const allChunks: CodeChunk[] = [];
+  let totalRawTokens = 0;
   for (let i = 0; i < files.length; i++) {
     const filePath = files[i];
     const content = await readFile(filePath, 'utf-8');
+    totalRawTokens += countChunkTokens(content);
     const chunks = chunkFile(filePath, content);
     allChunks.push(...chunks);
 
@@ -108,9 +111,10 @@ export async function runIndex(targetPath?: string): Promise<void> {
     await insertChunks(table, rows);
     processedCount += batch.length;
     process.stderr.write(
-      `brain-cache: embedded ${processedCount}/${allChunks.length} chunks\n`
+      `\rbrain-cache: embedding ${processedCount}/${allChunks.length} chunks (${Math.round((processedCount / allChunks.length) * 100)}%)`
     );
   }
+  process.stderr.write('\n');
 
   // Step 9: Write index state
   await writeIndexState(rootDir, {
@@ -122,8 +126,22 @@ export async function runIndex(targetPath?: string): Promise<void> {
     chunkCount: allChunks.length,
   });
 
-  // Step 10: Print summary
+  // Step 10: Print summary with token savings stats
+  const totalChunkTokens = allChunks.reduce(
+    (sum, chunk) => sum + countChunkTokens(chunk.content), 0
+  );
+  const reductionPct = totalRawTokens > 0
+    ? Math.round((1 - totalChunkTokens / totalRawTokens) * 100)
+    : 0;
+
   process.stderr.write(
-    `brain-cache: indexing complete\n  Files: ${files.length}\n  Chunks: ${allChunks.length}\n  Model: ${profile.embeddingModel}\n  Stored in: ${rootDir}/.brain-cache/\n`
+    `brain-cache: indexing complete\n` +
+    `  Files:        ${files.length}\n` +
+    `  Chunks:       ${allChunks.length}\n` +
+    `  Model:        ${profile.embeddingModel}\n` +
+    `  Raw tokens:   ${totalRawTokens.toLocaleString()}\n` +
+    `  Chunk tokens: ${totalChunkTokens.toLocaleString()}\n` +
+    `  Reduction:    ${reductionPct}%\n` +
+    `  Stored in:    ${rootDir}/.brain-cache/\n`
   );
 }
