@@ -47,6 +47,15 @@ program
   });
 
 program
+  .command('status')
+  .description('Show index stats: files indexed, chunks stored, last indexed time')
+  .argument('[path]', 'Project root directory (defaults to current directory)')
+  .action(async (path?: string) => {
+    const { runStatus } = await import('../workflows/status.js');
+    await runStatus(path);
+  });
+
+program
   .command('context')
   .description('Build token-budgeted context from codebase for a query')
   .argument('<query>', 'Natural language query string')
