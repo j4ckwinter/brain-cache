@@ -8,6 +8,13 @@ const log = childLogger('ask-codebase');
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_MAX_RESPONSE_TOKENS = 4096;
 
+const SYSTEM_PROMPT = `You are a codebase assistant. Answer questions strictly based on the provided codebase context.
+
+- Do not hallucinate or infer implementation details not present in the provided context.
+- Prioritize code-level explanations and reference specific files and functions when available.
+- If the provided context is insufficient to answer the question, say "I don't see enough context to answer that" rather than guessing.
+- Be precise and grounded in the actual code shown.`;
+
 export interface AskCodebaseOptions {
   path?: string;
   maxContextTokens?: number;
@@ -52,6 +59,7 @@ export async function runAskCodebase(
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
+    system: SYSTEM_PROMPT,
     messages: [
       {
         role: 'user',
