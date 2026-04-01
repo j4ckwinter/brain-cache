@@ -157,15 +157,25 @@ export async function pullModelIfMissing(
   log.info({ model }, 'Model not found locally, pulling...');
 
   const defaultProgress = (status: string) => {
-    process.stderr.write(`Pulling ${model}: ${status}\n`);
+    process.stderr.write(`\rPulling ${model}: ${status}`);
   };
 
   const progress = onProgress ?? defaultProgress;
 
+  let lastStatus = '';
   const stream = await ollama.pull({ model, stream: true });
   for await (const chunk of stream) {
-    progress(chunk.status);
+    const pct = chunk.total
+      ? ` ${Math.round(((chunk.completed ?? 0) / chunk.total) * 100)}%`
+      : '';
+    const status = `${chunk.status}${pct}`;
+    if (status !== lastStatus) {
+      progress(status);
+      lastStatus = status;
+    }
   }
+  // End the carriage-return line
+  if (!onProgress) process.stderr.write('\n');
 
   log.info({ model }, 'Model pull complete');
 }

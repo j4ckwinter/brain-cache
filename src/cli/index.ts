@@ -1,50 +1,49 @@
-import { Command } from 'commander';
-import { createRequire } from 'node:module';
+import { Command } from "commander";
 
-const require = createRequire(import.meta.url);
-const pkg = require('../../package.json') as { version: string };
+declare const __BRAIN_CACHE_VERSION__: string;
+const version = __BRAIN_CACHE_VERSION__;
 
 const program = new Command();
 
 program
-  .name('brain-cache')
-  .description('Local AI runtime \u2014 GPU cache layer for Claude')
-  .version(pkg.version);
+  .name("brain-cache")
+  .description("Local AI runtime \u2014 GPU cache layer for Claude")
+  .version(version);
 
 program
-  .command('init')
-  .description('Detect hardware, pull embedding model, create config directory')
+  .command("init")
+  .description("Detect hardware, pull embedding model, create config directory")
   .action(async () => {
-    const { runInit } = await import('../workflows/init.js');
+    const { runInit } = await import("../workflows/init.js");
     await runInit();
   });
 
 program
-  .command('doctor')
-  .description('Report system health: GPU, VRAM tier, Ollama status')
+  .command("doctor")
+  .description("Report system health: GPU, VRAM tier, Ollama status")
   .action(async () => {
-    const { runDoctor } = await import('../workflows/doctor.js');
+    const { runDoctor } = await import("../workflows/doctor.js");
     await runDoctor();
   });
 
 program
-  .command('index')
-  .description('Index a codebase: parse, chunk, embed, and store in LanceDB')
-  .argument('[path]', 'Directory to index (defaults to current directory)')
-  .option('-f, --force', 'Force full reindex, ignoring cached file hashes')
+  .command("index")
+  .description("Index a codebase: parse, chunk, embed, and store in LanceDB")
+  .argument("[path]", "Directory to index (defaults to current directory)")
+  .option("-f, --force", "Force full reindex, ignoring cached file hashes")
   .action(async (path: string | undefined, opts: { force?: boolean }) => {
-    const { runIndex } = await import('../workflows/index.js');
+    const { runIndex } = await import("../workflows/index.js");
     await runIndex(path, { force: opts.force });
   });
 
 program
-  .command('search')
-  .description('Search indexed codebase with a natural language query')
-  .argument('<query>', 'Natural language query string')
-  .option('-n, --limit <n>', 'Maximum number of results', '10')
-  .option('-p, --path <path>', 'Project root directory')
+  .command("search")
+  .description("Search indexed codebase with a natural language query")
+  .argument("<query>", "Natural language query string")
+  .option("-n, --limit <n>", "Maximum number of results", "10")
+  .option("-p, --path <path>", "Project root directory")
   .action(async (query: string, opts: { limit: string; path?: string }) => {
-    const { runSearch } = await import('../workflows/search.js');
+    const { runSearch } = await import("../workflows/search.js");
     await runSearch(query, {
       limit: parseInt(opts.limit, 10),
       path: opts.path,
@@ -52,46 +51,69 @@ program
   });
 
 program
-  .command('status')
-  .description('Show index stats: files indexed, chunks stored, last indexed time')
-  .argument('[path]', 'Project root directory (defaults to current directory)')
+  .command("status")
+  .description(
+    "Show index stats: files indexed, chunks stored, last indexed time",
+  )
+  .argument("[path]", "Project root directory (defaults to current directory)")
   .action(async (path?: string) => {
-    const { runStatus } = await import('../workflows/status.js');
+    const { runStatus } = await import("../workflows/status.js");
     await runStatus(path);
   });
 
 program
-  .command('context')
-  .description('Build token-budgeted context from codebase for a query')
-  .argument('<query>', 'Natural language query string')
-  .option('-n, --limit <n>', 'Maximum number of search results', '10')
-  .option('-b, --budget <tokens>', 'Token budget for assembled context', '4096')
-  .option('-p, --path <path>', 'Project root directory')
-  .action(async (query: string, opts: { limit: string; budget: string; path?: string }) => {
-    const { runBuildContext } = await import('../workflows/buildContext.js');
-    const result = await runBuildContext(query, {
-      limit: parseInt(opts.limit, 10),
-      maxTokens: parseInt(opts.budget, 10),
-      path: opts.path,
-    });
-    // Output result JSON to stdout (MCP transport compatible)
-    process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-  });
+  .command("context")
+  .description("Build token-budgeted context from codebase for a query")
+  .argument("<query>", "Natural language query string")
+  .option("-n, --limit <n>", "Maximum number of search results", "10")
+  .option("-b, --budget <tokens>", "Token budget for assembled context", "4096")
+  .option("-p, --path <path>", "Project root directory")
+  .option("--raw", "Output raw JSON (MCP transport compatible)")
+  .action(
+    async (
+      query: string,
+      opts: { limit: string; budget: string; path?: string; raw?: boolean },
+    ) => {
+      const { runBuildContext } = await import("../workflows/buildContext.js");
+      const result = await runBuildContext(query, {
+        limit: parseInt(opts.limit, 10),
+        maxTokens: parseInt(opts.budget, 10),
+        path: opts.path,
+      });
+      if (opts.raw) {
+        // Machine-parseable JSON — MCP transport compatible
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      } else {
+        // Human-readable: content field has real newlines, print it directly
+        process.stdout.write(result.content);
+        if (!result.content.endsWith("\n")) {
+          process.stdout.write("\n");
+        }
+        process.stderr.write(
+          `\n--- brain-cache: ${result.metadata.tokensSent} tokens, ${result.metadata.reductionPct}% reduction, ${result.chunks.length} chunks ---\n`,
+        );
+      }
+    },
+  );
 
 program
-  .command('ask')
-  .description('Ask a natural language question about the codebase — retrieves context locally, reasons via Claude')
-  .argument('<question>', 'Natural language question about the codebase')
-  .option('-b, --budget <tokens>', 'Token budget for context retrieval', '4096')
-  .option('-p, --path <path>', 'Project root directory')
+  .command("ask")
+  .description(
+    "Ask a natural language question about the codebase — retrieves context locally, reasons via Claude",
+  )
+  .argument("<question>", "Natural language question about the codebase")
+  .option("-b, --budget <tokens>", "Token budget for context retrieval", "4096")
+  .option("-p, --path <path>", "Project root directory")
   .action(async (question: string, opts: { budget: string; path?: string }) => {
-    const { runAskCodebase } = await import('../workflows/askCodebase.js');
+    const { runAskCodebase } = await import("../workflows/askCodebase.js");
     const result = await runAskCodebase(question, {
       path: opts.path,
       maxContextTokens: parseInt(opts.budget, 10),
     });
     process.stderr.write(`\n${result.answer}\n`);
-    process.stderr.write(`\n--- brain-cache: ${result.contextMetadata.tokensSent} tokens sent (${result.contextMetadata.reductionPct}% reduction) via ${result.model} ---\n`);
+    process.stderr.write(
+      `\n--- brain-cache: ${result.contextMetadata.tokensSent} tokens sent (${result.contextMetadata.reductionPct}% reduction) via ${result.model} ---\n`,
+    );
   });
 
 (async () => {
