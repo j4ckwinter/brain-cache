@@ -70,10 +70,18 @@ export async function runInit(): Promise<void> {
   // Step 6: Pull embedding model if missing
   await pullModelIfMissing(profileWithVersion.embeddingModel);
 
-  // Step 7: Write profile to disk
+  // Step 7: Warm model into VRAM
+  process.stderr.write(
+    `brain-cache: warming model ${profileWithVersion.embeddingModel} into VRAM...\n`
+  );
+  const { embedBatchWithRetry } = await import('../services/embedder.js');
+  await embedBatchWithRetry(profileWithVersion.embeddingModel, ['warmup']);
+  process.stderr.write('brain-cache: model warm.\n');
+
+  // Step 8: Write profile to disk
   await writeProfile(profileWithVersion);
 
-  // Step 8: Print success summary
+  // Step 9: Print success summary
   process.stderr.write(
     'brain-cache initialized successfully.\n' +
     '  Profile: ~/.brain-cache/profile.json\n' +

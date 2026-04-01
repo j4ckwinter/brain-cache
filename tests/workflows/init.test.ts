@@ -15,6 +15,10 @@ vi.mock('../../src/services/ollama.js', () => ({
   getOllamaVersion: vi.fn(),
 }));
 
+vi.mock('../../src/services/embedder.js', () => ({
+  embedBatchWithRetry: vi.fn().mockResolvedValue([[0.1, 0.2]]),
+}));
+
 vi.mock('ollama', () => ({
   default: {
     list: vi.fn(),
@@ -33,6 +37,7 @@ import {
   pullModelIfMissing,
   getOllamaVersion,
 } from '../../src/services/ollama.js';
+import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import ollamaClient from 'ollama';
 
 // These will be imported after mocks are set up
@@ -47,6 +52,7 @@ const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
 const mockStartOllama = vi.mocked(startOllama);
 const mockPullModelIfMissing = vi.mocked(pullModelIfMissing);
 const mockGetOllamaVersion = vi.mocked(getOllamaVersion);
+const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockOllamaList = vi.mocked(ollamaClient.list);
 
 const mockProfile = {
@@ -91,6 +97,7 @@ describe('runInit', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
+    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
 
     // Dynamically import to ensure mocks are in place
     const mod = await import('../../src/workflows/init.js');
@@ -213,6 +220,18 @@ describe('runInit', () => {
     await runInit();
     const combined = stderrOutput.join('');
     expect(combined).toContain('brain-cache initialized successfully');
+  });
+
+  it('warms model into VRAM after pull', async () => {
+    await runInit();
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalledWith('mxbai-embed-large', ['warmup']);
+  });
+
+  it('prints warming message to stderr', async () => {
+    await runInit();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('warming model');
+    expect(combined).toContain('model warm.');
   });
 });
 
