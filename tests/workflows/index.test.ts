@@ -26,6 +26,9 @@ vi.mock('../../src/services/lancedb.js', () => ({
   openOrCreateChunkTable: vi.fn(),
   insertChunks: vi.fn(),
   writeIndexState: vi.fn(),
+  readFileHashes: vi.fn(),
+  writeFileHashes: vi.fn(),
+  deleteChunksByFilePath: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -50,6 +53,9 @@ import {
   openOrCreateChunkTable,
   insertChunks,
   writeIndexState,
+  readFileHashes,
+  writeFileHashes,
+  deleteChunksByFilePath,
 } from '../../src/services/lancedb.js';
 import { readFile } from 'node:fs/promises';
 import { countChunkTokens } from '../../src/services/tokenCounter.js';
@@ -65,6 +71,9 @@ const mockInsertChunks = vi.mocked(insertChunks);
 const mockWriteIndexState = vi.mocked(writeIndexState);
 const mockReadFile = vi.mocked(readFile);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
+const mockReadFileHashes = vi.mocked(readFileHashes);
+const mockWriteFileHashes = vi.mocked(writeFileHashes);
+const mockDeleteChunksByFilePath = vi.mocked(deleteChunksByFilePath);
 
 const mockProfile = {
   version: 1 as const,
@@ -78,7 +87,7 @@ const mockProfile = {
 };
 
 const mockDb = {} as any;
-const mockTable = {} as any;
+const mockTable = { countRows: vi.fn().mockResolvedValue(2) } as any;
 
 const fakeFiles = ['/project/src/foo.ts', '/project/src/bar.ts'];
 
@@ -96,7 +105,7 @@ const fakeChunk = (filePath: string, i: number) => ({
 // 768-dim zero vector for nomic-embed-text
 const zeroVector768 = new Array(768).fill(0);
 
-let runIndex: (targetPath?: string) => Promise<void>;
+let runIndex: (targetPath?: string, opts?: { force?: boolean }) => Promise<void>;
 
 describe('runIndex', () => {
   let stderrOutput: string[];
@@ -132,6 +141,11 @@ describe('runIndex', () => {
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
     mockInsertChunks.mockResolvedValue(undefined);
     mockWriteIndexState.mockResolvedValue(undefined);
+    // Default: no stored hashes (first run)
+    mockReadFileHashes.mockResolvedValue({});
+    mockWriteFileHashes.mockResolvedValue(undefined);
+    mockDeleteChunksByFilePath.mockResolvedValue(undefined);
+    mockTable.countRows.mockResolvedValue(2);
 
     // Dynamically import after mocks are in place
     const mod = await import('../../src/workflows/index.js');
@@ -199,7 +213,6 @@ describe('runIndex', () => {
         embeddingModel: 'nomic-embed-text',
         dimension: 768,
         fileCount: fakeFiles.length,
-        chunkCount: fakeFiles.length, // one chunk per file in mock
       })
     );
   });
@@ -284,5 +297,138 @@ describe('runIndex', () => {
     expect(combined).toContain('Raw tokens:');
     expect(combined).toContain('Chunk tokens:');
     expect(combined).toContain('Reduction:');
+  });
+
+  // --- Incremental indexing tests ---
+
+  it('first run (no manifest): treats all files as new and embeds all', async () => {
+    mockReadFileHashes.mockResolvedValue({});
+    await runIndex('/project');
+    // All files are new, so embed should be called
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+    expect(mockChunkFile).toHaveBeenCalledTimes(fakeFiles.length);
+  });
+
+  it('second run with same content: calls embedBatchWithRetry zero times', async () => {
+    // Simulate all files already hashed with matching content
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(content, 'utf-8').digest('hex');
+    const storedHashes: Record<string, string> = {
+      [fakeFiles[0]]: hash,
+      [fakeFiles[1]]: hash,
+    };
+    mockReadFileHashes.mockResolvedValue(storedHashes);
+    mockReadFile.mockResolvedValue(content as any);
+
+    await runIndex('/project');
+
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+  });
+
+  it('second run with same content: logs nothing to re-index', async () => {
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(content, 'utf-8').digest('hex');
+    const storedHashes: Record<string, string> = {
+      [fakeFiles[0]]: hash,
+      [fakeFiles[1]]: hash,
+    };
+    mockReadFileHashes.mockResolvedValue(storedHashes);
+    mockReadFile.mockResolvedValue(content as any);
+
+    await runIndex('/project');
+
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('nothing to re-index');
+  });
+
+  it('changed file: only re-embeds the changed file, not the unchanged one', async () => {
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    const oldHash = createHash('sha256').update(content, 'utf-8').digest('hex');
+    const newContent = 'const x = 2;'; // changed
+    const storedHashes: Record<string, string> = {
+      [fakeFiles[0]]: oldHash, // unchanged
+      [fakeFiles[1]]: oldHash, // will be changed
+    };
+    mockReadFileHashes.mockResolvedValue(storedHashes);
+    // foo.ts unchanged, bar.ts changed
+    mockReadFile.mockImplementation(async (filePath: unknown) => {
+      if (filePath === fakeFiles[1]) return newContent as any;
+      return content as any;
+    });
+
+    await runIndex('/project');
+
+    // Only bar.ts (changed) should be chunked
+    expect(mockChunkFile).toHaveBeenCalledTimes(1);
+    expect(mockChunkFile).toHaveBeenCalledWith(fakeFiles[1], newContent);
+  });
+
+  it('changed file: calls deleteChunksByFilePath for the changed file before re-embed', async () => {
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    const oldHash = createHash('sha256').update(content, 'utf-8').digest('hex');
+    const storedHashes: Record<string, string> = {
+      [fakeFiles[0]]: oldHash,
+      [fakeFiles[1]]: oldHash,
+    };
+    mockReadFileHashes.mockResolvedValue(storedHashes);
+    mockReadFile.mockImplementation(async (filePath: unknown) => {
+      if (filePath === fakeFiles[1]) return 'const x = 2;' as any;
+      return content as any;
+    });
+
+    await runIndex('/project');
+
+    expect(mockDeleteChunksByFilePath).toHaveBeenCalledWith(mockTable, fakeFiles[1]);
+  });
+
+  it('removed file: calls deleteChunksByFilePath for removed file', async () => {
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(content, 'utf-8').digest('hex');
+    // Stored has both files, but crawl only returns one (bar.ts removed)
+    const storedHashes: Record<string, string> = {
+      [fakeFiles[0]]: hash,
+      [fakeFiles[1]]: hash, // this one is "removed"
+    };
+    mockReadFileHashes.mockResolvedValue(storedHashes);
+    mockCrawlSourceFiles.mockResolvedValue([fakeFiles[0]]); // only foo.ts present
+    mockReadFile.mockResolvedValue(content as any);
+
+    await runIndex('/project');
+
+    expect(mockDeleteChunksByFilePath).toHaveBeenCalledWith(mockTable, fakeFiles[1]);
+  });
+
+  it('force=true: ignores manifest and re-embeds all files', async () => {
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(content, 'utf-8').digest('hex');
+    const storedHashes: Record<string, string> = {
+      [fakeFiles[0]]: hash,
+      [fakeFiles[1]]: hash,
+    };
+    mockReadFileHashes.mockResolvedValue(storedHashes);
+    mockReadFile.mockResolvedValue(content as any);
+
+    await runIndex('/project', { force: true });
+
+    // Force bypasses incremental, so all files are embedded
+    expect(mockChunkFile).toHaveBeenCalledTimes(fakeFiles.length);
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+  });
+
+  it('writes updated hash manifest after successful indexing', async () => {
+    await runIndex('/project');
+    expect(mockWriteFileHashes).toHaveBeenCalledWith('/project', expect.any(Object));
+  });
+
+  it('logs incremental stats to stderr', async () => {
+    await runIndex('/project');
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('incremental index');
   });
 });

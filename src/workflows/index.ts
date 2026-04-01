@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { readProfile } from '../services/capability.js';
 import { isOllamaRunning } from '../services/ollama.js';
 import { crawlSourceFiles } from '../services/crawler.js';
@@ -10,6 +11,9 @@ import {
   openOrCreateChunkTable,
   insertChunks,
   writeIndexState,
+  readFileHashes,
+  writeFileHashes,
+  deleteChunksByFilePath,
   type ChunkRow,
 } from '../services/lancedb.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE } from '../lib/config.js';
@@ -17,19 +21,32 @@ import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
 
 /**
- * Orchestrates the full indexing pipeline:
+ * Compute a SHA-256 hex digest of file content.
+ */
+function hashContent(content: string): string {
+  return createHash('sha256').update(content, 'utf-8').digest('hex');
+}
+
+/**
+ * Orchestrates the full indexing pipeline with incremental support:
  * 1. Resolve target path
  * 2. Read capability profile
  * 3. Check Ollama is running
  * 4. Open LanceDB
  * 5. Crawl source files
- * 6. Chunk each file (AST-aware)
- * 7. Batch embed + store chunks
- * 8. Write index state
+ * 6. Read all files, compute SHA-256 hashes, diff against stored manifest
+ * 7. Delete chunks for removed + changed files
+ * 8. Chunk, embed, and store new + changed files only
+ * 9. Write updated hash manifest and index state
  *
  * All output goes to stderr — zero stdout output (per D-16).
+ *
+ * @param targetPath - Directory to index (defaults to current directory)
+ * @param opts.force - If true, ignore stored hashes and perform full reindex
  */
-export async function runIndex(targetPath?: string): Promise<void> {
+export async function runIndex(targetPath?: string, opts?: { force?: boolean }): Promise<void> {
+  const force = opts?.force ?? false;
+
   // Step 1: Resolve path
   const rootDir = resolve(targetPath ?? '.');
 
@@ -71,22 +88,110 @@ export async function runIndex(targetPath?: string): Promise<void> {
     return;
   }
 
-  // Step 7: Chunk all files
-  const allChunks: CodeChunk[] = [];
-  let totalRawTokens = 0;
-  for (let i = 0; i < files.length; i++) {
+  // Step 6b: Read all files and compute SHA-256 hashes
+  const contentMap = new Map<string, string>();
+  const currentHashes: Record<string, string> = {};
+
+  for (let i = 0; i < files.length; i += 1) {
     const filePath = files[i];
     const content = await readFile(filePath, 'utf-8');
+    contentMap.set(filePath, content);
+    currentHashes[filePath] = hashContent(content);
+  }
+
+  // Step 6c: Load stored hashes (skip if force)
+  const storedHashes = force ? {} : await readFileHashes(rootDir);
+  const crawledSet = new Set(files);
+
+  // Step 6d: Compute diff sets
+  const newFiles: string[] = [];
+  const changedFiles: string[] = [];
+  const removedFiles: string[] = [];
+  const unchangedFiles: string[] = [];
+
+  for (const filePath of files) {
+    const currentHash = currentHashes[filePath];
+    if (!(filePath in storedHashes)) {
+      newFiles.push(filePath);
+    } else if (storedHashes[filePath] !== currentHash) {
+      changedFiles.push(filePath);
+    } else {
+      unchangedFiles.push(filePath);
+    }
+  }
+
+  for (const filePath of Object.keys(storedHashes)) {
+    if (!crawledSet.has(filePath)) {
+      removedFiles.push(filePath);
+    }
+  }
+
+  // Step 6e: Log incremental stats
+  process.stderr.write(
+    `brain-cache: incremental index -- ${newFiles.length} new, ${changedFiles.length} changed, ` +
+    `${removedFiles.length} removed (${unchangedFiles.length} unchanged)\n`
+  );
+
+  // Step 6f: Delete chunks for removed + changed files
+  for (const filePath of [...removedFiles, ...changedFiles]) {
+    await deleteChunksByFilePath(table, filePath);
+  }
+
+  // Step 6g: Remove hash entries for removed files
+  const updatedHashes = { ...storedHashes };
+  for (const filePath of removedFiles) {
+    delete updatedHashes[filePath];
+  }
+
+  // Step 6h: Filter to only new + changed files for processing
+  const filesToProcess = [...newFiles, ...changedFiles];
+
+  // Step 6i: Nothing to do
+  if (filesToProcess.length === 0) {
+    process.stderr.write(`brain-cache: nothing to re-index\n`);
+    // Write updated manifest (may have removed some entries) and index state
+    for (const filePath of files) {
+      updatedHashes[filePath] = currentHashes[filePath];
+    }
+    await writeFileHashes(rootDir, updatedHashes);
+
+    // Update index state with current totals
+    const totalFiles = unchangedFiles.length;
+    const chunkCount = await table.countRows();
+    await writeIndexState(rootDir, {
+      version: 1,
+      embeddingModel: profile.embeddingModel,
+      dimension: dim,
+      indexedAt: new Date().toISOString(),
+      fileCount: totalFiles,
+      chunkCount,
+    });
+    process.stderr.write(
+      `brain-cache: indexing complete\n` +
+      `  Files:        ${totalFiles}\n` +
+      `  Chunks:       ${chunkCount}\n` +
+      `  Model:        ${profile.embeddingModel}\n` +
+      `  Stored in:    ${rootDir}/.brain-cache/\n`
+    );
+    return;
+  }
+
+  // Step 7: Chunk all files to process (using cached content)
+  const allChunks: CodeChunk[] = [];
+  let totalRawTokens = 0;
+  for (let i = 0; i < filesToProcess.length; i++) {
+    const filePath = filesToProcess[i];
+    const content = contentMap.get(filePath)!;
     totalRawTokens += countChunkTokens(content);
     const chunks = chunkFile(filePath, content);
     allChunks.push(...chunks);
 
     if ((i + 1) % 10 === 0) {
-      process.stderr.write(`brain-cache: chunked ${i + 1}/${files.length} files\n`);
+      process.stderr.write(`brain-cache: chunked ${i + 1}/${filesToProcess.length} files\n`);
     }
   }
   process.stderr.write(
-    `brain-cache: ${allChunks.length} chunks from ${files.length} files\n`
+    `brain-cache: ${allChunks.length} chunks from ${filesToProcess.length} files\n`
   );
 
   // Step 8: Batch embed + store
@@ -116,14 +221,26 @@ export async function runIndex(targetPath?: string): Promise<void> {
   }
   process.stderr.write('\n');
 
-  // Step 9: Write index state
+  // Step 9a: Merge new/changed hashes into manifest
+  for (const filePath of filesToProcess) {
+    updatedHashes[filePath] = currentHashes[filePath];
+  }
+  // Also ensure unchanged files stay in manifest
+  for (const filePath of unchangedFiles) {
+    updatedHashes[filePath] = currentHashes[filePath];
+  }
+  await writeFileHashes(rootDir, updatedHashes);
+
+  // Step 9b: Write index state
+  const totalFiles = files.length;
+  const chunkCount = await table.countRows();
   await writeIndexState(rootDir, {
     version: 1,
     embeddingModel: profile.embeddingModel,
     dimension: dim,
     indexedAt: new Date().toISOString(),
-    fileCount: files.length,
-    chunkCount: allChunks.length,
+    fileCount: totalFiles,
+    chunkCount,
   });
 
   // Step 10: Print summary with token savings stats
@@ -136,7 +253,7 @@ export async function runIndex(targetPath?: string): Promise<void> {
 
   process.stderr.write(
     `brain-cache: indexing complete\n` +
-    `  Files:        ${files.length}\n` +
+    `  Files:        ${totalFiles}\n` +
     `  Chunks:       ${allChunks.length}\n` +
     `  Model:        ${profile.embeddingModel}\n` +
     `  Raw tokens:   ${totalRawTokens.toLocaleString()}\n` +
