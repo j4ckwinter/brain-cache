@@ -15,6 +15,12 @@ vi.mock('../../src/services/ollama.js', () => ({
   getOllamaVersion: vi.fn(),
 }));
 
+vi.mock('ollama', () => ({
+  default: {
+    list: vi.fn(),
+  },
+}));
+
 import {
   detectCapabilities,
   readProfile,
@@ -27,6 +33,7 @@ import {
   pullModelIfMissing,
   getOllamaVersion,
 } from '../../src/services/ollama.js';
+import ollamaClient from 'ollama';
 
 // These will be imported after mocks are set up
 let runInit: () => Promise<void>;
@@ -40,6 +47,7 @@ const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
 const mockStartOllama = vi.mocked(startOllama);
 const mockPullModelIfMissing = vi.mocked(pullModelIfMissing);
 const mockGetOllamaVersion = vi.mocked(getOllamaVersion);
+const mockOllamaList = vi.mocked(ollamaClient.list);
 
 const mockProfile = {
   version: 1 as const,
@@ -237,6 +245,8 @@ describe('runDoctor', () => {
     mockIsOllamaInstalled.mockResolvedValue(true);
     mockIsOllamaRunning.mockResolvedValue(true);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
+    // Default: model is present
+    mockOllamaList.mockResolvedValue({ models: [{ name: 'mxbai-embed-large:latest' }] } as never);
 
     const mod = await import('../../src/workflows/doctor.js');
     runDoctor = mod.runDoctor;
@@ -297,5 +307,22 @@ describe('runDoctor', () => {
     const combined = stderrOutput.join('');
     expect(combined.toLowerCase()).toContain('installed');
     expect(combined.toLowerCase()).toContain('running');
+  });
+
+  it('prints "Model loaded: yes" when the embedding model is present in Ollama', async () => {
+    mockOllamaList.mockResolvedValue({
+      models: [{ name: 'mxbai-embed-large:latest' }],
+    } as never);
+    await runDoctor();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('Model loaded:      yes');
+  });
+
+  it('prints actionable fix with ollama pull command when model is missing', async () => {
+    mockOllamaList.mockResolvedValue({ models: [] } as never);
+    await runDoctor();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('Model loaded:      no');
+    expect(combined).toContain('ollama pull mxbai-embed-large');
   });
 });

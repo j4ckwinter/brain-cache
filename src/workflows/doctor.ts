@@ -1,3 +1,4 @@
+import ollama from 'ollama';
 import {
   readProfile,
   detectCapabilities,
@@ -33,9 +34,18 @@ export async function runDoctor(): Promise<void> {
   const running = installed ? await isOllamaRunning() : false;
   const version = installed ? await getOllamaVersion() : null;
 
+  // Step 4: Check model presence in Ollama
+  let modelPresent = false;
+  if (running) {
+    const list = await ollama.list();
+    modelPresent = list.models.some((m: { name: string }) =>
+      m.name.startsWith(saved.embeddingModel)
+    );
+  }
+
   const vramGiBDisplay = (gib: number | null) => gib !== null ? `${gib} GiB` : 'N/A';
 
-  // Step 4: Print health report to stderr
+  // Step 5: Print health report to stderr
   process.stderr.write(
     'brain-cache doctor\n' +
     '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n' +
@@ -53,6 +63,11 @@ export async function runDoctor(): Promise<void> {
     'Ollama:\n' +
     `Installed:         ${installed ? 'yes' : 'no'}\n` +
     `Running:           ${running ? 'yes' : 'no'}\n` +
-    `Version:           ${version ?? 'unknown'}\n`
+    `Version:           ${version ?? 'unknown'}\n` +
+    `Model loaded:      ${modelPresent ? 'yes' : 'no'}\n` +
+    (!modelPresent && running
+      ? `\n  Fix: run 'brain-cache init' to pull the model, or:\n` +
+        `       ollama pull ${saved.embeddingModel}\n`
+      : '')
   );
 }
