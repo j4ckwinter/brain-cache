@@ -184,6 +184,36 @@ describe('classifyQueryIntent', () => {
     expect(classifyQueryIntent('what is the purpose of the chunker')).toBe('knowledge');
     expect(classifyQueryIntent('describe the embedding pipeline')).toBe('knowledge');
   });
+
+  // Bigram tests (always diagnostic regardless of exclusions)
+  it('returns "diagnostic" for bigram "stack trace"', () => {
+    expect(classifyQueryIntent('I got a stack trace')).toBe('diagnostic');
+  });
+
+  it('returns "diagnostic" for bigram "null pointer"', () => {
+    expect(classifyQueryIntent('null pointer in the loop')).toBe('diagnostic');
+  });
+
+  it('returns "diagnostic" for bigram "type error"', () => {
+    expect(classifyQueryIntent('it throws a type error')).toBe('diagnostic');
+  });
+
+  it('returns "diagnostic" for bigram "not working"', () => {
+    expect(classifyQueryIntent('the feature is not working')).toBe('diagnostic');
+  });
+
+  // Exclusion tests (keyword present but suppressed by exclusion pattern)
+  it('returns "knowledge" for "how does the error handler work" (exclusion)', () => {
+    expect(classifyQueryIntent('how does the error handler work')).toBe('knowledge');
+  });
+
+  it('returns "knowledge" for "what is undefined behavior" (exclusion)', () => {
+    expect(classifyQueryIntent('what is undefined behavior in Rust')).toBe('knowledge');
+  });
+
+  it('returns "knowledge" for "explain the null object pattern" (exclusion)', () => {
+    expect(classifyQueryIntent('explain the null object pattern')).toBe('knowledge');
+  });
 });
 
 describe('RETRIEVAL_STRATEGIES', () => {
