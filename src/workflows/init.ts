@@ -47,7 +47,7 @@ export async function runInit(): Promise<void> {
       '  Linux: curl -fsSL https://ollama.com/install.sh | sh\n\n' +
       'Then run: brain-cache init\n'
     );
-    process.exit(1);
+    throw new Error('Ollama is not installed. Install from https://ollama.com then retry brain-cache init.');
   }
 
   // Step 4: Check Ollama is running, auto-start if needed (per D-06, D-07)
@@ -59,7 +59,7 @@ export async function runInit(): Promise<void> {
       process.stderr.write(
         "Error: Could not start Ollama. Run 'ollama serve' manually, then retry 'brain-cache init'.\n"
       );
-      process.exit(1);
+      throw new Error("Could not start Ollama. Run 'ollama serve' manually, then retry 'brain-cache init'.");
     }
   }
 
