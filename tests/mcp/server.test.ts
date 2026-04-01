@@ -310,13 +310,19 @@ describe('MCP tool handlers', () => {
       const result = await handler({ query: 'how does auth work', maxTokens: 2000 });
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
+
+      // Response is JSON + savings line separated by \n\n---\n
+      const [jsonPart, savingsPart] = result.content[0].text.split('\n\n---\n');
+      const parsed = JSON.parse(jsonPart);
       expect(parsed).toHaveProperty('content');
       expect(parsed).toHaveProperty('chunks');
       expect(parsed).toHaveProperty('metadata');
       expect(parsed.metadata.tokensSent).toBe(150);
       expect(parsed.metadata.reductionPct).toBe(85);
       expect(parsed.metadata.cloudCallsMade).toBe(0);
+
+      // Verify the plain-text savings summary line
+      expect(savingsPart).toBe('brain-cache token savings: 150 tokens sent vs ~1000 without brain-cache (85% reduction)');
     });
   });
 
