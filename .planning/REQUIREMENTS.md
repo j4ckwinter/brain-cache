@@ -14,7 +14,7 @@ Requirements for the hardening milestone. Each maps to roadmap phases.
 - [x] **DEBT-03**: Respect OLLAMA_HOST env var for Ollama server URL with localhost:11434 fallback
 - [x] **DEBT-04**: Remove or populate empty barrel export files (tools, services, lib)
 - [x] **DEBT-05**: Replace `any` types in tree-sitter and LanceDB interop with proper local interfaces
-- [ ] **DEBT-06**: Eliminate redundant token counting in index workflow — count once during chunking
+- [x] **DEBT-06**: Eliminate redundant token counting in index workflow — count once during chunking
 
 ### Bugs
 
@@ -27,8 +27,8 @@ Requirements for the hardening milestone. Each maps to roadmap phases.
 
 ### Performance
 
-- [ ] **PERF-01**: Parallelize file I/O during indexing with concurrency limiter
-- [ ] **PERF-02**: Stream chunk pipeline to cap memory — process in batches instead of accumulating all chunks
+- [x] **PERF-01**: Parallelize file I/O during indexing with concurrency limiter
+- [x] **PERF-02**: Stream chunk pipeline to cap memory — process in batches instead of accumulating all chunks
 - [x] **PERF-03**: Create IVF-PQ vector index on LanceDB table when chunk count exceeds threshold
 - [x] **PERF-04**: Cache separator token count — compute once outside loop, not per-chunk
 
@@ -80,12 +80,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEBT-03 | Phase 6 | Complete |
 | DEBT-04 | Phase 6 | Complete |
 | DEBT-05 | Phase 7 | Complete |
-| DEBT-06 | Phase 11 | Pending |
+| DEBT-06 | Phase 11 | Complete |
 | BUG-01 | Phase 7 | Complete |
 | SEC-01 | Phase 6 | Complete |
 | SEC-02 | Phase 8 | Complete |
-| PERF-01 | Phase 11 | Pending |
-| PERF-02 | Phase 11 | Pending |
+| PERF-01 | Phase 11 | Complete |
+| PERF-02 | Phase 11 | Complete |
 | PERF-03 | Phase 9 | Complete |
 | PERF-04 | Phase 9 | Complete |
 | HARD-01 | Phase 6 | Complete |
