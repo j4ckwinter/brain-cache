@@ -13,30 +13,30 @@ Requirements for the hardening milestone. Each maps to roadmap phases.
 - [x] **DEBT-02**: Source version string from package.json instead of hardcoding '0.1.0'
 - [x] **DEBT-03**: Respect OLLAMA_HOST env var for Ollama server URL with localhost:11434 fallback
 - [x] **DEBT-04**: Remove or populate empty barrel export files (tools, services, lib)
-- [ ] **DEBT-05**: Replace `any` types in tree-sitter and LanceDB interop with proper local interfaces
-- [ ] **DEBT-06**: Eliminate redundant token counting in index workflow — count once during chunking
+- [x] **DEBT-05**: Replace `any` types in tree-sitter and LanceDB interop with proper local interfaces
+- [x] **DEBT-06**: Eliminate redundant token counting in index workflow — count once during chunking
 
 ### Bugs
 
-- [ ] **BUG-01**: Fix model name matching to handle explicit tags and prevent false prefix matches
+- [x] **BUG-01**: Fix model name matching to handle explicit tags and prevent false prefix matches
 
 ### Security
 
 - [x] **SEC-01**: Ensure API keys never leak to pino logs or debug output
-- [ ] **SEC-02**: Fix detached Ollama process management — PID tracking, race condition prevention, port check before spawn
+- [x] **SEC-02**: Fix detached Ollama process management — PID tracking, race condition prevention, port check before spawn
 
 ### Performance
 
-- [ ] **PERF-01**: Parallelize file I/O during indexing with concurrency limiter
-- [ ] **PERF-02**: Stream chunk pipeline to cap memory — process in batches instead of accumulating all chunks
-- [ ] **PERF-03**: Create IVF-PQ vector index on LanceDB table when chunk count exceeds threshold
-- [ ] **PERF-04**: Cache separator token count — compute once outside loop, not per-chunk
+- [x] **PERF-01**: Parallelize file I/O during indexing with concurrency limiter
+- [x] **PERF-02**: Stream chunk pipeline to cap memory — process in batches instead of accumulating all chunks
+- [x] **PERF-03**: Create IVF-PQ vector index on LanceDB table when chunk count exceeds threshold
+- [x] **PERF-04**: Cache separator token count — compute once outside loop, not per-chunk
 
 ### Hardening
 
 - [x] **HARD-01**: Replace all `process.exit(1)` calls with thrown errors; let CLI entry point handle exit
-- [ ] **HARD-02**: Document tree-sitter CJS require() hack with inline comments explaining why and when it can be removed
-- [ ] **HARD-03**: Improve arrow function extraction — use parent node types instead of raw depth counting
+- [x] **HARD-02**: Document tree-sitter CJS require() hack with inline comments explaining why and when it can be removed
+- [x] **HARD-03**: Improve arrow function extraction — use parent node types instead of raw depth counting
 - [x] **HARD-04**: Improve intent classification — add exclusion patterns and bigrams to reduce false positives
 
 ## Future Requirements
@@ -79,18 +79,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEBT-02 | Phase 6 | Complete |
 | DEBT-03 | Phase 6 | Complete |
 | DEBT-04 | Phase 6 | Complete |
-| DEBT-05 | Phase 7 | Pending |
-| DEBT-06 | Phase 7 | Pending |
-| BUG-01 | Phase 7 | Pending |
+| DEBT-05 | Phase 7 | Complete |
+| DEBT-06 | Phase 7 | Complete |
+| BUG-01 | Phase 7 | Complete |
 | SEC-01 | Phase 6 | Complete |
-| SEC-02 | Phase 8 | Pending |
-| PERF-01 | Phase 9 | Pending |
-| PERF-02 | Phase 9 | Pending |
-| PERF-03 | Phase 9 | Pending |
-| PERF-04 | Phase 9 | Pending |
+| SEC-02 | Phase 8 | Complete |
+| PERF-01 | Phase 9 | Complete |
+| PERF-02 | Phase 9 | Complete |
+| PERF-03 | Phase 9 | Complete |
+| PERF-04 | Phase 9 | Complete |
 | HARD-01 | Phase 6 | Complete |
-| HARD-02 | Phase 7 | Pending |
-| HARD-03 | Phase 7 | Pending |
+| HARD-02 | Phase 7 | Complete |
+| HARD-03 | Phase 7 | Complete |
 | HARD-04 | Phase 10 | Complete |
 
 **Coverage:**
