@@ -1,0 +1,247 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Mock all service dependencies before importing the workflow
+vi.mock('../../src/services/capability.js', () => ({
+  readProfile: vi.fn(),
+}));
+
+vi.mock('../../src/services/ollama.js', () => ({
+  isOllamaRunning: vi.fn(),
+}));
+
+vi.mock('../../src/services/lancedb.js', () => ({
+  openDatabase: vi.fn(),
+  readIndexState: vi.fn(),
+}));
+
+vi.mock('../../src/services/embedder.js', () => ({
+  embedBatchWithRetry: vi.fn(),
+}));
+
+vi.mock('../../src/services/retriever.js', () => ({
+  searchChunks: vi.fn(),
+  deduplicateChunks: vi.fn(),
+  classifyQueryIntent: vi.fn(),
+  RETRIEVAL_STRATEGIES: {
+    diagnostic: { limit: 20, distanceThreshold: 0.4 },
+    knowledge: { limit: 10, distanceThreshold: 0.3 },
+  },
+}));
+
+import { readProfile } from '../../src/services/capability.js';
+import { isOllamaRunning } from '../../src/services/ollama.js';
+import { openDatabase, readIndexState } from '../../src/services/lancedb.js';
+import { embedBatchWithRetry } from '../../src/services/embedder.js';
+import {
+  searchChunks,
+  deduplicateChunks,
+  classifyQueryIntent,
+} from '../../src/services/retriever.js';
+
+const mockReadProfile = vi.mocked(readProfile);
+const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
+const mockOpenDatabase = vi.mocked(openDatabase);
+const mockReadIndexState = vi.mocked(readIndexState);
+const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
+const mockSearchChunks = vi.mocked(searchChunks);
+const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
+const mockClassifyQueryIntent = vi.mocked(classifyQueryIntent);
+
+const mockProfile = {
+  version: 1 as const,
+  detectedAt: '2026-03-31T00:00:00.000Z',
+  vramTier: 'large' as const,
+  vramGiB: 16,
+  gpuVendor: 'nvidia' as const,
+  embeddingModel: 'nomic-embed-text',
+  ollamaVersion: null,
+  platform: 'linux',
+};
+
+const mockIndexState = {
+  version: 1 as const,
+  embeddingModel: 'mxbai-embed-large', // different from profile to test model source
+  dimension: 1024,
+  indexedAt: '2026-03-31T00:00:00.000Z',
+  fileCount: 10,
+  chunkCount: 50,
+};
+
+const fakeChunk = (id: string) => ({
+  id,
+  filePath: `/project/src/${id}.ts`,
+  chunkType: 'function',
+  scope: null,
+  name: `fn_${id}`,
+  content: `function fn_${id}() {}`,
+  startLine: 1,
+  endLine: 5,
+  similarity: 0.9,
+});
+
+const queryVector = new Array(1024).fill(0.1);
+
+const mockTable = {
+  query: vi.fn(),
+} as any;
+
+const mockDb = {
+  tableNames: vi.fn(),
+  openTable: vi.fn(),
+} as any;
+
+let runSearch: typeof import('../../src/workflows/search.js').runSearch;
+
+describe('runSearch', () => {
+  let stderrOutput: string[];
+  let stdoutOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+  let stdoutWriteSpy: ReturnType<typeof vi.spyOn>;
+  let processExitSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+    stdoutOutput = [];
+
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+    stdoutWriteSpy = vi.spyOn(process.stdout, 'write').mockImplementation((data: unknown) => {
+      stdoutOutput.push(String(data));
+      return true;
+    });
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: unknown) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    // Happy path defaults
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockDb.tableNames.mockResolvedValue(['chunks']);
+    mockDb.openTable.mockResolvedValue(mockTable);
+    mockEmbedBatchWithRetry.mockResolvedValue([queryVector]);
+    mockClassifyQueryIntent.mockReturnValue('knowledge');
+
+    const rawChunks = [fakeChunk('a'), fakeChunk('b')];
+    const dedupedChunks = [fakeChunk('a'), fakeChunk('b')];
+    mockSearchChunks.mockResolvedValue(rawChunks);
+    mockDeduplicateChunks.mockReturnValue(dedupedChunks);
+
+    // Dynamically import after mocks are in place
+    const mod = await import('../../src/workflows/search.js');
+    runSearch = mod.runSearch;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('calls classifyQueryIntent with the query', async () => {
+    await runSearch('how does authentication work');
+    expect(mockClassifyQueryIntent).toHaveBeenCalledWith('how does authentication work');
+  });
+
+  it('calls embedBatchWithRetry with model from indexState (not profile)', async () => {
+    await runSearch('how does authentication work');
+    // indexState.embeddingModel is 'mxbai-embed-large', profile.embeddingModel is 'nomic-embed-text'
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalledWith(
+      'mxbai-embed-large', // must use indexState model, not profile model
+      ['how does authentication work']
+    );
+  });
+
+  it('calls searchChunks with the strategy from classifyQueryIntent', async () => {
+    mockClassifyQueryIntent.mockReturnValue('diagnostic');
+    await runSearch('why is the login broken');
+    expect(mockSearchChunks).toHaveBeenCalledWith(
+      mockTable,
+      queryVector,
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.4 })
+    );
+  });
+
+  it('calls deduplicateChunks on search results', async () => {
+    const rawChunks = [fakeChunk('x'), fakeChunk('y')];
+    mockSearchChunks.mockResolvedValue(rawChunks);
+    await runSearch('test query');
+    expect(mockDeduplicateChunks).toHaveBeenCalledWith(rawChunks);
+  });
+
+  it('returns deduplicated chunks', async () => {
+    const dedupedChunks = [fakeChunk('only-one')];
+    mockDeduplicateChunks.mockReturnValue(dedupedChunks);
+    const result = await runSearch('test query');
+    expect(result).toEqual(dedupedChunks);
+  });
+
+  it('writes search progress to stderr', async () => {
+    await runSearch('test query');
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('brain-cache:');
+  });
+
+  it('writes found chunks count to stderr', async () => {
+    await runSearch('test query');
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('found');
+    expect(combined).toContain('chunks');
+  });
+
+  it('writes nothing to stdout', async () => {
+    await runSearch('test query');
+    expect(stdoutOutput).toHaveLength(0);
+    expect(stdoutWriteSpy).not.toHaveBeenCalled();
+  });
+
+  it('exits with code 1 when no profile found', async () => {
+    mockReadProfile.mockResolvedValue(null);
+    await expect(runSearch('test query')).rejects.toThrow('process.exit(1)');
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('writes error to stderr when no profile found', async () => {
+    mockReadProfile.mockResolvedValue(null);
+    try {
+      await runSearch('test query');
+    } catch {
+      // expected
+    }
+    expect(stderrOutput.join('')).toContain('brain-cache init');
+  });
+
+  it('exits with code 1 when Ollama is not running', async () => {
+    mockIsOllamaRunning.mockResolvedValue(false);
+    await expect(runSearch('test query')).rejects.toThrow('process.exit(1)');
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('exits with code 1 when no index found', async () => {
+    mockReadIndexState.mockResolvedValue(null);
+    await expect(runSearch('test query')).rejects.toThrow('process.exit(1)');
+    expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('applies custom limit option', async () => {
+    mockClassifyQueryIntent.mockReturnValue('knowledge');
+    await runSearch('test query', { limit: 5 });
+    expect(mockSearchChunks).toHaveBeenCalledWith(
+      mockTable,
+      queryVector,
+      expect.objectContaining({ limit: 5 })
+    );
+  });
+
+  it('uses knowledge strategy for non-diagnostic queries', async () => {
+    mockClassifyQueryIntent.mockReturnValue('knowledge');
+    await runSearch('how does routing work');
+    expect(mockSearchChunks).toHaveBeenCalledWith(
+      mockTable,
+      queryVector,
+      expect.objectContaining({ limit: 10, distanceThreshold: 0.3 })
+    );
+  });
+});
