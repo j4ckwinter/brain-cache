@@ -83,52 +83,89 @@ That's it. brain-cache handles the retrieval, Claude handles the reasoning.
 
 | Command | What it does |
 |---------|-------------|
-| `brain-cache init` | Set up brain-cache in the current directory and pull the embedding model |
-| `brain-cache index` | Crawl, chunk, and embed your codebase into a local vector store |
+| `brain-cache init` | Detect hardware, pull embedding model, create config directory |
+| `brain-cache index [path]` | Crawl, chunk, embed, and store your codebase into a local vector store |
 | `brain-cache search <query>` | Retrieve relevant code chunks locally (no Claude call) |
 | `brain-cache context <query>` | Preview the context that would be sent to Claude |
 | `brain-cache ask <question>` | Full pipeline: retrieve context, call Claude, get an answer |
-| `brain-cache status` | Show index stats, model info, and token savings to date |
+| `brain-cache status [path]` | Show index stats, model info, and files indexed |
 | `brain-cache doctor` | Diagnose connection issues with Ollama, LanceDB, and the Anthropic API |
+
+### Flags
+
+**`brain-cache index [path]`**
+- `-f, --force` — Force full reindex, ignoring cached file hashes (re-embeds everything)
+
+**`brain-cache search <query>`**
+- `-n, --limit <n>` — Maximum number of results (default: 10)
+- `-p, --path <path>` — Project root directory
+
+**`brain-cache context <query>`**
+- `-n, --limit <n>` — Maximum number of search results (default: 10)
+- `-b, --budget <tokens>` — Token budget for assembled context (default: 4096)
+- `-p, --path <path>` — Project root directory
+
+**`brain-cache ask <question>`**
+- `-b, --budget <tokens>` — Token budget for context retrieval (default: 4096)
+- `-p, --path <path>` — Project root directory
 
 ## How the token savings work
 
 Every `ask` response includes a savings report:
 
 ```
-🧠 brain-cache optimisation
-
-Tokens sent to Claude:   1,240
-Without brain-cache:     18,600
-Reduction:               93%
+brain-cache: 1,240 tokens sent (93% reduction) via claude-3-5-sonnet-20241022
 ```
 
 Token counts are calculated locally before anything is sent to Claude — no surprise overages.
+
+## What shipped in v1.1 (Hardening)
+
+- **Incremental indexing** — only re-embeds new and changed files (SHA-256 content hashing); unchanged files are skipped entirely
+- **`--force` flag** — bypass incremental diffing for a full reindex when you need a clean slate
+- **Concurrent file I/O pipeline** — up to 20 files processed in parallel; streaming embed keeps memory flat
+- **Ollama process security** — pre-spawn duplicate detection, PID tracking, orphan cleanup, and a remote host guard that prevents spawning against non-localhost Ollama instances
+- **Zero `any` types** — production code is fully type-safe; all implicit anys eliminated
+- **Error handling** — workflows throw instead of calling `process.exit`, making them composable and testable
+- **269 tests passing**
 
 ## MCP integration (Claude Code)
 
 brain-cache ships an MCP server that exposes its tools directly inside Claude Code. Claude can call them without you manually copying context.
 
-Add this to your `.mcp.json`:
+The MCP server is a separate compiled entry point at `dist/mcp.js`. Add this to your `.mcp.json` (substituting the actual path to your brain-cache installation):
 
 ```json
 {
   "mcpServers": {
     "brain-cache": {
-      "command": "brain-cache",
-      "args": ["mcp"]
+      "command": "node",
+      "args": ["/absolute/path/to/brain-cache/dist/mcp.js"]
     }
   }
 }
 ```
 
-This gives Claude Code access to `index_repo`, `search_codebase`, `build_context`, and `doctor` as native tools.
+This gives Claude Code access to these tools:
+
+| Tool | What it does |
+|------|-------------|
+| `index_repo` | Index a codebase — parse, chunk, embed, store in LanceDB. Accepts `force: true` for full reindex. |
+| `search_codebase` | Search the indexed codebase with a natural language query, returns top-N chunks with similarity scores |
+| `build_context` | Build a deduplicated, token-budgeted context block ready for inclusion in a Claude prompt |
+| `doctor` | Return system health: Ollama status, index freshness, model availability, VRAM info |
 
 ## Supported languages
 
 brain-cache uses tree-sitter for AST-aware chunking, which means it understands your code structure rather than just slicing by line count.
 
-Currently supported: TypeScript, JavaScript, Python, Rust, Go
+| Language | Extensions |
+|----------|-----------|
+| TypeScript | `.ts`, `.tsx` |
+| JavaScript | `.js`, `.jsx` |
+| Python | `.py`, `.pyi` |
+| Go | `.go` |
+| Rust | `.rs` |
 
 ## Architecture (for the curious)
 
@@ -159,7 +196,7 @@ All the heavy lifting happens on your machine. Claude gets a clean brief, not a 
 npm run build    # Compile to dist/
 npm run link     # Register brain-cache in your shell (once after first clone)
 npm run dev      # Run CLI directly with tsx (no build step needed)
-npm test         # Run test suite (vitest)
+npm test         # Run test suite (vitest) — 269 tests
 ```
 
 ## License
