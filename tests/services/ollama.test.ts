@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock node:child_process before importing the module
 vi.mock('node:child_process', () => ({
@@ -20,6 +20,7 @@ import {
   startOllama,
   pullModelIfMissing,
   getOllamaVersion,
+  getOllamaHost,
 } from '../../src/services/ollama.js';
 
 import { execFile, spawn } from 'node:child_process';
@@ -118,8 +119,10 @@ describe('startOllama', () => {
     };
     mockSpawn.mockReturnValue(mockChild as unknown as ReturnType<typeof spawn>);
 
-    // fetch succeeds on first poll
-    const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    // fetch fails on first call (pre-spawn check: not running), then succeeds on poll
+    const mockFetch = vi.fn()
+      .mockRejectedValueOnce(new Error('ECONNREFUSED')) // pre-spawn check: not running
+      .mockResolvedValue({ ok: true } as Response);     // poll after spawn: running
     vi.stubGlobal('fetch', mockFetch);
 
     const resultPromise = startOllama();
@@ -151,6 +154,59 @@ describe('startOllama', () => {
     const result = await resultPromise;
 
     expect(result).toBe(false);
+  });
+
+  it('throws when OLLAMA_HOST points to a remote address', async () => {
+    const originalHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://192.168.1.10:11434';
+
+    await expect(startOllama()).rejects.toThrow('cannot auto-start a remote Ollama server');
+
+    // Cleanup
+    if (originalHost === undefined) {
+      delete process.env.OLLAMA_HOST;
+    } else {
+      process.env.OLLAMA_HOST = originalHost;
+    }
+  });
+
+  it('does not throw when OLLAMA_HOST is http://127.0.0.1:11434', async () => {
+    const originalHost = process.env.OLLAMA_HOST;
+    process.env.OLLAMA_HOST = 'http://127.0.0.1:11434';
+
+    // Should reach the pre-spawn check (isOllamaRunning), not throw
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const resultPromise = startOllama();
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result).toBe(true); // already running
+    expect(mockSpawn).not.toHaveBeenCalled();
+
+    // Cleanup
+    if (originalHost === undefined) {
+      delete process.env.OLLAMA_HOST;
+    } else {
+      process.env.OLLAMA_HOST = originalHost;
+    }
+  });
+});
+
+describe('getOllamaHost', () => {
+  afterEach(() => {
+    delete process.env.OLLAMA_HOST;
+  });
+
+  it('returns default localhost URL when OLLAMA_HOST is not set', () => {
+    delete process.env.OLLAMA_HOST;
+    expect(getOllamaHost()).toBe('http://localhost:11434');
+  });
+
+  it('returns OLLAMA_HOST value when set', () => {
+    process.env.OLLAMA_HOST = 'http://192.168.1.10:11434';
+    expect(getOllamaHost()).toBe('http://192.168.1.10:11434');
   });
 });
 
