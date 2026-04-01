@@ -10,6 +10,19 @@ import {
 
 const log = childLogger('retriever');
 
+/** Shape of a raw row returned by LanceDB vector search. */
+interface RawChunkRow {
+  id: string;
+  file_path: string;
+  chunk_type: string;
+  scope: string | null;
+  name: string | null;
+  content: string;
+  start_line: number;
+  end_line: number;
+  _distance: number;
+}
+
 const DIAGNOSTIC_KEYWORDS = [
   'why', 'broken', 'error', 'bug', 'fail', 'crash', 'exception',
   'undefined', 'null', 'not working', 'wrong', 'issue', 'problem',
@@ -42,9 +55,9 @@ export async function searchChunks(
     .limit(opts.limit)
     .toArray();
 
-  return rows
-    .filter((r: any) => r._distance <= opts.distanceThreshold)
-    .map((r: any) => ({
+  return (rows as RawChunkRow[])
+    .filter((r) => r._distance <= opts.distanceThreshold)
+    .map((r) => ({
       id: r.id,
       filePath: r.file_path,
       chunkType: r.chunk_type,
