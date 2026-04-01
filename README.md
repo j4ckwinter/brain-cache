@@ -10,7 +10,7 @@ You ask a question. brain-cache:
 
 1. Embeds your query locally via Ollama (fast, free, no API calls)
 2. Retrieves the most relevant code chunks from its local vector index
-3. Trims and deduplicates the context to fit a tight token budget
+3. Selects, prioritises, deduplicates, and compresses the most relevant code into a tight token budget
 4. Hands Claude a clean, minimal context — not your entire repo
 
 The result: Claude gives you a sharper answer, and your API bill stops looking like a mortgage payment.
@@ -114,7 +114,12 @@ That's it. brain-cache handles the retrieval, Claude handles the reasoning.
 Every `ask` response includes a savings report:
 
 ```
-brain-cache: 1,240 tokens sent (93% reduction) via claude-3-5-sonnet-20241022
+brain-cache: context assembled (1,240 tokens, 93% reduction)
+
+  Tokens sent to Claude:     1,240
+  Estimated without brain-cache: ~18,600
+  Reduction:                  93%
+  Model:                      claude-sonnet-4-20250514
 ```
 
 Token counts are calculated locally before anything is sent to Claude — no surprise overages.
@@ -128,6 +133,13 @@ Token counts are calculated locally before anything is sent to Claude — no sur
 - **Zero `any` types** — production code is fully type-safe; all implicit anys eliminated
 - **Error handling** — workflows throw instead of calling `process.exit`, making them composable and testable
 - **269 tests passing**
+
+## Known limitations
+
+- **No reranking** — retrieval is pure vector similarity; a reranking pass to refine results is planned but not yet implemented
+- **Index staleness** — after code changes, you need to re-run `brain-cache index` to pick up new content (file-watch mode is on the roadmap)
+- **No context compression** — context is deduplicated and trimmed, but not yet semantically compressed (e.g., summarising large functions)
+- **Single embedding model** — currently hardcoded to `nomic-embed-text`; model selection is planned
 
 ## MCP integration (Claude Code)
 
@@ -189,6 +201,8 @@ Answer + token savings report
 ```
 
 All the heavy lifting happens on your machine. Claude gets a clean brief, not a data dump.
+
+Because Claude receives only the most relevant code — not your entire repository — answers are more accurate, more consistent, and grounded in actual implementation details.
 
 ## Development
 
