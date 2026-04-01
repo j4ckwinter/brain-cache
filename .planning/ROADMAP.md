@@ -36,6 +36,8 @@
 | 8. Ollama Process Security | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 9. Indexing and Retrieval Performance | v1.1 | 2/2 | Complete | 2026-04-01 |
 | 10. Incremental Indexing and Intent Classification | v1.1 | 2/2 | Complete    | 2026-04-01 |
+| 11. Restore Concurrent Index Pipeline | v1.1 | 0/0 | Not Started | — |
+| 12. Integration Gap Cleanup | v1.1 | 0/0 | Not Started | — |
 
 ## v1.1 Hardening (Phases 6-10)
 
@@ -83,6 +85,18 @@
 **Requirements:** DEBT-01, HARD-04
 **Status:** Pending
 
+### Phase 11: Restore Concurrent Index Pipeline
+**Goal:** Re-apply Phase 9's concurrent file I/O and streaming chunk pipeline that was lost in the Phase 10 merge; eliminate re-introduced redundant token counting
+**Requirements:** PERF-01, PERF-02, DEBT-06
+**Gap Closure:** Closes requirement gaps from v1.1 audit (merge regression in `c76bbc2`)
+**Status:** Not Started
+
+### Phase 12: Integration Gap Cleanup
+**Goal:** Wire missing barrel exports, expose --force in MCP index tool, pass OLLAMA_HOST to ollama spawn
+**Requirements:** DEBT-04 (partial), DEBT-01 (MCP gap), DEBT-03/SEC-02 (edge case)
+**Gap Closure:** Closes integration gaps from v1.1 audit
+**Status:** Not Started
+
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 — v1.1 phases 6-10 fully documented*
+*Last updated: 2026-04-01 — added gap closure phases 11-12 from milestone audit*
