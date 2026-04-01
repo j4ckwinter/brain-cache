@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Hardening
-status: verifying
-stopped_at: Completed 11-restore-concurrent-index-pipeline/11-01-PLAN.md
-last_updated: "2026-04-01T13:14:55.066Z"
-last_activity: 2026-04-01
+status: executing
+stopped_at: Completed 12-integration-gap-cleanup/12-01-PLAN.md
+last_updated: "2026-04-01T06:31:00.000Z"
+last_activity: 2026-04-01 -- Phase 12 plan 01 complete
 progress:
   total_phases: 7
-  completed_phases: 6
-  total_plans: 10
-  completed_plans: 10
+  completed_phases: 7
+  total_plans: 11
+  completed_plans: 11
 ---
 
 # Project State: Brain-Cache
@@ -25,19 +25,19 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 11 — restore-concurrent-index-pipeline
+**Current focus:** Phase 12 — integration-gap-cleanup
 
 ---
 
 ## Current Position
 
-Phase: 11 (restore-concurrent-index-pipeline) — EXECUTING
-Plan: 1 of 1
-Status: Phase complete — ready for verification
-Last activity: 2026-04-01
+Phase: 12 (integration-gap-cleanup) — COMPLETE
+Plan: 1 of 1 (complete)
+Status: v1.1 Hardening milestone COMPLETE
+Last activity: 2026-04-01 -- Phase 12 plan 01 complete
 
 ```
-v1.1 Progress: [----------] 0/5 phases complete
+v1.1 Progress: [██████████] 7/7 phases complete — v1.1 SHIPPED
 ```
 
 ---
@@ -48,10 +48,17 @@ v1.1 Progress: [----------] 0/5 phases complete
 
 None.
 
+### Key Decisions (Phase 12)
+
+- Added `getOllamaHost()` as exported utility for OLLAMA_HOST env resolution — was referenced in plan but missing from codebase
+- Added pre-spawn `isOllamaRunning()` check to `startOllama()` — prevents rogue spawn when Ollama already running
+- Updated existing spawn test to mock fetch as ECONNREFUSED first — reflects correct pre-spawn check behavior
+
 ### Session Notes
 
 v1.0 MVP shipped 2026-04-01. All 22 requirements satisfied, 224 tests passing.
 v1.1 focus: Fix concerns from codebase audit (tech debt, bugs, security, performance, fragile areas).
+v1.1 complete 2026-04-01. All phases 6-12 executed. 230 tests passing.
 
 v1.1 Roadmap (Phases 6-10):
 
@@ -71,13 +78,13 @@ v1.1 Roadmap (Phases 6-10):
 
 ## Session Continuity
 
-**Last session:** 2026-04-01T13:14:55.061Z
+**Last session:** 2026-04-01T06:31:00.000Z
 
-**To resume:** Run `/gsd:plan-phase 6` to plan Phase 6: Foundation Cleanup.
+**To resume:** Run `/gsd:new-milestone` for v1.2 or `/gsd:complete-milestone` to archive v1.1.
 
-**Stopped at:** Completed 11-restore-concurrent-index-pipeline/11-01-PLAN.md
+**Stopped at:** Completed 12-integration-gap-cleanup/12-01-PLAN.md
 
-**Next action:** `/gsd:plan-phase 6`
+**Next action:** `/gsd:complete-milestone` to archive v1.1 milestone
 
 ---
 *State initialized: 2026-03-31*
