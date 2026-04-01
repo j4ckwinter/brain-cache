@@ -119,6 +119,18 @@ None - no external service configuration required.
 - OLLAMA_HOST config is now runtime-driven — operators can point brain-cache at non-local Ollama instances
 - Log redaction protects against accidental API key leakage in any log call that passes credentials
 
+## Self-Check: PASSED
+
+- FOUND: src/services/ollama.ts
+- FOUND: src/services/logger.ts
+- FOUND: src/lib/index.ts
+- FOUND: src/services/index.ts
+- FOUND: src/tools/index.ts
+- FOUND: .planning/phases/06-foundation-cleanup/06-02-SUMMARY.md
+- FOUND commit: 645282f (test RED)
+- FOUND commit: c7c4382 (feat Task 1)
+- FOUND commit: d9bdf81 (feat Task 2)
+
 ---
 *Phase: 06-foundation-cleanup*
 *Completed: 2026-04-01*

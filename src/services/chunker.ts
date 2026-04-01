@@ -174,17 +174,23 @@ export function chunkFile(filePath: string, content: string): CodeChunk[] {
     }
 
     // For arrow functions: only extract top-level or exported ones.
-    // Top-level export pattern: root > export_statement > lexical_declaration > variable_declarator > arrow_function (depth=4)
-    // Nested callback pattern: depth >= 6 (inside function body > call_expression > arguments > arrow_function)
-    // Threshold: depth <= 5 admits top-level/exported arrow functions; depth > 5 skips nested callbacks.
+    // Check parent node types structurally rather than counting depth,
+    // which is fragile when AST nesting varies (e.g., if blocks, IIFEs).
+    //
+    // Admitted patterns:
+    //   export const fn = () => {}  → export_statement > lexical_declaration > variable_declarator > arrow_function
+    //   const fn = () => {}         → program > lexical_declaration > variable_declarator > arrow_function
     if (node.type === 'arrow_function') {
-      let depth = 0;
-      let cur = node.parent;
-      while (cur) {
-        depth++;
-        cur = cur.parent;
-      }
-      if (depth > 5) {
+      const varDeclarator = node.parent;
+      const lexDecl = varDeclarator?.parent;
+      const container = lexDecl?.parent;
+
+      const isTopLevelConst =
+        varDeclarator?.type === 'variable_declarator' &&
+        lexDecl?.type === 'lexical_declaration' &&
+        (container?.type === 'program' || container?.type === 'export_statement');
+
+      if (!isTopLevelConst) {
         continue;
       }
     }

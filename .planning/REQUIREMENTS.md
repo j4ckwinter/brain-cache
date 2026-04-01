@@ -10,7 +10,7 @@ Requirements for the hardening milestone. Each maps to roadmap phases.
 ### Tech Debt
 
 - [ ] **DEBT-01**: Incremental indexing — detect changed/new/removed files via content hashing, only re-embed what changed
-- [ ] **DEBT-02**: Source version string from package.json instead of hardcoding '0.1.0'
+- [x] **DEBT-02**: Source version string from package.json instead of hardcoding '0.1.0'
 - [x] **DEBT-03**: Respect OLLAMA_HOST env var for Ollama server URL with localhost:11434 fallback
 - [x] **DEBT-04**: Remove or populate empty barrel export files (tools, services, lib)
 - [ ] **DEBT-05**: Replace `any` types in tree-sitter and LanceDB interop with proper local interfaces
@@ -34,7 +34,7 @@ Requirements for the hardening milestone. Each maps to roadmap phases.
 
 ### Hardening
 
-- [ ] **HARD-01**: Replace all `process.exit(1)` calls with thrown errors; let CLI entry point handle exit
+- [x] **HARD-01**: Replace all `process.exit(1)` calls with thrown errors; let CLI entry point handle exit
 - [ ] **HARD-02**: Document tree-sitter CJS require() hack with inline comments explaining why and when it can be removed
 - [ ] **HARD-03**: Improve arrow function extraction — use parent node types instead of raw depth counting
 - [ ] **HARD-04**: Improve intent classification — add exclusion patterns and bigrams to reduce false positives
@@ -76,7 +76,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DEBT-01 | Phase 10 | Pending |
-| DEBT-02 | Phase 6 | Pending |
+| DEBT-02 | Phase 6 | Complete |
 | DEBT-03 | Phase 6 | Complete |
 | DEBT-04 | Phase 6 | Complete |
 | DEBT-05 | Phase 7 | Pending |
@@ -88,7 +88,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-02 | Phase 9 | Pending |
 | PERF-03 | Phase 9 | Pending |
 | PERF-04 | Phase 9 | Pending |
-| HARD-01 | Phase 6 | Pending |
+| HARD-01 | Phase 6 | Complete |
 | HARD-02 | Phase 7 | Pending |
 | HARD-03 | Phase 7 | Pending |
 | HARD-04 | Phase 10 | Pending |

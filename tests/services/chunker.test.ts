@@ -179,3 +179,42 @@ describe('chunkFile - unsupported', () => {
     expect(chunks).toEqual([]);
   });
 });
+
+describe('arrow function extraction', () => {
+  it('extracts top-level exported arrow function', () => {
+    const code = `export const greet = (name: string): string => {\n  return 'hello ' + name;\n};\n`;
+    const chunks = chunkFile('test.ts', code);
+    expect(chunks.some(c => c.chunkType === 'function')).toBe(true);
+  });
+
+  it('extracts top-level non-exported arrow function', () => {
+    const code = `const add = (a: number, b: number) => a + b;\n`;
+    const chunks = chunkFile('test.ts', code);
+    expect(chunks.some(c => c.chunkType === 'function')).toBe(true);
+  });
+
+  it('does NOT extract arrow function used as callback argument', () => {
+    const code = `const arr = [1, 2, 3];\nconst result = arr.map((x) => x * 2);\n`;
+    const chunks = chunkFile('test.ts', code);
+    // The map callback arrow should not be extracted as a standalone chunk
+    const arrowChunks = chunks.filter(c => c.chunkType === 'function');
+    expect(arrowChunks.length).toBe(0);
+  });
+
+  it('does NOT extract deeply nested arrow function', () => {
+    const code = [
+      'function outer() {',
+      '  function middle() {',
+      '    const items = [1, 2, 3];',
+      '    items.forEach((item) => {',
+      '      console.log(item);',
+      '    });',
+      '  }',
+      '}',
+    ].join('\n');
+    const chunks = chunkFile('test.ts', code);
+    const arrowChunks = chunks.filter(c => c.content.includes('=>'));
+    // Only the named functions should be extracted, not the forEach callback
+    expect(arrowChunks.every(c => c.name === 'outer' || c.name === 'middle')).toBe(true);
+  });
+});

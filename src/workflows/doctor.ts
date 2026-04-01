@@ -7,6 +7,7 @@ import {
   isOllamaInstalled,
   isOllamaRunning,
   getOllamaVersion,
+  modelMatches,
 } from '../services/ollama.js';
 import { PROFILE_PATH } from '../lib/config.js';
 
@@ -38,7 +39,7 @@ export async function runDoctor(): Promise<void> {
   if (running) {
     const list = await ollama.list();
     modelPresent = list.models.some((m: { name: string }) =>
-      m.name.startsWith(saved.embeddingModel)
+      modelMatches(m.name, saved.embeddingModel)
     );
   }
 

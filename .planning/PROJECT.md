@@ -29,6 +29,17 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 - [ ] Configurable retrieval depth per query type (ADV-01)
 - [ ] Cross-file dependency-aware retrieval (ADV-02)
 
+## Current Milestone: v1.1 Hardening
+
+**Goal:** Fix tech debt, bugs, security issues, performance bottlenecks, and fragile code patterns identified in the codebase concerns audit.
+
+**Target features:**
+- Fix 6 tech debt items (incremental indexing, hardcoded values, empty barrels, any types, redundant token counting)
+- Fix 1 known bug (model name prefix matching)
+- Address 2 security concerns (API key handling, detached Ollama process management)
+- Fix 4 performance bottlenecks (sequential I/O, memory accumulation, vector index creation, separator counting)
+- Harden 4 fragile areas (replace process.exit with thrown errors, document tree-sitter CJS hack, improve arrow function heuristic, improve intent classification)
+
 ### Out of Scope
 
 - UI of any kind — CLI and MCP tools are the interfaces
@@ -91,4 +102,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v1.0 milestone*
+*Last updated: 2026-04-01 after v1.1 milestone started*

@@ -73,6 +73,17 @@ export async function startOllama(): Promise<boolean> {
 }
 
 /**
+ * Compares an Ollama listed model name against a profile model name.
+ * Strips the `:tag` suffix from both sides and compares base names exactly.
+ * Prevents false prefix matches (e.g., 'llama3' must not match 'llama3.2').
+ */
+export function modelMatches(listedName: string, profileModel: string): boolean {
+  const listedBase = listedName.split(':')[0];
+  const profileBase = profileModel.split(':')[0];
+  return listedBase === profileBase;
+}
+
+/**
  * Pulls a model from Ollama if it is not already present in the local model list.
  * Reports progress via onProgress callback (defaults to stderr output).
  */
@@ -81,7 +92,7 @@ export async function pullModelIfMissing(
   onProgress?: (status: string) => void
 ): Promise<void> {
   const list = await ollama.list();
-  const alreadyExists = list.models.some((m) => m.name.startsWith(model));
+  const alreadyExists = list.models.some((m) => modelMatches(m.name, model));
 
   if (alreadyExists) {
     log.info({ model }, 'Model already present, skipping pull');
