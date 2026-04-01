@@ -32,6 +32,12 @@
 | 4. MCP Server and Claude Integration | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. CLI Completion | v1.0 | 2/2 | Complete | 2026-04-01 |
 
+## Phase 9: Indexing and Retrieval Performance
+
+| Plan | Title | Status | Completed |
+|------|-------|--------|-----------|
+| 09-01 | Concurrent file I/O and streaming chunk pipeline | Complete | 2026-04-01 |
+
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 after v1.0 milestone completion*
+*Last updated: 2026-04-01 after plan 09-01 completion*
