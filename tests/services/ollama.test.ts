@@ -20,6 +20,7 @@ import {
   startOllama,
   pullModelIfMissing,
   getOllamaVersion,
+  getOllamaHost,
 } from '../../src/services/ollama.js';
 
 import { execFile, spawn } from 'node:child_process';
@@ -65,7 +66,31 @@ describe('isOllamaInstalled', () => {
   });
 });
 
+describe('getOllamaHost', () => {
+  const originalEnv = process.env.OLLAMA_HOST;
+
+  afterEach(() => {
+    if (originalEnv === undefined) {
+      delete process.env.OLLAMA_HOST;
+    } else {
+      process.env.OLLAMA_HOST = originalEnv;
+    }
+  });
+
+  it('returns http://localhost:11434 when OLLAMA_HOST is not set', () => {
+    delete process.env.OLLAMA_HOST;
+    expect(getOllamaHost()).toBe('http://localhost:11434');
+  });
+
+  it('returns OLLAMA_HOST value when env var is set', () => {
+    process.env.OLLAMA_HOST = 'http://192.168.1.10:11434';
+    expect(getOllamaHost()).toBe('http://192.168.1.10:11434');
+  });
+});
+
 describe('isOllamaRunning', () => {
+  const originalEnv = process.env.OLLAMA_HOST;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
@@ -73,15 +98,31 @@ describe('isOllamaRunning', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    if (originalEnv === undefined) {
+      delete process.env.OLLAMA_HOST;
+    } else {
+      process.env.OLLAMA_HOST = originalEnv;
+    }
   });
 
   it('returns true when fetch to localhost:11434 returns ok', async () => {
+    delete process.env.OLLAMA_HOST;
     const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
     vi.stubGlobal('fetch', mockFetch);
 
     const result = await isOllamaRunning();
     expect(result).toBe(true);
     expect(mockFetch).toHaveBeenCalledWith('http://localhost:11434');
+  });
+
+  it('uses OLLAMA_HOST env var when set', async () => {
+    process.env.OLLAMA_HOST = 'http://192.168.1.10:11434';
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true } as Response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await isOllamaRunning();
+    expect(result).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith('http://192.168.1.10:11434');
   });
 
   it('returns false when fetch throws (connection refused)', async () => {

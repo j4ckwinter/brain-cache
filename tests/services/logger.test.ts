@@ -158,4 +158,40 @@ describe('logger', () => {
     expect(child).toBeDefined();
     expect(typeof child.info).toBe('function');
   });
+
+  it('pino redact config censors apiKey values in log output', async () => {
+    delete process.env.BRAIN_CACHE_LOG;
+    vi.resetModules();
+
+    // Create a custom pino logger with redact config pointing to an in-memory stream
+    const pino = (await import('pino')).default;
+    const { Writable } = await import('node:stream');
+
+    const chunks: string[] = [];
+    const dest = new Writable({
+      write(chunk: Buffer, _encoding: string, callback: () => void) {
+        chunks.push(chunk.toString());
+        callback();
+      },
+    });
+
+    const testLogger = pino(
+      {
+        level: 'info',
+        redact: {
+          paths: ['apiKey', 'api_key', 'secret', 'password', 'token', 'authorization'],
+          censor: '[Redacted]',
+        },
+      },
+      dest
+    );
+
+    testLogger.info({ apiKey: 'sk-ant-abc123' }, 'test message');
+    // flush
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+    const output = chunks.join('');
+    expect(output).toContain('[Redacted]');
+    expect(output).not.toContain('sk-ant-abc123');
+  });
 });
