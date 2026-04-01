@@ -1,8 +1,8 @@
-# Braincache
+# Brain-Cache
 
 ## What This Is
 
-Braincache is a local AI runtime and tool layer for Claude that uses the developer's local GPU as a cache layer. It offloads low-value AI tasks (embeddings, retrieval, context preprocessing) to local models via Ollama, then sends only minimal, high-quality context to Claude for reasoning. Designed for developers who use Claude Code and want to reduce token usage while improving response quality.
+Brain-cache is a local AI runtime and tool layer for Claude that uses the developer's local GPU as a cache layer. It indexes codebases with AST-aware chunking, embeds queries locally via Ollama, retrieves relevant code with smart deduplication and intent classification, and sends only minimal, token-budgeted context to Claude for reasoning. Exposes tools via MCP stdio and a polished CLI.
 
 ## Core Value
 
@@ -12,54 +12,66 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Local runtime that indexes codebases, embeds queries, retrieves relevant code, and builds compressed context — v1.0
+- ✓ MCP server exposing tools (index_repo, search_codebase, build_context, doctor) callable by Claude Code — v1.0
+- ✓ CLI for setup and diagnostics (brain-cache init, index, doctor, status, search, context, ask) — v1.0
+- ✓ Capability-aware execution that detects GPU/VRAM and adapts behavior — v1.0
+- ✓ Ollama integration for local embeddings with batch processing and cold-start retry — v1.0
+- ✓ LanceDB vector storage with explicit Arrow schema for code embeddings — v1.0
+- ✓ Context builder that deduplicates, prioritizes by relevance, and trims to token budget — v1.0
+- ✓ Claude integration via Anthropic SDK for ask-codebase workflow — v1.0
+- ✓ Token savings metadata reporting (tokens sent, estimated without, reduction %) — v1.0
 
 ### Active
 
-- [ ] Local runtime service that indexes codebases, embeds queries, retrieves relevant code, and builds compressed context
-- [ ] MCP server exposing tools (index_repo, search_codebase, build_context, doctor) callable by Claude Code
-- [ ] CLI for setup and diagnostics (braincache init, index, doctor, status)
-- [ ] Capability-aware execution that detects GPU/VRAM and adapts behavior
-- [ ] Ollama integration for local embeddings and optional compression
-- [ ] LanceDB vector storage for code embeddings
-- [ ] Context builder that deduplicates, prioritizes relevance, and trims unnecessary content
-- [ ] Claude integration via Anthropic SDK for the ask-codebase workflow
-- [ ] Token savings metadata reporting
+- [ ] Incremental indexing — file watcher + content-hash stale detection (INC-01, INC-02)
+- [ ] Custom exclusion patterns via `.braincacheignore` (EXC-01)
+- [ ] Configurable retrieval depth per query type (ADV-01)
+- [ ] Cross-file dependency-aware retrieval (ADV-02)
 
 ### Out of Scope
 
-- UI of any kind — this is a CLI and tool layer only
+- UI of any kind — CLI and MCP tools are the interfaces
 - Multi-agent systems — single orchestrator pattern
 - Plugin systems — no extensibility framework
 - Providers beyond Ollama + Claude — no OpenAI, no Gemini
-- Generic AI framework features — this is a context optimization layer, not a framework
+- Generic AI framework features — context optimization layer, not a framework
 - Mobile or browser support — Node.js local runtime only
+- Chat interface — Claude Code's conversation loop handles chat
+- Autocomplete / inline completions — different product category
+- Cross-machine sync — local-only, indexes live where the code lives
+- LSP integration — tree-sitter AST parsing is sufficient
+- Reranking with second LLM — vector similarity scores are sufficient
 
 ## Context
 
-- **Concept model**: Local GPU = cache layer, Claude = brain (reasoning engine), Braincache = orchestrator
-- **Primary use case**: Developer asks Claude a question (e.g., "Why is this component rerendering?"), Braincache locally embeds the query, retrieves relevant code, compresses context, then sends only relevant context to Claude
-- **Architecture**: Workflows-first (workflows > services > commands), strict folder structure
-- **Tool interface**: MCP (Model Context Protocol) server — Claude Code discovers and calls tools natively
-- **Vector storage**: LanceDB (embedded, no external server)
-- **Local models**: Ollama HTTP API for embeddings
-- **Design philosophy**: Optimize for developer experience, prefer hardcoded defaults over abstraction, keep it simple
+Shipped v1.0 MVP with 2,045 LOC TypeScript across 5 phases and 14 plans.
+Tech stack: Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, tree-sitter, pino, zod v4.
+224 tests passing across all subsystems.
+Architecture: workflows-first (workflows > services > commands), strict folder layout.
+MCP server discoverable via `.mcp.json` with stdio transport.
 
 ## Constraints
 
 - **Tech stack**: TypeScript (Node.js), Commander CLI, Ollama, Anthropic SDK, LanceDB
 - **Architecture**: Workflows-first structure with strict folder layout (src/workflows/, src/services/, src/tools/, src/cli/, src/lib/)
-- **Hardware**: Must gracefully handle machines with no GPU — fallback to CPU or defer to Claude
+- **Hardware**: Must gracefully handle machines without GPU — fallback to CPU or defer to Claude
 - **Complexity**: No over-abstraction, no unnecessary complexity, no premature generalization
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| MCP server for tool interface | Native Claude Code integration, tools discoverable without config | — Pending |
-| LanceDB for vector storage | Embedded, no external server, good TS support | — Pending |
-| Ollama for local models | Standard local model runtime, HTTP API, wide model support | — Pending |
-| Workflows-first architecture | Clear separation of orchestration from services, easier to reason about | — Pending |
+| MCP server for tool interface | Native Claude Code integration, tools discoverable without config | ✓ Good — 4 tools working via stdio |
+| LanceDB for vector storage | Embedded, no external server, good TS support | ✓ Good — explicit Arrow schema, disk-backed |
+| Ollama for local models | Standard local model runtime, HTTP API, wide model support | ✓ Good — batch embed + cold-start retry solved |
+| Workflows-first architecture | Clear separation of orchestration from services | ✓ Good — CLI and MCP share identical workflow layer |
+| stderr-only logging (pino) | stdout reserved for MCP stdio JSON-RPC transport | ✓ Good — zero stdout pollution |
+| tree-sitter AST chunking | Function-boundary chunks produce quality embeddings | ✓ Good — 5 languages supported |
+| zod v4 (not v3) | 14x faster parsing, smaller bundle | ✓ Good — used for MCP input validation |
+| Batch embedding (32-64 chunks) | Avoids N+1 embed pattern | ✓ Good — critical for indexing performance |
+| Keyword-based intent classification | Fast, fully local, no LLM round-trip | ✓ Good — diagnostic vs knowledge strategies |
+| tsup dual-config (CLI + MCP) | CLI gets shebang, MCP does not | ✓ Good — separate entry points |
 
 ## Evolution
 
@@ -79,4 +91,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-31 after initialization*
+*Last updated: 2026-04-01 after v1.0 milestone*
