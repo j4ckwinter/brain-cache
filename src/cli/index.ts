@@ -73,4 +73,20 @@ program
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   });
 
+program
+  .command('ask')
+  .description('Ask a natural language question about the codebase — retrieves context locally, reasons via Claude')
+  .argument('<question>', 'Natural language question about the codebase')
+  .option('-b, --budget <tokens>', 'Token budget for context retrieval', '4096')
+  .option('-p, --path <path>', 'Project root directory')
+  .action(async (question: string, opts: { budget: string; path?: string }) => {
+    const { runAskCodebase } = await import('../workflows/askCodebase.js');
+    const result = await runAskCodebase(question, {
+      path: opts.path,
+      maxContextTokens: parseInt(opts.budget, 10),
+    });
+    process.stderr.write(`\n${result.answer}\n`);
+    process.stderr.write(`\n--- brain-cache: ${result.contextMetadata.tokensSent} tokens sent (${result.contextMetadata.reductionPct}% reduction) via ${result.model} ---\n`);
+  });
+
 program.parse();
