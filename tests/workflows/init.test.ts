@@ -140,10 +140,9 @@ describe('runInit', () => {
     expect(profileArg.ollamaVersion).toBe('ollama version 0.6.3');
   });
 
-  it('exits with code 1 when Ollama is not installed', async () => {
+  it('throws an error when Ollama is not installed', async () => {
     mockIsOllamaInstalled.mockResolvedValue(false);
-    await expect(runInit()).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runInit()).rejects.toThrow('Ollama is not installed');
   });
 
   it('prints install instructions to stderr when Ollama is not installed', async () => {
@@ -165,11 +164,10 @@ describe('runInit', () => {
     expect(mockStartOllama).toHaveBeenCalledOnce();
   });
 
-  it('exits with code 1 when Ollama auto-start fails', async () => {
+  it('throws an error when Ollama auto-start fails', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
     mockStartOllama.mockResolvedValue(false);
-    await expect(runInit()).rejects.toThrow('process.exit(1)');
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    await expect(runInit()).rejects.toThrow("Could not start Ollama");
   });
 
   it('prints stderr message with ollama serve when auto-start fails', async () => {
