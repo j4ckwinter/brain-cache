@@ -26,7 +26,7 @@
 ### v1.1 Hardening
 
 - [x] **Phase 6: Foundation Cleanup** - Fix process.exit, env config, version sourcing, barrel files, and API key log hygiene (completed 2026-04-01)
-- [ ] **Phase 7: Type Safety and Code Correctness** - Replace any types, fix model name matching, eliminate redundant token counting, harden tree-sitter layer
+- [x] **Phase 7: Type Safety and Code Correctness** - Replace any types, fix model name matching, eliminate redundant token counting, harden tree-sitter layer (completed 2026-04-01)
 - [ ] **Phase 8: Ollama Process Security** - Fix detached process management with PID tracking, port checks, and race condition prevention
 - [ ] **Phase 9: Indexing and Retrieval Performance** - Parallelize I/O, stream chunk pipeline, add IVF-PQ index, cache separator count
 - [ ] **Phase 10: Incremental Indexing and Intent Classification** - Content-hash stale detection for incremental re-indexing, bigram/exclusion improvements to intent classification
