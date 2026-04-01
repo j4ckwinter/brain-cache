@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "brain-cache": {
+      "command": "node",
+      "args": ["./dist/mcp.js"]
+    }
+  }
+}
