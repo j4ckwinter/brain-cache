@@ -47,8 +47,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Claude Integration
 
-- [ ] **CLD-01**: `ask-codebase` workflow accepts a question, retrieves context locally, sends minimal context to Claude via Anthropic SDK, and returns Claude's reasoning answer
-- [ ] **CLD-02**: Claude receives only the assembled context (not raw chunks), preserving token efficiency
+- [x] **CLD-01**: `ask-codebase` workflow accepts a question, retrieves context locally, sends minimal context to Claude via Anthropic SDK, and returns Claude's reasoning answer
+- [x] **CLD-02**: Claude receives only the assembled context (not raw chunks), preserving token efficiency
 
 ## v2 Requirements
 
@@ -110,8 +110,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MCP-03 | Phase 4 | Complete |
 | MCP-04 | Phase 4 | Complete |
 | MCP-05 | Phase 4 | Complete |
-| CLD-01 | Phase 4 | Pending |
-| CLD-02 | Phase 4 | Pending |
+| CLD-01 | Phase 4 | Complete |
+| CLD-02 | Phase 4 | Complete |
 | CLI-01 | Phase 5 | Pending |
 | CLI-02 | Phase 5 | Pending |
 | CLI-03 | Phase 5 | Pending |
