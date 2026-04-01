@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -14,9 +15,12 @@ import { runIndex } from '../workflows/index.js';
 import { runSearch } from '../workflows/search.js';
 import { runBuildContext } from '../workflows/buildContext.js';
 
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json') as { version: string };
+
 const log = childLogger('mcp');
 
-const server = new McpServer({ name: 'brain-cache', version: '0.1.0' });
+const server = new McpServer({ name: 'brain-cache', version: pkg.version });
 
 // Tool 1: index_repo (MCP-02)
 server.registerTool(

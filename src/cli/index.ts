@@ -1,11 +1,15 @@
 import { Command } from 'commander';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const pkg = require('../../package.json') as { version: string };
 
 const program = new Command();
 
 program
   .name('brain-cache')
   .description('Local AI runtime \u2014 GPU cache layer for Claude')
-  .version('0.1.0');
+  .version(pkg.version);
 
 program
   .command('init')
@@ -89,4 +93,10 @@ program
     process.stderr.write(`\n--- brain-cache: ${result.contextMetadata.tokensSent} tokens sent (${result.contextMetadata.reductionPct}% reduction) via ${result.model} ---\n`);
   });
 
-program.parse();
+(async () => {
+  await program.parseAsync();
+})().catch((err: unknown) => {
+  const message = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`Error: ${message}\n`);
+  process.exit(1);
+});
