@@ -20,6 +20,7 @@ import {
   startOllama,
   pullModelIfMissing,
   getOllamaVersion,
+  modelMatches,
 } from '../../src/services/ollama.js';
 
 import { execFile, spawn } from 'node:child_process';
@@ -190,6 +191,36 @@ describe('pullModelIfMissing', () => {
     expect(mockOllama.pull).toHaveBeenCalledWith({ model: 'nomic-embed-text', stream: true });
     expect(progressCalls).toContain('pulling manifest');
     expect(progressCalls).toContain('success');
+  });
+});
+
+describe('modelMatches', () => {
+  it('matches exact base name with tag', () => {
+    expect(modelMatches('llama3:latest', 'llama3')).toBe(true);
+  });
+
+  it('matches exact base name without tag', () => {
+    expect(modelMatches('nomic-embed-text:latest', 'nomic-embed-text')).toBe(true);
+  });
+
+  it('rejects prefix-only match (llama3 vs llama3.2)', () => {
+    expect(modelMatches('llama3.2:latest', 'llama3')).toBe(false);
+  });
+
+  it('rejects prefix-only match reversed', () => {
+    expect(modelMatches('llama3:latest', 'llama3.2')).toBe(false);
+  });
+
+  it('matches when both have tags', () => {
+    expect(modelMatches('llama3:q4', 'llama3:latest')).toBe(true);
+  });
+
+  it('matches when neither has a tag', () => {
+    expect(modelMatches('nomic-embed-text', 'nomic-embed-text')).toBe(true);
+  });
+
+  it('rejects completely different models', () => {
+    expect(modelMatches('mistral:latest', 'llama3')).toBe(false);
   });
 });
 

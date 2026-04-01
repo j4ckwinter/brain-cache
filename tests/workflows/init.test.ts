@@ -13,6 +13,11 @@ vi.mock('../../src/services/ollama.js', () => ({
   startOllama: vi.fn(),
   pullModelIfMissing: vi.fn(),
   getOllamaVersion: vi.fn(),
+  modelMatches: vi.fn((listedName: string, profileModel: string) => {
+    const listedBase = listedName.split(':')[0];
+    const profileBase = profileModel.split(':')[0];
+    return listedBase === profileBase;
+  }),
 }));
 
 vi.mock('../../src/services/embedder.js', () => ({
