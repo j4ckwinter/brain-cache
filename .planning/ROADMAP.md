@@ -81,10 +81,10 @@ Plans:
   3. Invalid tool inputs are rejected with a Zod validation error before any workflow logic executes
   4. The `ask-codebase` workflow sends only the assembled context block to Claude -- not raw chunks -- and returns Claude's reasoning response
   5. `doctor` returns Ollama status, index freshness, model loaded state, and VRAM available as a structured health object
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 04-01-PLAN.md -- MCP server entry point with 4 tool registrations (index_repo, search_codebase, build_context, doctor)
+- [x] 04-01-PLAN.md -- MCP server entry point with 4 tool registrations (index_repo, search_codebase, build_context, doctor)
 - [ ] 04-02-PLAN.md -- ask-codebase workflow (local retrieval + Claude reasoning via Anthropic SDK)
 
 ### Phase 5: CLI Completion
@@ -107,7 +107,7 @@ Plans:
 | 1. Foundation | 3/3 | Complete   | 2026-03-31 |
 | 2. Storage and Indexing | 4/4 | Complete   | 2026-03-31 |
 | 3. Retrieval and Context Assembly | 3/3 | Complete   | 2026-04-01 |
-| 4. MCP Server and Claude Integration | 0/2 | Planning   | - |
+| 4. MCP Server and Claude Integration | 1/2 | In Progress|  |
 | 5. CLI Completion | 0/? | Not started | - |
 
 ---

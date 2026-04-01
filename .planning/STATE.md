@@ -3,19 +3,19 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-04-01T03:31:27.750Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-31T21:00:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
+  total_plans: 12
+  completed_plans: 11
 ---
 
 # Project State: Braincache
 
-**Last updated:** 2026-04-01
-**Updated by:** execute-phase agent (03-01 complete)
+**Last updated:** 2026-03-31
+**Updated by:** execute-phase agent (04-01 complete)
 
 ---
 
@@ -29,10 +29,11 @@ progress:
 
 ## Current Position
 
-Phase: 03 (retrieval-and-context-assembly) — COMPLETE
+Phase: 04 (mcp-server-and-claude-integration) — EXECUTING
+Plan: 2 of 2
 **Phase:** 4
-**Plan:** 03-03 complete (3/3)
-**Status:** Phase 03 complete. Ready for Phase 04.
+**Plan:** 1 of 2 COMPLETE — next: Plan 2
+**Status:** Executing Phase 04
 
 **Overall progress:**
 
@@ -99,6 +100,9 @@ Phase 5 [          ] 0%   CLI Completion
 | Distance threshold 0.3 knowledge / 0.4 diagnostic | Diagnostic queries (errors, bugs) need broader recall (0.6 similarity) vs knowledge queries (0.7 similarity) to surface related context | Phase 3 |
 | Keyword-based intent classification (no LLM) | Keeps retrieval fast and fully local — no round-trip to classify query intent | Phase 3 |
 | ask-codebase workflow last (Phase 4) | Anthropic SDK called only from this path; must not be introduced before workflows are fully built | Phase 4 |
+| MCP handlers guard before workflow dispatch | MCP context cannot tolerate process.exit; handlers check readProfile + isOllamaRunning before calling workflows to prevent exit guards from firing | Phase 4 |
+| doctor tool bypasses runDoctor() | runDoctor() prints to stderr and calls process.exit; MCP doctor builds JSON health object directly from services | Phase 4 |
+| tsup dual-config with clean:false on MCP entry | CLI gets shebang banner; MCP does not; clean:false prevents MCP build step from deleting CLI output | Phase 4 |
 | CLI commands are thin adapters only | Business logic belongs in workflows, not CLI handlers — enables identical behavior from MCP and CLI surfaces | Phase 5 |
 | Dynamic import() in CLI for lazy loading | Keeps brain-cache startup fast — Commander best practice, dynamic import per command action | Phase 1 |
 | Shebang in tsup banner only | tsup banner.js adds shebang to dist/cli.js — adding it in src causes double shebang SyntaxError in ESM | Phase 1 |
@@ -127,13 +131,13 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-04-01T03:31:27.747Z
+**Last session:** 2026-03-31T21:00:00.000Z
 
 **To resume:** Read this file, then `cat .planning/ROADMAP.md` to see phase structure.
 
-**Stopped at:** Completed 03-03-PLAN.md
+**Stopped at:** Completed 04-01-PLAN.md
 
-**Next action:** Continue Phase 03 — Plan 02 (context builder)
+**Next action:** Continue Phase 04 — Plan 2 (ask-codebase workflow)
 
 ---
 *State initialized: 2026-03-31*

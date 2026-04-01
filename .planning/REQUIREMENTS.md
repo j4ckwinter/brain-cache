@@ -32,11 +32,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### MCP Server
 
-- [ ] **MCP-01**: Braincache exposes an MCP server via stdio transport discoverable by Claude Code
-- [ ] **MCP-02**: `index_repo` tool accepts a path and indexes the codebase, returning status and file count
-- [ ] **MCP-03**: `search_codebase` tool accepts a query string and returns top-N relevant chunks with scores
-- [ ] **MCP-04**: `build_context` tool accepts a query and optional token budget, returns assembled context with metadata
-- [ ] **MCP-05**: `doctor` tool returns system health: Ollama status, index freshness, model loaded, VRAM available
+- [x] **MCP-01**: Braincache exposes an MCP server via stdio transport discoverable by Claude Code
+- [x] **MCP-02**: `index_repo` tool accepts a path and indexes the codebase, returning status and file count
+- [x] **MCP-03**: `search_codebase` tool accepts a query string and returns top-N relevant chunks with scores
+- [x] **MCP-04**: `build_context` tool accepts a query and optional token budget, returns assembled context with metadata
+- [x] **MCP-05**: `doctor` tool returns system health: Ollama status, index freshness, model loaded, VRAM available
 
 ### CLI
 
@@ -105,11 +105,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RET-03 | Phase 3 | Complete |
 | RET-04 | Phase 3 | Complete |
 | RET-05 | Phase 3 | Complete |
-| MCP-01 | Phase 4 | Pending |
-| MCP-02 | Phase 4 | Pending |
-| MCP-03 | Phase 4 | Pending |
-| MCP-04 | Phase 4 | Pending |
-| MCP-05 | Phase 4 | Pending |
+| MCP-01 | Phase 4 | Complete |
+| MCP-02 | Phase 4 | Complete |
+| MCP-03 | Phase 4 | Complete |
+| MCP-04 | Phase 4 | Complete |
+| MCP-05 | Phase 4 | Complete |
 | CLD-01 | Phase 4 | Pending |
 | CLD-02 | Phase 4 | Pending |
 | CLI-01 | Phase 5 | Pending |
