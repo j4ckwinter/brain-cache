@@ -17,7 +17,7 @@ import {
   deleteChunksByFilePath,
   type ChunkRow,
 } from '../services/lancedb.js';
-import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE } from '../lib/config.js';
+import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
 
@@ -89,11 +89,18 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   const contentMap = new Map<string, string>();
   const currentHashes: Record<string, string> = {};
 
-  for (let i = 0; i < files.length; i += 1) {
-    const filePath = files[i];
-    const content = await readFile(filePath, 'utf-8');
-    contentMap.set(filePath, content);
-    currentHashes[filePath] = hashContent(content);
+  for (let groupStart = 0; groupStart < files.length; groupStart += FILE_READ_CONCURRENCY) {
+    const group = files.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
+    const results = await Promise.all(
+      group.map(async (filePath) => {
+        const content = await readFile(filePath, 'utf-8');
+        return { filePath, content, hash: hashContent(content) };
+      })
+    );
+    for (const { filePath, content, hash } of results) {
+      contentMap.set(filePath, content);
+      currentHashes[filePath] = hash;
+    }
   }
 
   // Step 6c: Load stored hashes (skip if force)
