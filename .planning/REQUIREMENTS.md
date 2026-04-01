@@ -42,8 +42,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **CLI-01**: `braincache init` detects hardware, pulls required Ollama model, creates config directory
 - [ ] **CLI-02**: `braincache index [path]` indexes a directory with progress output
-- [ ] **CLI-03**: `braincache doctor` reports system health in human-readable format
-- [ ] **CLI-04**: `braincache status` shows index stats: files indexed, chunks stored, last indexed time, embedding model
+- [x] **CLI-03**: `braincache doctor` reports system health in human-readable format
+- [x] **CLI-04**: `braincache status` shows index stats: files indexed, chunks stored, last indexed time, embedding model
 
 ### Claude Integration
 
@@ -114,8 +114,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CLD-02 | Phase 4 | Complete |
 | CLI-01 | Phase 5 | Pending |
 | CLI-02 | Phase 5 | Pending |
-| CLI-03 | Phase 5 | Pending |
-| CLI-04 | Phase 5 | Pending |
+| CLI-03 | Phase 5 | Complete |
+| CLI-04 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 22 total

@@ -96,7 +96,11 @@ Plans:
   2. `braincache index [path]` displays a progress bar during indexing and prints token savings stats on completion
   3. `braincache doctor` outputs human-readable system health -- missing Ollama models produce an actionable fix message, not a stack trace
   4. `braincache status` reports files indexed, chunks stored, last indexed time, and active embedding model
-**Plans**: TBD
+**Plans:** 1/2 plans executed
+
+Plans:
+- [x] 05-01-PLAN.md -- Status command (new runStatus workflow) and doctor model presence check
+- [ ] 05-02-PLAN.md -- Init model warm-up and index progress/token savings stats
 
 ---
 
@@ -108,7 +112,7 @@ Plans:
 | 2. Storage and Indexing | 4/4 | Complete   | 2026-03-31 |
 | 3. Retrieval and Context Assembly | 3/3 | Complete   | 2026-04-01 |
 | 4. MCP Server and Claude Integration | 2/2 | Complete   | 2026-04-01 |
-| 5. CLI Completion | 0/? | Not started | - |
+| 5. CLI Completion | 1/2 | In Progress|  |
 
 ---
 
@@ -146,4 +150,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-03-31 after Phase 4 planning*
+*Last updated: 2026-03-31 after Phase 5 planning*
