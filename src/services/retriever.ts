@@ -25,15 +25,44 @@ interface RawChunkRow {
 
 const DIAGNOSTIC_KEYWORDS = [
   'why', 'broken', 'error', 'bug', 'fail', 'crash', 'exception',
-  'undefined', 'null', 'not working', 'wrong', 'issue', 'problem',
+  'undefined', 'null', 'wrong', 'issue', 'problem',
   'causes', 'caused', 'debug', 'fix', 'incorrect', 'unexpected',
+];
+
+const DIAGNOSTIC_BIGRAMS = [
+  'stack trace', 'null pointer', 'not defined',
+  'type error', 'reference error', 'syntax error',
+  'runtime error', 'segmentation fault',
+  'not working', 'throws exception',
+];
+
+const DIAGNOSTIC_EXCLUSIONS = [
+  'error handler', 'error handling', 'error boundary',
+  'error type', 'error message', 'error code', 'error class',
+  'null object', 'null check', 'null pattern',
+  'undefined behavior',
+  'fix the style', 'fix the format', 'fix the lint',
+  'fix the config', 'fix the setup',
 ];
 
 export function classifyQueryIntent(query: string): QueryIntent {
   const lower = query.toLowerCase();
-  return DIAGNOSTIC_KEYWORDS.some((kw) => lower.includes(kw))
-    ? 'diagnostic'
-    : 'knowledge';
+
+  // Bigram match -> always diagnostic (strong signal, per D-07)
+  if (DIAGNOSTIC_BIGRAMS.some((bg) => lower.includes(bg))) {
+    return 'diagnostic';
+  }
+
+  // Single keyword match, but check exclusion patterns first (per D-08)
+  const hasKeyword = DIAGNOSTIC_KEYWORDS.some((kw) => lower.includes(kw));
+  if (hasKeyword) {
+    const isExcluded = DIAGNOSTIC_EXCLUSIONS.some((ex) => lower.includes(ex));
+    if (!isExcluded) {
+      return 'diagnostic';
+    }
+  }
+
+  return 'knowledge';
 }
 
 export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
