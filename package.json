@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/tokenizer": "^0.0.4",
     "@lancedb/lancedb": "^0.27.1",
     "apache-arrow": "^18.1.0",
     "commander": "14.0.3",

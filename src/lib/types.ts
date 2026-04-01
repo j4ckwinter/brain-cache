@@ -36,3 +36,38 @@ export const IndexStateSchema = z.object({
   chunkCount:     z.number().int(),
 });
 export type IndexState = z.infer<typeof IndexStateSchema>;
+
+// --- Phase 3: Retrieval types ---
+
+export type QueryIntent = 'diagnostic' | 'knowledge';
+
+export interface SearchOptions {
+  limit: number;
+  distanceThreshold: number; // cosine distance (0.3 = 0.7 similarity)
+}
+
+export interface RetrievedChunk {
+  id: string;
+  filePath: string;
+  chunkType: string;
+  scope: string | null;
+  name: string | null;
+  content: string;
+  startLine: number;
+  endLine: number;
+  similarity: number; // 1 - _distance (higher = more similar)
+}
+
+export interface ContextMetadata {
+  tokensSent: number;
+  estimatedWithoutBraincache: number;
+  reductionPct: number;
+  localTasksPerformed: string[];
+  cloudCallsMade: number;
+}
+
+export interface ContextResult {
+  content: string;
+  chunks: RetrievedChunk[];
+  metadata: ContextMetadata;
+}
