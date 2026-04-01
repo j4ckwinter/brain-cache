@@ -24,7 +24,7 @@ export async function embedBatch(
 
   log.debug({ model, batchSize: texts.length }, 'Embedding batch');
 
-  const embedCall = ollama.embed({ model, input: texts }).then((r) => r.embeddings);
+  const embedCall = ollama.embed({ model, input: texts, truncate: true }).then((r) => r.embeddings);
 
   let timerId: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -58,18 +58,29 @@ function isConnectionError(err: unknown): boolean {
 }
 
 /**
- * Wraps embedBatch with a single cold-start retry.
- * On the first attempt, if a connection error is detected (ECONNRESET, ECONNREFUSED,
- * fetch failed, socket hang up), waits COLD_START_RETRY_DELAY_MS then retries once.
- * Subsequent failures (including the retry) are rethrown without further retries.
+ * Returns true if the error is an Ollama context-length rejection.
+ */
+function isContextLengthError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  return msg.includes('input length exceeds the context length');
+}
+
+/**
+ * Wraps embedBatch with a single cold-start retry and context-length fallback.
+ *
+ * When a batch fails with "input length exceeds the context length", falls back
+ * to embedding each text individually. Texts that still exceed the limit are
+ * replaced with zero vectors and a warning is logged.
  *
  * @param model   - Ollama model name
  * @param texts   - Array of text strings to embed
+ * @param dimension - Embedding dimension (needed for zero-vector fallback)
  * @param attempt - Internal retry counter (0 = first attempt, 1 = retry)
  */
 export async function embedBatchWithRetry(
   model: string,
   texts: string[],
+  dimension: number = 768,
   attempt = 0
 ): Promise<number[][]> {
   try {
@@ -78,8 +89,31 @@ export async function embedBatchWithRetry(
     if (attempt === 0 && isConnectionError(err)) {
       log.warn({ model }, 'Ollama cold-start suspected, retrying in 5s');
       await new Promise<void>((r) => setTimeout(r, COLD_START_RETRY_DELAY_MS));
-      return embedBatchWithRetry(model, texts, 1);
+      return embedBatchWithRetry(model, texts, dimension, 1);
     }
+
+    // Context-length error: fall back to one-at-a-time embedding
+    if (isContextLengthError(err)) {
+      log.warn({ model, batchSize: texts.length }, 'Batch exceeded context length, falling back to individual embedding');
+      const results: number[][] = [];
+      for (const text of texts) {
+        try {
+          const [vec] = await embedBatch(model, [text]);
+          results.push(vec);
+        } catch (innerErr) {
+          if (isContextLengthError(innerErr)) {
+            process.stderr.write(
+              `\nbrain-cache: chunk too large for embedding model, skipping (${text.length} chars)\n`
+            );
+            results.push(new Array(dimension).fill(0));
+          } else {
+            throw innerErr;
+          }
+        }
+      }
+      return results;
+    }
+
     throw err;
   }
 }

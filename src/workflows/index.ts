@@ -17,7 +17,7 @@ import {
   deleteChunksByFilePath,
   type ChunkRow,
 } from '../services/lancedb.js';
-import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY } from '../lib/config.js';
+import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
 
@@ -207,11 +207,33 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     // Embed and store this group's chunks in DEFAULT_BATCH_SIZE batches
     for (let offset = 0; offset < groupChunks.length; offset += DEFAULT_BATCH_SIZE) {
       const batch = groupChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
-      const texts = batch.map((chunk) => chunk.content);
-      totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
-      const vectors = await embedBatchWithRetry(profile.embeddingModel, texts);
 
-      const rows: ChunkRow[] = batch.map((chunk, i) => ({
+      // Pre-flight: skip chunks that exceed the embedding model's token limit.
+      // Sending oversized input causes Ollama to throw "input length exceeds the
+      // context length", crashing the entire indexing run.
+      // We count tokens with the Anthropic tokenizer. nomic-embed-text runs on
+      // llama.cpp with a BERT tokenizer that produces ~1.4x more tokens for code,
+      // so EMBED_MAX_TOKENS is set conservatively (1400 Anthropic ≈ 1960 BERT < 2048
+      // real context limit). truncate: true in ollama.embed() is a hard safety net.
+      const embeddableBatch = batch.filter((chunk) => {
+        const tokens = countChunkTokens(chunk.content);
+        if (tokens > EMBED_MAX_TOKENS) {
+          process.stderr.write(
+            `\nbrain-cache: skipping oversized chunk (${tokens} tokens > ${EMBED_MAX_TOKENS} limit): ` +
+            `${chunk.filePath} lines ${chunk.startLine}-${chunk.endLine}\n`
+          );
+          return false;
+        }
+        return true;
+      });
+
+      if (embeddableBatch.length === 0) continue;
+
+      const texts = embeddableBatch.map((chunk) => chunk.content);
+      totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
+      const vectors = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
+
+      const rows: ChunkRow[] = embeddableBatch.map((chunk, i) => ({
         id: chunk.id,
         file_path: chunk.filePath,
         chunk_type: chunk.chunkType,
