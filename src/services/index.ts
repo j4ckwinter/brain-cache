@@ -54,3 +54,5 @@ export {
 } from './retriever.js';
 
 export { countChunkTokens, assembleContext, formatChunk } from './tokenCounter.js';
+
+export { traceFlow, resolveSymbolToChunkId } from './flowTracer.js';
