@@ -226,8 +226,10 @@ describe('runBuildContext', () => {
   });
 
   it('computes reductionPct as (1 - tokensSent/estimatedWithoutBraincache) * 100', async () => {
-    // tokenCount = 150, each of 2 files = 500 tokens → estimatedWithoutBraincache = 1000
-    // reductionPct = (1 - 150/1000) * 100 = 85
+    // tokenCount = 150, each of 2 files = 500 tokens = 1000
+    // toolCallOverhead = (1 grep + 2 reads) × 300 = 900
+    // estimatedWithoutBraincache = 1000 + 900 = 1900
+    // reductionPct = (1 - 150/1900) * 100 ≈ 92
     mockAssembleContext.mockReturnValue({
       content: 'assembled',
       chunks: dedupedChunks,
@@ -237,16 +239,19 @@ describe('runBuildContext', () => {
 
     const result = await runBuildContext('test query');
     expect(result.metadata.tokensSent).toBe(150);
-    expect(result.metadata.estimatedWithoutBraincache).toBe(1000);
-    expect(result.metadata.reductionPct).toBe(85);
+    expect(result.metadata.estimatedWithoutBraincache).toBe(1900);
+    expect(result.metadata.reductionPct).toBe(92);
   });
 
   it('clamps reductionPct to 0 when estimatedWithoutBraincache is 0', async () => {
-    // No files could be read (all throw)
+    // No files could be read (all throw) — fileContentTokens = 0
+    // But toolCallOverhead still applies: (1 grep + 2 reads) × 300 = 900
+    // So estimatedWithoutBraincache = 900, not 0
     mockReadFile.mockRejectedValue(new Error('ENOENT'));
     const result = await runBuildContext('test query');
-    expect(result.metadata.reductionPct).toBe(0);
-    expect(result.metadata.estimatedWithoutBraincache).toBe(0);
+    // reductionPct = (1 - 150/900) * 100 ≈ 83
+    expect(result.metadata.estimatedWithoutBraincache).toBe(900);
+    expect(result.metadata.reductionPct).toBe(83);
   });
 
   it('skips files that cannot be read (gracefully handles missing files)', async () => {
@@ -254,9 +259,9 @@ describe('runBuildContext', () => {
       if (path === '/project/src/auth.ts') throw new Error('ENOENT');
       return 'file content' as any;
     });
-    // Should not throw, and estimatedWithoutBraincache should be for just 1 file (500 tokens)
+    // 1 readable file × 500 tokens + (1 grep + 2 reads) × 300 overhead = 1400
     const result = await runBuildContext('test query');
-    expect(result.metadata.estimatedWithoutBraincache).toBe(500);
+    expect(result.metadata.estimatedWithoutBraincache).toBe(1400);
   });
 
   it('throws when no profile found', async () => {

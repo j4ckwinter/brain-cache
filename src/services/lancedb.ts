@@ -378,17 +378,5 @@ export interface EdgeRow {
   [key: string]: unknown;
 }
 
-/**
- * Returns all edge rows where from_chunk_id matches the given value.
- * Returns empty array if no matches. Uses SQL predicate with single-quote escaping.
- */
-export async function queryEdgesFrom(
-  edgesTable: lancedb.Table,
-  fromChunkId: string
-): Promise<EdgeRow[]> {
-  const escaped = fromChunkId.replace(/'/g, "''");
-  return edgesTable.query().where(`from_chunk_id = '${escaped}'`).toArray() as Promise<EdgeRow[]>;
-}
-
 // Re-export CodeChunk for consumers of this module that only import from lancedb.ts
 export type { CodeChunk };
