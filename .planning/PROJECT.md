@@ -40,9 +40,20 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 - [ ] Cross-file dependency-aware retrieval (ADV-02)
 - [ ] File watcher for live re-indexing (INC-02)
 
+## Current Milestone: v1.2 MCP Tool Adoption
+
+**Goal:** Make Claude naturally choose brain-cache MCP tools over built-in file search when answering codebase questions, without requiring explicit user prompting.
+
+**Target features:**
+- Rewrite MCP tool descriptions to clearly communicate when/why to use each tool
+- Position brain-cache as the default for understanding code (semantic search, relevance ranking, token efficiency)
+- Clarify distinct roles for `search_codebase`, `build_context`, `index_repo`, and `doctor`
+- Add implicit guidance that steers Claude toward brain-cache tools for complex queries
+
 ## Current State
 
 Shipped v1.1 Hardening on 2026-04-01. All 16 requirements satisfied across 7 phases. No outstanding gaps.
+Phase 13 (v1.2 MCP Tool Adoption) complete 2026-04-02 — all 4 MCP tool descriptions rewritten with directive tone, cross-references, and advantage positioning.
 
 ### Out of Scope
 
@@ -110,4 +121,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v1.1 Hardening milestone shipped*
+*Last updated: 2026-04-02 after Phase 13 (v1.2 MCP Tool Adoption) complete*

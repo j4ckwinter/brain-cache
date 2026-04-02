@@ -91,7 +91,7 @@ Plans:
 | 10. Incremental Indexing and Intent Classification | v1.1 | 2/2 | Complete | 2026-04-01 |
 | 11. Restore Concurrent Index Pipeline | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 12. Integration Gap Cleanup | v1.1 | 1/1 | Complete | 2026-04-01 |
-| 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete   | 2026-04-02 |
+| 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete    | 2026-04-02 |
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete    | 2026-04-02 |
 
 ---

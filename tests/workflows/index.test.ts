@@ -269,8 +269,8 @@ describe('runIndex', () => {
   it('prints token savings stats on completion', async () => {
     await runIndex('/project');
     const combined = stderrOutput.join('');
-    expect(combined).toContain('Raw tokens:');
-    expect(combined).toContain('Chunk tokens:');
+    expect(combined).toContain('Tokens sent to Claude:');
+    expect(combined).toContain('Estimated without:');
     expect(combined).toContain('Reduction:');
   });
 
