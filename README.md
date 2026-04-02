@@ -119,6 +119,19 @@ When using brain-cache build_context, include the token savings summary from the
 
 This keeps it transparent and under your control.
 
+## 🎛 Tuning how much Claude uses brain-cache
+
+`brain-cache init` adds a section to your project's `CLAUDE.md` with soft recommendations — Claude will use the tools when it thinks they're useful, but won't prioritise them over its own judgement.
+
+If you want Claude to lean on brain-cache more heavily, you can strengthen the language yourself. For example:
+
+```
+Always use brain-cache build_context before reading files or using Grep/Glob.
+Do not skip brain-cache tools — they return better results with fewer tokens.
+```
+
+Or soften it further if you prefer Claude to decide on its own. It's your `CLAUDE.md` — edit it to match how you want to work.
+
 ---
 
 ## 🧩 Core capabilities
