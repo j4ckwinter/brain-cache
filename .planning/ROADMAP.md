@@ -40,7 +40,7 @@
 
 **v1.1.1 Post-Ship Cleanup (Phase 14)**
 
-- [ ] **Phase 14: Test Suite & Barrel Repair** - Fix 13 test failures from mock drift and update stale barrel exports
+- [x] **Phase 14: Test Suite & Barrel Repair** - Fix 13 test failures from mock drift and update stale barrel exports — completed 2026-04-02
 
 **v1.2 MCP Tool Adoption (Phase 13)**
 
@@ -57,7 +57,9 @@
   1. All 13 failing tests pass (`vitest run` exits 0, excluding tree-sitter arch issues)
   2. `src/services/index.ts` re-exports all Phase 9/10 public symbols
   3. `src/lib/index.ts` re-exports all Phase 9/10 config constants
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [x] 14-01-PLAN.md — Fix test failures, revert config drift, complete barrel exports — completed 2026-04-02
 
 ### Phase 13: MCP Tool Description Rewrite
 **Goal**: Claude naturally chooses brain-cache MCP tools over built-in file search when answering codebase questions
@@ -69,7 +71,9 @@
   3. Claude calls `index_repo` first when no index exists, understanding it is a prerequisite for all other tools
   4. Claude calls `doctor` when diagnosing brain-cache problems rather than inspecting config files manually
   5. When Claude must choose between `search_codebase` and `build_context`, the distinct use cases are clear without user guidance
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 13-01-PLAN.md — Rewrite all 4 MCP tool descriptions with directive tone, cross-references, and advantage positioning
 
 ## Progress
 
@@ -88,8 +92,8 @@
 | 11. Restore Concurrent Index Pipeline | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 12. Integration Gap Cleanup | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 13. MCP Tool Description Rewrite | v1.2 | 0/1 | Not started | - |
-| 14. Test Suite & Barrel Repair | v1.1.1 | 0/? | Not started | - |
+| 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 — v1.2 MCP Tool Adoption roadmap added*
+*Last updated: 2026-04-01 — Phase 13 planned (1 plan)*
