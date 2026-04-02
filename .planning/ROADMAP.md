@@ -44,7 +44,7 @@
 
 **v1.2 MCP Tool Adoption (Phase 13)**
 
-- [ ] **Phase 13: MCP Tool Description Rewrite** - Rewrite all four MCP tool descriptions to make Claude naturally prefer brain-cache tools
+- [x] **Phase 13: MCP Tool Description Rewrite** - Rewrite all four MCP tool descriptions to make Claude naturally prefer brain-cache tools (completed 2026-04-02)
 
 ## Phase Details
 
@@ -73,7 +73,7 @@ Plans:
   5. When Claude must choose between `search_codebase` and `build_context`, the distinct use cases are clear without user guidance
 **Plans**: 1 plan
 Plans:
-- [ ] 13-01-PLAN.md — Rewrite all 4 MCP tool descriptions with directive tone, cross-references, and advantage positioning
+- [x] 13-01-PLAN.md — Rewrite all 4 MCP tool descriptions with directive tone, cross-references, and advantage positioning
 
 ## Progress
 
@@ -91,8 +91,8 @@ Plans:
 | 10. Incremental Indexing and Intent Classification | v1.1 | 2/2 | Complete | 2026-04-01 |
 | 11. Restore Concurrent Index Pipeline | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 12. Integration Gap Cleanup | v1.1 | 1/1 | Complete | 2026-04-01 |
-| 13. MCP Tool Description Rewrite | v1.2 | 0/1 | Not started | - |
-| 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
+| 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete   | 2026-04-02 |
+| 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete    | 2026-04-02 |
 
 ---
 *Roadmap created: 2026-03-31*

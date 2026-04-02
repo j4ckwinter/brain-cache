@@ -9,20 +9,20 @@ Requirements for MCP Tool Adoption milestone. Each maps to roadmap phases.
 
 ### Tool Descriptions
 
-- [ ] **DESC-01**: `search_codebase` description communicates semantic search advantage over grep/file-find and specifies best-fit queries (symbol lookup, function finding, quick exploration)
-- [ ] **DESC-02**: `build_context` description positions it as producing Claude-ready, deduplicated, token-budgeted context and specifies best-fit queries (how does X work, explain architecture, multi-file reasoning)
-- [ ] **DESC-03**: `index_repo` description clearly states it is a prerequisite that enables all other brain-cache tools
-- [ ] **DESC-04**: `doctor` description communicates it as the diagnostic/troubleshooting entry point for brain-cache health
+- [x] **DESC-01**: `search_codebase` description communicates semantic search advantage over grep/file-find and specifies best-fit queries (symbol lookup, function finding, quick exploration)
+- [x] **DESC-02**: `build_context` description positions it as producing Claude-ready, deduplicated, token-budgeted context and specifies best-fit queries (how does X work, explain architecture, multi-file reasoning)
+- [x] **DESC-03**: `index_repo` description clearly states it is a prerequisite that enables all other brain-cache tools
+- [x] **DESC-04**: `doctor` description communicates it as the diagnostic/troubleshooting entry point for brain-cache health
 
 ### Tool Positioning
 
-- [ ] **POS-01**: Descriptions emphasise semantic (embedding-based) retrieval over naive keyword/file search
-- [ ] **POS-02**: Descriptions highlight relevance-ranked, token-efficient results as advantages over reading raw files
+- [x] **POS-01**: Descriptions emphasise semantic (embedding-based) retrieval over naive keyword/file search
+- [x] **POS-02**: Descriptions highlight relevance-ranked, token-efficient results as advantages over reading raw files
 
 ### Role Clarity
 
-- [ ] **ROLE-01**: `search_codebase` and `build_context` descriptions make their distinct use cases unambiguous (search = find code, context = answer questions)
-- [ ] **ROLE-02**: Descriptions include implicit guidance for Claude to prefer brain-cache tools and to combine tools when needed (e.g., build_context before answering complex questions)
+- [x] **ROLE-01**: `search_codebase` and `build_context` descriptions make their distinct use cases unambiguous (search = find code, context = answer questions)
+- [x] **ROLE-02**: Descriptions include implicit guidance for Claude to prefer brain-cache tools and to combine tools when needed (e.g., build_context before answering complex questions)
 
 ## Future Requirements
 
@@ -44,14 +44,14 @@ Requirements for MCP Tool Adoption milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DESC-01 | Phase 13 | Pending |
-| DESC-02 | Phase 13 | Pending |
-| DESC-03 | Phase 13 | Pending |
-| DESC-04 | Phase 13 | Pending |
-| POS-01 | Phase 13 | Pending |
-| POS-02 | Phase 13 | Pending |
-| ROLE-01 | Phase 13 | Pending |
-| ROLE-02 | Phase 13 | Pending |
+| DESC-01 | Phase 13 | Complete |
+| DESC-02 | Phase 13 | Complete |
+| DESC-03 | Phase 13 | Complete |
+| DESC-04 | Phase 13 | Complete |
+| POS-01 | Phase 13 | Complete |
+| POS-02 | Phase 13 | Complete |
+| ROLE-01 | Phase 13 | Complete |
+| ROLE-02 | Phase 13 | Complete |
 | DEBT-04 (v1.1) | Phase 14 | Pending (gap closure) |
 
 **Coverage:**
