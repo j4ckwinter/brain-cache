@@ -9,6 +9,8 @@
 
 - ✅ **v1.0 MVP** — Phases 1-5 (shipped 2026-04-01) — [archive](milestones/v1.0-ROADMAP.md)
 - ✅ **v1.1 Hardening** — Phases 6-12 (shipped 2026-04-01) — [archive](milestones/v1.1-ROADMAP.md)
+- 🔄 **v1.1.1 Post-Ship Cleanup** — Phase 14 (gap closure)
+- 🔄 **v1.2 MCP Tool Adoption** — Phases 13 (active)
 
 ## Phases
 
@@ -36,6 +38,39 @@
 
 </details>
 
+**v1.1.1 Post-Ship Cleanup (Phase 14)**
+
+- [ ] **Phase 14: Test Suite & Barrel Repair** - Fix 13 test failures from mock drift and update stale barrel exports
+
+**v1.2 MCP Tool Adoption (Phase 13)**
+
+- [ ] **Phase 13: MCP Tool Description Rewrite** - Rewrite all four MCP tool descriptions to make Claude naturally prefer brain-cache tools
+
+## Phase Details
+
+### Phase 14: Test Suite & Barrel Repair
+**Goal**: Fix all test failures caused by Phase 9/10 interface changes and complete barrel exports
+**Depends on**: Phase 12 (source of the drift)
+**Requirements**: DEBT-04 (barrel completeness)
+**Gap Closure**: Closes gaps from v1.1 milestone audit
+**Success Criteria** (what must be TRUE):
+  1. All 13 failing tests pass (`vitest run` exits 0, excluding tree-sitter arch issues)
+  2. `src/services/index.ts` re-exports all Phase 9/10 public symbols
+  3. `src/lib/index.ts` re-exports all Phase 9/10 config constants
+**Plans**: TBD
+
+### Phase 13: MCP Tool Description Rewrite
+**Goal**: Claude naturally chooses brain-cache MCP tools over built-in file search when answering codebase questions
+**Depends on**: Phase 12 (MCP server fully functional)
+**Requirements**: DESC-01, DESC-02, DESC-03, DESC-04, POS-01, POS-02, ROLE-01, ROLE-02
+**Success Criteria** (what must be TRUE):
+  1. Claude selects `search_codebase` instead of grep or file-find tools when asked to locate a function, symbol, or concept in the codebase
+  2. Claude calls `build_context` before answering complex "how does X work" or architecture questions rather than reading individual files
+  3. Claude calls `index_repo` first when no index exists, understanding it is a prerequisite for all other tools
+  4. Claude calls `doctor` when diagnosing brain-cache problems rather than inspecting config files manually
+  5. When Claude must choose between `search_codebase` and `build_context`, the distinct use cases are clear without user guidance
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -52,7 +87,9 @@
 | 10. Incremental Indexing and Intent Classification | v1.1 | 2/2 | Complete | 2026-04-01 |
 | 11. Restore Concurrent Index Pipeline | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 12. Integration Gap Cleanup | v1.1 | 1/1 | Complete | 2026-04-01 |
+| 13. MCP Tool Description Rewrite | v1.2 | 0/1 | Not started | - |
+| 14. Test Suite & Barrel Repair | v1.1.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-01 — v1.1 Hardening shipped*
+*Last updated: 2026-04-01 — v1.2 MCP Tool Adoption roadmap added*

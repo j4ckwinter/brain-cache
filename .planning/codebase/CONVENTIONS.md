@@ -5,221 +5,288 @@
 ## Naming Patterns
 
 **Files:**
-- Use camelCase for all source files: `tokenCounter.ts`, `askCodebase.ts`, `buildContext.ts`
-- Use camelCase for test files matching source: `tokenCounter.test.ts`, `askCodebase.test.ts`
-- Use `index.ts` as barrel/entry point per directory: `src/cli/index.ts`, `src/mcp/index.ts`, `src/services/index.ts`
+- Use camelCase for all source files: `buildContext.ts`, `tokenCounter.ts`, `askCodebase.ts`
+- Use camelCase for test files matching source: `buildContext.test.ts`, `tokenCounter.test.ts`
+- Barrel files are always `index.ts`
 
 **Functions:**
-- Use camelCase for all functions: `embedBatch`, `crawlSourceFiles`, `classifyQueryIntent`
-- Prefix workflow orchestrators with `run`: `runInit`, `runIndex`, `runSearch`, `runBuildContext`, `runAskCodebase`, `runDoctor`, `runStatus`
-- Prefix detection functions with `detect` or `is`: `detectNvidiaVRAM`, `isOllamaInstalled`, `isOllamaRunning`
-- Use descriptive verb-noun patterns: `pullModelIfMissing`, `openOrCreateChunkTable`, `writeIndexState`
+- Use camelCase: `embedBatch`, `classifyQueryIntent`, `crawlSourceFiles`
+- Prefix workflow entry points with `run`: `runInit`, `runIndex`, `runSearch`, `runBuildContext`, `runStatus`, `runDoctor`
+- Prefix detection/check functions with `is`/`detect`/`get`: `isOllamaRunning`, `detectNvidiaVRAM`, `getOllamaHost`
+- Internal helpers use camelCase without prefix: `hashContent`, `extractName`, `walkNodes`
 
 **Variables:**
-- Use camelCase for all variables: `queryVector`, `allChunks`, `totalRawTokens`
-- Use UPPER_SNAKE_CASE for module-level constants: `DEFAULT_BATCH_SIZE`, `EMBED_TIMEOUT_MS`, `DIAGNOSTIC_KEYWORDS`
-- Prefix mock variables with `mock` in tests: `mockReadProfile`, `mockIsOllamaRunning`
+- Use camelCase for variables: `queryVector`, `rootDir`, `rowCount`
+- Use UPPER_SNAKE_CASE for module-level constants: `EMBED_TIMEOUT_MS`, `DEFAULT_BATCH_SIZE`, `SOURCE_EXTENSIONS`
+- Use UPPER_SNAKE_CASE for exported constant collections: `LANGUAGE_MAP`, `CHUNK_NODE_TYPES`, `RETRIEVAL_STRATEGIES`
 
 **Types:**
-- Use PascalCase for all types and interfaces: `CapabilityProfile`, `CodeChunk`, `RetrievedChunk`, `SearchOptions`
-- Use PascalCase with `Schema` suffix for Zod schemas: `CapabilityProfileSchema`, `CodeChunkSchema`, `IndexStateSchema`
-- Derive TypeScript types from Zod schemas with `z.infer`: `export type CodeChunk = z.infer<typeof CodeChunkSchema>;`
-- Use string literal union types for enums: `type VRAMTier = 'none' | 'standard' | 'large'`
-- Use `interface` for object shapes with no Zod schema: `SearchOptions`, `ContextMetadata`, `ContextResult`
+- Use PascalCase for interfaces and type aliases: `CapabilityProfile`, `RetrievedChunk`, `CodeChunk`
+- Zod schemas use PascalCase with `Schema` suffix: `CapabilityProfileSchema`, `CodeChunkSchema`, `IndexStateSchema`
+- Types are derived from Zod schemas via `z.infer`: `type CodeChunk = z.infer<typeof CodeChunkSchema>`
+- Union literal types use lowercase strings: `'none' | 'standard' | 'large'`, `'diagnostic' | 'knowledge'`
+- Use `interface` for object shapes without Zod schema: `SearchOptions`, `ContextMetadata`, `BuildContextOptions`
 
 ## Code Style
 
 **Formatting:**
-- No project-level Prettier or ESLint configuration detected
-- 2-space indentation throughout all source and test files
-- Single quotes for string literals
-- Trailing commas in multi-line structures
-- Semicolons required at end of statements
-- Aligned property values in object literals using whitespace (seen in `src/lib/types.ts`, `src/services/lancedb.ts`):
+- No Prettier or ESLint config files. Formatting is manually maintained.
+- Indentation: 2 spaces
+- Semicolons: always present
+- Quotes: single quotes for imports and strings
+- Trailing commas: used in multi-line arrays and objects
+- Aligned property values in Zod schemas and object literals using whitespace:
   ```typescript
   id:         z.string(),
   filePath:   z.string(),
   chunkType:  z.enum(['function', 'class', 'method', 'file']),
   ```
 
-**Linting:**
-- No ESLint config at project root
-- TypeScript strict mode enabled in `tsconfig.json` (`"strict": true`)
+**TypeScript Strictness:**
+- `strict: true` in `tsconfig.json`
+- `forceConsistentCasingInFileNames: true`
+- Target: ES2022, Module: Node16, ModuleResolution: Node16
+- All source code uses ESM (`"type": "module"` in `package.json`)
 
 ## Import Organization
 
 **Order:**
-1. Node.js built-in modules with `node:` prefix: `import { readFile } from 'node:fs/promises';`
-2. External npm packages: `import ollama from 'ollama';`
-3. Internal project imports using relative paths with `.js` extension: `import { childLogger } from './logger.js';`
-4. Type-only imports use `import type`: `import type { CodeChunk, IndexState } from '../lib/types.js';`
+1. Node.js built-in modules with `node:` prefix: `import { readFile } from 'node:fs/promises'`
+2. Third-party packages: `import ollama from 'ollama'`, `import { z } from 'zod'`
+3. Local imports with `.js` extension: `import { childLogger } from './logger.js'`
+4. Type-only imports use `import type`: `import type { Table } from '@lancedb/lancedb'`
 
 **Critical rules:**
-- Always use the `node:` prefix for Node.js builtins: `node:path`, `node:os`, `node:fs/promises`, `node:child_process`, `node:util`
-- Always use `.js` extension on relative imports (required by Node16 module resolution): `'./logger.js'`, `'../lib/config.js'`
-- Separate runtime imports from type-only imports
-
-**Path Aliases:**
-- None configured. All imports use relative paths.
-
-## Module System
-
-**ESM only:**
-- `"type": "module"` in `package.json`
-- `"module": "Node16"` and `"moduleResolution": "Node16"` in `tsconfig.json`
-- `format: ['esm']` in `tsup.config.ts`
-- tree-sitter packages loaded via CJS bridge pattern using `createRequire`:
-  ```typescript
-  const _require = createRequire(import.meta.url);
-  const Parser = _require('tree-sitter');
-  ```
-
-## Export Patterns
-
-**Named exports only:**
-- All source modules use named exports exclusively: `export function`, `export async function`, `export const`, `export type`
-- No default exports anywhere in project source code
-- The `ollama` npm package is the only default import: `import ollama from 'ollama';`
-
-**Barrel files:**
-- `src/lib/index.ts`, `src/services/index.ts`, `src/tools/index.ts` exist as empty barrel files (`export {};`)
-- They are not used for re-exports; consumers import directly from specific files
+- Always use `node:` prefix for Node.js built-ins: `node:path`, `node:fs/promises`, `node:child_process`
+- Always use `.js` extension on local imports (required by Node16 module resolution): `'../lib/config.js'`
+- Type-only imports use `import type` keyword
+- No path aliases -- all imports are relative
 
 ## Error Handling
 
-**Patterns:**
-- Use try/catch with swallowed errors returning fallback values for optional operations:
-  ```typescript
+**1. Return null for missing/invalid data (services):**
+Services that read optional state return `null` rather than throwing:
+```typescript
+// src/services/capability.ts
+export async function readProfile(): Promise<CapabilityProfile | null> {
   try {
-    const raw = await readFile(statePath, 'utf-8');
-    const parsed = IndexStateSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
+    const raw = await readFile(PROFILE_PATH, 'utf-8');
+    const result = CapabilityProfileSchema.safeParse(JSON.parse(raw));
+    return result.success ? result.data : null;
   } catch {
     return null;
   }
-  ```
-- Use Zod `safeParse` for validation, returning `null` on failure (not throwing)
-- Workflow functions call `process.exit(1)` for fatal precondition failures (missing profile, Ollama not running, no index)
-- MCP tool handlers return `{ isError: true, content: [...] }` instead of throwing -- never call `process.exit()`
-- The `embedBatchWithRetry` function implements a single cold-start retry for transient connection errors (ECONNRESET, ECONNREFUSED)
-- Error messages are written to stderr via `process.stderr.write()` before calling `process.exit(1)`
-- Bare `catch` blocks (no error variable) are used when error details are not needed
+}
+```
 
-## Output Conventions (D-16 Rule)
+**2. Throw with actionable messages (workflows):**
+Workflows validate preconditions and throw descriptive errors with fix instructions:
+```typescript
+// src/workflows/buildContext.ts
+if (profile === null) {
+  throw new Error("No profile found. Run 'brain-cache init' first.");
+}
+if (!running) {
+  throw new Error("Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.");
+}
+```
 
-**All CLI output goes to stderr:**
-- Every workflow function writes progress and status to `process.stderr.write()`
-- stdout is reserved exclusively for machine-readable output (JSON) -- only the `context` CLI command writes to stdout
-- The `ask` command writes the answer to stderr
-- MCP server tools return JSON via the MCP protocol, not stdout/stderr
+**3. Return isError objects (MCP tools):**
+MCP tool handlers return structured error responses instead of throwing:
+```typescript
+// src/mcp/index.ts
+if (!profile) {
+  return {
+    isError: true,
+    content: [{ type: "text" as const, text: "No capability profile found. Run 'brain-cache init' first." }],
+  };
+}
+```
+
+**4. Silent catch for non-critical operations:**
+Empty catch blocks used only when failure is expected and non-critical:
+```typescript
+// src/services/ollama.ts
+try {
+  await execFileAsync(cmd, ['ollama']);
+  return true;
+} catch {
+  return false;
+}
+```
+
+**5. Retry with backoff for transient failures:**
+Connection errors to Ollama get a single retry with delay (cold-start pattern):
+```typescript
+// src/services/embedder.ts
+if (attempt === 0 && isConnectionError(err)) {
+  log.warn({ model }, 'Ollama cold-start suspected, retrying in 5s');
+  await new Promise<void>((r) => setTimeout(r, COLD_START_RETRY_DELAY_MS));
+  return embedBatchWithRetry(model, texts, dimension, 1);
+}
+```
+
+**6. Context-length fallback:**
+Batch embedding failures from oversized input fall back to individual embedding per text:
+```typescript
+// src/services/embedder.ts
+if (isContextLengthError(err)) {
+  // Fall back to one-at-a-time embedding; replace still-too-large chunks with zero vectors
+}
+```
+
+**7. Zod safeParse for external data validation:**
+Use `safeParse` (not `parse`) when reading data from disk -- never crash on corrupted files:
+```typescript
+const result = CapabilityProfileSchema.safeParse(JSON.parse(raw));
+return result.success ? result.data : null;
+```
 
 ## Logging
 
-**Framework:** pino (structured JSON logging to stderr)
+**Framework:** pino (structured JSON to stderr)
 
-**Configuration:**
-- Logger defined in `src/services/logger.ts`
-- Log level controlled by `BRAIN_CACHE_LOG` environment variable
-- Valid levels: `debug`, `info`, `warn`, `error`, `silent`
-- Default level: `warn` (when env var is unset or invalid)
-- Output target: stderr (fd 2) via `pino.destination(2)`
+**Setup pattern -- every service file creates a child logger:**
+```typescript
+// Top of each service file
+import { childLogger } from './logger.js';
+const log = childLogger('embedder');
 
-**Patterns:**
-- Create child loggers per component using `childLogger(componentName)`:
-  ```typescript
-  import { childLogger } from './logger.js';
-  const log = childLogger('embedder');
-  ```
-- Use structured logging with context objects:
-  ```typescript
-  log.debug({ model, batchSize: texts.length }, 'Embedding batch');
-  log.info({ model, dim }, 'Created new chunks table');
-  log.warn({ model }, 'Ollama cold-start suspected, retrying in 5s');
-  ```
-- The first argument is always a context object, the second is the message string
-- Use `log.debug` for internal operations, `log.info` for significant lifecycle events, `log.warn` for recoverable issues
+// Structured logging: context object first, message string second
+log.debug({ model, batchSize: texts.length }, 'Embedding batch');
+log.warn({ model }, 'Ollama cold-start suspected, retrying in 5s');
+log.info({ rootDir, fileCount: result.length }, 'Crawl complete');
+```
 
-## TypeScript Usage
+**Log level control:**
+- Default: `warn` (minimal output)
+- Set via `BRAIN_CACHE_LOG` env var: `debug`, `info`, `warn`, `error`, `silent`
+- Secret redaction configured for: `apiKey`, `api_key`, `secret`, `password`, `token`, `authorization`
 
-**Strict mode:**
-- Full strict mode enabled: `"strict": true`
-- Target: ES2022
+**User-facing output:**
+- All user-facing output goes to `process.stderr.write()` (not console.log, not logger)
+- stdout is reserved exclusively for machine-readable data (JSON via `--raw` flag)
+- Progress messages use `\r` for in-place updates: `\rbrain-cache: embedding 15/42 chunks (36%)`
+- This is called the "D-16 rule" in comments throughout the codebase
 
-**Type inference over annotation:**
-- Return types are explicitly annotated on exported functions: `Promise<boolean>`, `Promise<number | null>`, `Promise<CapabilityProfile>`
-- Local variables rely on type inference
-- Use `as const` for literal type assertions in test mock objects: `version: 1 as const`, `vramTier: 'large' as const`
+## Comments
 
-**Zod-first type definitions:**
-- Define Zod schema first, then derive the TypeScript type:
-  ```typescript
-  export const CapabilityProfileSchema = z.object({ ... });
-  export type CapabilityProfile = z.infer<typeof CapabilityProfileSchema>;
-  ```
-- Used for all data that crosses serialization boundaries (profile JSON, index state JSON, code chunks)
-- Plain interfaces used for internal-only types: `SearchOptions`, `BuildContextOptions`, `AskCodebaseOptions`
+**When to Comment:**
+- JSDoc on all exported functions with `@param` tags for non-obvious parameters
+- Inline comments for non-obvious logic, especially workarounds
+- Reference design decision IDs: `// per D-16`, `// per D-07`, `// per D-08`
+- Reference debt/perf tracking IDs: `// PERF-02`, `// DEBT-06`, `// DEBT-04`
+- Explain "why" not "what"
 
-**Generics:**
-- Minimal use of generics. The codebase favors concrete types.
+**JSDoc pattern:**
+```typescript
+/**
+ * Brief description of what the function does.
+ * Additional context about behavior edge cases.
+ *
+ * @param model   - Ollama model name (e.g. 'nomic-embed-text')
+ * @param texts   - Array of text strings to embed in one batch
+ */
+export async function embedBatch(model: string, texts: string[]): Promise<number[][]> {
+```
 
-**`any` usage:**
-- tree-sitter AST node parameters typed as `any` in `src/services/chunker.ts` (the tree-sitter library lacks TypeScript types)
-- LanceDB query result rows cast with `(r: any)` in `src/services/retriever.ts`
-- Mock objects in tests typed as `any` when LanceDB types are complex
+**Workaround comments include removal criteria:**
+```typescript
+// CJS require workaround for tree-sitter packages.
+// ...
+// This workaround can be removed when:
+//   - tree-sitter ships an ESM entry point (tracked in tree-sitter >= 0.24.0), OR
+//   - the project migrates to web-tree-sitter (WASM-based)
+```
 
 ## Function Design
 
-**Size:** Functions are focused and typically under 50 lines. Workflow orchestrators (`runInit`, `runIndex`) are the longest at ~90 lines due to sequential steps.
+**Size:** Functions are generally short (under 50 lines). Workflow orchestrators (`runIndex` at ~300 lines) are the exception, broken into clearly numbered steps with comments.
 
 **Parameters:**
-- Use options objects for functions with 2+ optional parameters:
-  ```typescript
-  export async function runSearch(query: string, opts?: SearchRunOptions): Promise<RetrievedChunk[]>
-  ```
-- Use positional parameters for functions with 1-2 required parameters:
-  ```typescript
-  export async function embedBatch(model: string, texts: string[], timeoutMs?: number): Promise<number[][]>
-  ```
+- Use options objects for functions with 2+ optional parameters: `opts: { maxTokens?: number; limit?: number; path?: string }`
+- Use default values from config constants: `timeoutMs: number = EMBED_TIMEOUT_MS`
+- Use explicit types, never `any` in source (only in test mocks)
 
 **Return Values:**
-- Use `null` for "not found" semantics: `readProfile(): Promise<CapabilityProfile | null>`
-- Use `boolean` for success/failure checks: `isOllamaInstalled(): Promise<boolean>`
-- Workflows that produce output return void and write to stderr
+- Async functions have explicitly annotated return types: `Promise<boolean>`, `Promise<number | null>`
+- Use `null` (not `undefined`) for "not found" semantics
 - Workflows that produce data return typed results: `runSearch -> RetrievedChunk[]`, `runBuildContext -> ContextResult`
+- Workflows that only produce output return `void` and write to stderr
 
-## Code Organization Within Files
+## Module Design
 
-**Service files follow this structure:**
-1. Imports (node builtins, npm packages, internal modules)
-2. Module-level constants and child logger
-3. Helper/utility functions (private, not exported)
-4. Exported functions in order of dependency
+**Exports:**
+- Named exports only -- no default exports in source code
+- Exception: `ollama` and `pino` are imported as default (third-party convention)
 
-**Workflow files follow this structure:**
-1. Imports
-2. Interface definitions for options/results (if any)
-3. Single exported `run*` function with numbered step comments:
-   ```typescript
-   // Step 1: Resolve path
-   // Step 2: Read profile
-   // Step 3: Check Ollama is running
-   ```
+**Barrel Files:**
+- `src/services/index.ts` -- re-exports all service APIs with explicit named re-exports
+- `src/lib/index.ts` -- re-exports all types and config constants
+- `src/tools/index.ts` -- intentionally empty placeholder (documented with `DEBT-04` comment)
+- Barrel files use explicit `export { foo } from './bar.js'`, not `export * from`
 
-## Documentation
+**Module boundaries:**
+- `src/lib/` -- pure data: types, schemas, config constants (no I/O, no side effects)
+- `src/services/` -- single-responsibility modules with I/O (each gets a child logger)
+- `src/workflows/` -- orchestrators that compose services (contain `process.stderr.write` for user output)
+- `src/mcp/` -- MCP server registration (imports from services and workflows)
+- `src/cli/` -- Commander CLI registration (lazy-imports workflows via dynamic `import()`)
 
-**JSDoc comments:**
-- All exported functions have JSDoc `/** ... */` documentation
-- JSDoc describes what the function does, not implementation details
-- `@param` tags used when parameter names are not self-documenting
-- Internal helper functions have single-line `//` comments explaining purpose
+**CLI lazy imports pattern (reduces startup time):**
+```typescript
+// src/cli/index.ts
+program.command("init").action(async () => {
+  const { runInit } = await import("../workflows/init.js");
+  await runInit();
+});
+```
 
-**Inline comments:**
-- Numbered step comments in workflow functions for traceability
-- Design decision references using codes: `// per D-16`, `// per D-08`, `// CLD-02`
-- Inline threshold explanations for magic numbers:
-  ```typescript
-  export const DEFAULT_DISTANCE_THRESHOLD = 0.3; // cosine distance; 0.3 = 0.7 similarity
-  ```
+## Data Conventions
+
+**Casing boundaries:**
+- TypeScript types/interfaces use camelCase properties: `filePath`, `chunkType`, `startLine`
+- LanceDB/Arrow schema uses snake_case columns: `file_path`, `chunk_type`, `start_line`
+- Conversion happens at the service boundary (`src/services/retriever.ts` maps snake_case to camelCase)
+
+**Schema validation:**
+- All persisted data has a Zod schema in `src/lib/types.ts`
+- Schemas are defined alongside their types: `export const FooSchema = z.object({...}); export type Foo = z.infer<typeof FooSchema>;`
+- MCP tool input schemas use Zod directly (not JSON Schema)
+
+**Configuration constants:**
+- All magic numbers live in `src/lib/config.ts`
+- Constants are exported individually (not as a config object)
+- Numeric separators used for readability: `10_000`, `120_000`
+
+## Workflow Step Pattern
+
+Workflow files follow a numbered-step pattern with comments:
+```typescript
+export async function runBuildContext(query: string, opts?: BuildContextOptions): Promise<ContextResult> {
+  // 1. Read profile
+  const profile = await readProfile();
+  if (profile === null) { throw new Error("..."); }
+
+  // 2. Check Ollama
+  const running = await isOllamaRunning();
+  if (!running) { throw new Error("..."); }
+
+  // 3. Resolve project root and read index state
+  // ...
+}
+```
+
+## Build-Time Injection
+
+Version string injected at build time via `tsup.config.ts` and `vitest.config.ts`:
+```typescript
+// src/types/globals.d.ts
+declare const __BRAIN_CACHE_VERSION__: string;
+
+// src/cli/index.ts
+const version = __BRAIN_CACHE_VERSION__;
+```
 
 ---
 

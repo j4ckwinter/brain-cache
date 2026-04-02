@@ -13,12 +13,12 @@
 ## Runtime
 
 **Environment:**
-- Node.js 20+ (tsup target: `node20`; no `.nvmrc` or `.node-version` present)
+- Node.js 22 (`.nvmrc` specifies `22`; tsup build target: `node20`)
 - ESM-only (`"type": "module"` in `package.json`)
 
 **Package Manager:**
-- npm (no yarn.lock or pnpm-lock.yaml present)
-- Lockfile: package-lock.json expected but not verified in repo
+- npm
+- Lockfile: `package-lock.json` present (lockfileVersion 3)
 
 ## Frameworks
 
@@ -80,11 +80,19 @@
   2. `src/mcp/index.ts` -> `dist/mcp.js` (ESM, dts, no clean)
 - Target: node20
 - Format: ESM only
+- Build-time version injection: `__BRAIN_CACHE_VERSION__` defined from `package.json` version
+
+**Test (`vitest.config.ts`):**
+- Globals: true
+- Environment: node
+- Test include pattern: `tests/**/*.test.ts`
+- Defines `__BRAIN_CACHE_VERSION__` as `'0.0.0-test'` for test builds
 
 **Environment Variables:**
 - `ANTHROPIC_API_KEY` - Required for `ask` command (Claude API)
 - `BRAIN_CACHE_CLAUDE_MODEL` - Optional Claude model override (default: `claude-sonnet-4-20250514`)
 - `BRAIN_CACHE_LOG` - Log level control: `debug`, `info`, `warn`, `error`, `silent` (default: `warn`)
+- `OLLAMA_HOST` - Optional Ollama server URL override (default: `http://localhost:11434`)
 
 **npm Scripts (`package.json`):**
 ```bash
@@ -101,7 +109,7 @@ npm run test:watch   # vitest (watch mode)
 ## Platform Requirements
 
 **Development:**
-- Node.js 20+
+- Node.js 22 (per `.nvmrc`); build targets node20 minimum
 - Ollama installed and running locally (for embedding operations)
 - GPU optional - gracefully degrades to CPU via Ollama
 
@@ -109,7 +117,7 @@ npm run test:watch   # vitest (watch mode)
 - Node.js 20+
 - Ollama binary installed (`ollama serve` running)
 - Embedding model pulled (handled by `brain-cache init`)
-- ANTHROPIC_API_KEY set (only for `ask` command)
+- `ANTHROPIC_API_KEY` set (only for `ask` command)
 
 **Supported Platforms:**
 - macOS (Apple Silicon detection via `system_profiler`)
@@ -123,6 +131,8 @@ npm run test:watch   # vitest (watch mode)
 3. **Pino logs to stderr** - All logging goes to fd 2 via `pino.destination(2)` in `src/services/logger.ts`, keeping stdout clean for MCP stdio transport
 4. **No database server** - LanceDB is embedded, stores data at `<projectRoot>/.brain-cache/index/`
 5. **No LangChain/LlamaIndex** - Direct SDK usage for all integrations per project constraints
+6. **Build-time version injection** - `__BRAIN_CACHE_VERSION__` injected by tsup from `package.json`, declared in `src/types/globals.d.ts`
+7. **Pino redaction** - Logger redacts sensitive fields (apiKey, secret, password, token, authorization) to prevent credential leaks
 
 ---
 

@@ -8,272 +8,270 @@
 brain-cache/
 ├── src/
 │   ├── cli/
-│   │   └── index.ts            # CLI entry point (Commander program)
-│   ├── lib/
-│   │   ├── config.ts           # Constants and configuration values
-│   │   ├── types.ts            # Zod schemas and TypeScript types
-│   │   └── index.ts            # Barrel export (empty)
+│   │   └── index.ts          # Commander CLI entry point (7 subcommands)
 │   ├── mcp/
-│   │   └── index.ts            # MCP server entry point (stdio transport)
+│   │   └── index.ts          # MCP server entry point (4 tools, stdio transport)
+│   ├── workflows/
+│   │   ├── index.ts           # Index workflow (crawl -> chunk -> embed -> store)
+│   │   ├── init.ts            # Hardware detection + Ollama setup
+│   │   ├── doctor.ts          # System health report
+│   │   ├── search.ts          # Vector search workflow
+│   │   ├── buildContext.ts    # Token-budgeted context assembly
+│   │   ├── askCodebase.ts     # Context + Claude API question answering
+│   │   └── status.ts          # Index stats report
 │   ├── services/
-│   │   ├── capability.ts       # GPU/VRAM detection, profile read/write
-│   │   ├── chunker.ts          # AST-aware code chunking (tree-sitter)
-│   │   ├── crawler.ts          # Source file discovery (fast-glob + .gitignore)
-│   │   ├── embedder.ts         # Ollama embedding with retry/timeout
-│   │   ├── lancedb.ts          # LanceDB database operations
-│   │   ├── logger.ts           # Pino structured logging
-│   │   ├── ollama.ts           # Ollama binary detection, version, model pull
-│   │   ├── retriever.ts        # Vector search, deduplication, query intent
-│   │   ├── tokenCounter.ts     # Anthropic tokenizer wrapper
-│   │   └── index.ts            # Barrel export (empty)
+│   │   ├── index.ts           # Barrel re-exports for all services
+│   │   ├── capability.ts      # GPU/VRAM detection, profile read/write
+│   │   ├── chunker.ts         # Tree-sitter AST parsing -> CodeChunks
+│   │   ├── crawler.ts         # File discovery (fast-glob + .gitignore)
+│   │   ├── embedder.ts        # Ollama embed API with retry/fallback
+│   │   ├── lancedb.ts         # LanceDB connection, table CRUD, index state
+│   │   ├── retriever.ts       # Intent classification, vector search, dedup
+│   │   ├── tokenCounter.ts    # Anthropic tokenizer, context assembly
+│   │   ├── logger.ts          # Pino logger with secret redaction
+│   │   └── ollama.ts          # Ollama binary/server management
+│   ├── lib/
+│   │   ├── index.ts           # Barrel re-exports for types + config
+│   │   ├── config.ts          # Constants (paths, thresholds, defaults)
+│   │   └── types.ts           # Zod schemas + TypeScript interfaces
 │   ├── tools/
-│   │   └── index.ts            # Barrel export (empty, reserved for future)
-│   └── workflows/
-│       ├── askCodebase.ts      # End-to-end: retrieve context + Claude reasoning
-│       ├── buildContext.ts     # Token-budgeted context assembly
-│       ├── doctor.ts           # System health diagnostics
-│       ├── index.ts            # Full indexing pipeline orchestration
-│       ├── init.ts             # First-run setup (detect, pull model, write profile)
-│       ├── search.ts           # Semantic search over indexed codebase
-│       └── status.ts           # Index stats reporting
+│   │   └── index.ts           # Empty barrel (reserved for future tool modules)
+│   └── types/
+│       └── globals.d.ts       # Build-time __BRAIN_CACHE_VERSION__ declaration
 ├── tests/
 │   ├── mcp/
-│   │   └── server.test.ts      # MCP server tool registration tests
+│   │   └── server.test.ts     # MCP server tool registration tests
 │   ├── services/
 │   │   ├── capability.test.ts
 │   │   ├── chunker.test.ts
 │   │   ├── crawler.test.ts
 │   │   ├── embedder.test.ts
+│   │   ├── lancedb.test.ts
 │   │   ├── logger.test.ts
 │   │   ├── ollama.test.ts
 │   │   ├── retriever.test.ts
 │   │   └── tokenCounter.test.ts
 │   └── workflows/
-│       ├── askCodebase.test.ts
-│       ├── buildContext.test.ts
 │       ├── index.test.ts
 │       ├── init.test.ts
+│       ├── askCodebase.test.ts
+│       ├── buildContext.test.ts
 │       ├── search.test.ts
 │       └── status.test.ts
-├── dist/                       # Build output (gitignored)
-│   ├── cli.js                  # CLI binary (with shebang)
-│   ├── cli.d.ts                # CLI type declarations
-│   ├── mcp.js                  # MCP server bundle
-│   ├── mcp.d.ts                # MCP type declarations
-│   └── chunk-*.js / *.js       # Code-split shared chunks
-├── .planning/                  # GSD workflow artifacts (gitignored)
-├── .devcontainer/              # Dev container config (gitignored)
-├── package.json                # Package manifest, scripts, deps
-├── package-lock.json           # Lockfile
-├── tsconfig.json               # TypeScript compiler config
-├── tsup.config.ts              # Build config (dual entry: cli + mcp)
-├── vitest.config.ts            # Test runner config
-├── .mcp.json                   # MCP server registration for Claude
-├── .nvmrc                      # Node.js version (22)
-├── .npmrc                      # npm config (legacy-peer-deps=true)
-├── .gitignore                  # Ignores dist/, node_modules/, .brain-cache/, .planning/
-├── CLAUDE.md                   # Project instructions for Claude
-└── README.md                   # Project documentation
+├── dist/                      # Build output (tsup, gitignored)
+│   ├── cli.js                 # CLI binary (ESM, shebang)
+│   ├── mcp.js                 # MCP server (ESM)
+│   └── *.d.ts                 # Type declarations
+├── .brain-cache/              # Per-project index data (gitignored)
+│   └── index/                 # LanceDB database files
+├── .planning/                 # GSD workflow planning artifacts
+├── package.json
+├── tsconfig.json
+├── tsup.config.ts             # Two build entries: cli + mcp
+├── vitest.config.ts
+├── .mcp.json                  # MCP server config for Claude Code
+├── .gitignore
+├── .nvmrc                     # Node.js version pin (22)
+├── .npmrc                     # npm config (legacy-peer-deps=true)
+├── CLAUDE.md                  # Project instructions for Claude
+└── README.md
 ```
 
 ## Directory Purposes
 
-**`src/cli/`**
+**`src/cli/`:**
 - Purpose: CLI entry point using Commander
-- Contains: Single `index.ts` that defines all subcommands
-- Key file: `src/cli/index.ts` -- registers `init`, `doctor`, `index`, `search`, `status`, `context`, `ask` commands
-- Pattern: Each command uses dynamic `import()` to lazy-load the corresponding workflow
+- Contains: Single `index.ts` with all 7 command definitions
+- Key file: `src/cli/index.ts`
+- Pattern: Each command uses dynamic `import()` to lazy-load the corresponding workflow module
 
-**`src/lib/`**
-- Purpose: Shared constants, types, and configuration
-- Contains: No logic -- only type definitions and config values
+**`src/mcp/`:**
+- Purpose: MCP (Model Context Protocol) server for Claude Code integration
+- Contains: Single `index.ts` with 4 registered tools and stdio transport setup
+- Key file: `src/mcp/index.ts`
+- Pattern: Each tool wraps a workflow function with pre-flight guards (profile, Ollama) and structured JSON return
+
+**`src/workflows/`:**
+- Purpose: Multi-step orchestration functions that compose services into complete operations
+- Contains: One file per workflow, each exporting a single `run*` function
 - Key files:
-  - `src/lib/config.ts` -- all constants (paths, timeouts, thresholds, defaults)
-  - `src/lib/types.ts` -- Zod schemas (`CapabilityProfileSchema`, `CodeChunkSchema`, `IndexStateSchema`) and TypeScript interfaces (`RetrievedChunk`, `ContextResult`, `ContextMetadata`, `SearchOptions`)
-- Note: `src/lib/index.ts` is an empty barrel export; imports go directly to `config.js` or `types.js`
+  - `src/workflows/index.ts` -- largest and most complex: full indexing pipeline with incremental support
+  - `src/workflows/buildContext.ts` -- context assembly with token budgeting
+  - `src/workflows/askCodebase.ts` -- the only workflow that calls the Claude API
 
-**`src/mcp/`**
-- Purpose: MCP server that exposes brain-cache as tools for Claude
-- Contains: Single `index.ts` with 4 registered tools: `index_repo`, `search_codebase`, `build_context`, `doctor`
-- Key file: `src/mcp/index.ts` -- uses `@modelcontextprotocol/sdk` with stdio transport
-- Pattern: Each tool wraps a workflow function, adds guards (profile exists, Ollama running), returns structured JSON
-
-**`src/services/`**
-- Purpose: Low-level service modules -- each wraps a single external dependency or system concern
-- Contains: Stateless functions that perform one job each
+**`src/services/`:**
+- Purpose: Single-responsibility modules, each wrapping one external dependency or system concern
+- Contains: 10 service files + barrel index
 - Key files:
-  - `src/services/capability.ts` -- GPU detection via `nvidia-smi`/`system_profiler`, profile read/write to `~/.brain-cache/profile.json`
-  - `src/services/chunker.ts` -- tree-sitter parsing for TS/TSX/Python/Go/Rust, falls back to whole-file chunks
-  - `src/services/crawler.ts` -- `fast-glob` file discovery, respects `.gitignore` via `ignore` package
-  - `src/services/embedder.ts` -- `ollama.embed()` with timeout and cold-start retry
-  - `src/services/lancedb.ts` -- LanceDB database/table operations, Apache Arrow schema, index state persistence
-  - `src/services/logger.ts` -- Pino logger with `BRAIN_CACHE_LOG` env var control
-  - `src/services/ollama.ts` -- Ollama binary checks, version detection, model pulling, process spawning
-  - `src/services/retriever.ts` -- vector search, chunk deduplication, query intent classification
-  - `src/services/tokenCounter.ts` -- Anthropic tokenizer wrapper for token counting and budget enforcement
+  - `src/services/chunker.ts` -- tree-sitter AST parsing for TypeScript, Python, Go, Rust
+  - `src/services/lancedb.ts` -- vector database operations, Arrow schema, state persistence
+  - `src/services/retriever.ts` -- query intent classification, vector search, deduplication
+  - `src/services/embedder.ts` -- Ollama embedding with cold-start retry and context-length fallback
+  - `src/services/capability.ts` -- GPU/VRAM detection (NVIDIA via nvidia-smi, Apple Silicon via system_profiler)
+  - `src/services/ollama.ts` -- Ollama binary detection, server management, model pulling
+  - `src/services/logger.ts` -- Pino logger to stderr with secret redaction
+  - `src/services/tokenCounter.ts` -- Anthropic tokenizer wrapper + greedy context assembly
+  - `src/services/crawler.ts` -- fast-glob file discovery with .gitignore support
 
-**`src/tools/`**
-- Purpose: Reserved for future MCP tool definitions or tool utilities
-- Contains: Empty barrel export only (`src/tools/index.ts`)
-- Status: Placeholder -- not currently used by any module
-
-**`src/workflows/`**
-- Purpose: High-level orchestration -- each workflow composes multiple services into a complete user-facing operation
-- Contains: One file per CLI command / MCP tool
+**`src/lib/`:**
+- Purpose: Shared types, Zod schemas, and configuration constants (no business logic)
+- Contains: `types.ts` (all schemas and interfaces), `config.ts` (all constants), `index.ts` (barrel)
 - Key files:
-  - `src/workflows/init.ts` -- detect capabilities, install/start Ollama, pull embedding model, write profile
-  - `src/workflows/doctor.ts` -- health check: Ollama, VRAM, profile, index freshness
-  - `src/workflows/index.ts` -- full indexing pipeline: crawl -> chunk -> embed -> store -> write state
-  - `src/workflows/search.ts` -- embed query -> vector search -> deduplicate -> return ranked chunks
-  - `src/workflows/buildContext.ts` -- search + token-budget assembly into a context block
-  - `src/workflows/askCodebase.ts` -- buildContext + send to Claude API for reasoning
-  - `src/workflows/status.ts` -- read and display index stats
-- Pattern: Workflows import from `services/` and `lib/`, never from each other (except `askCodebase` -> `buildContext`)
+  - `src/lib/types.ts` -- `CapabilityProfileSchema`, `CodeChunkSchema`, `IndexStateSchema`, plus interfaces for `RetrievedChunk`, `ContextResult`, `ContextMetadata`, `SearchOptions`, `QueryIntent`
+  - `src/lib/config.ts` -- paths (`GLOBAL_CONFIG_DIR`, `PROJECT_DATA_DIR`), thresholds (`DEFAULT_DISTANCE_THRESHOLD`, `VECTOR_INDEX_THRESHOLD`), limits (`DEFAULT_BATCH_SIZE`, `EMBED_MAX_TOKENS`, `FILE_READ_CONCURRENCY`)
 
-**`tests/`**
-- Purpose: Unit tests mirroring the `src/` structure
-- Contains: `.test.ts` files organized by layer (services, workflows, mcp)
-- Pattern: Test file at `tests/{layer}/{module}.test.ts` corresponds to `src/{layer}/{module}.ts`
+**`src/tools/`:**
+- Purpose: Reserved for future standalone tool modules
+- Contains: Empty barrel export (`src/tools/index.ts`)
+- Status: Intentionally empty (marked DEBT-04)
+
+**`src/types/`:**
+- Purpose: Ambient TypeScript declarations for build-time constants
+- Contains: `globals.d.ts` declaring `__BRAIN_CACHE_VERSION__`
+
+**`tests/`:**
+- Purpose: Vitest test suites mirroring `src/` layer structure
+- Contains: Test files organized into `services/`, `workflows/`, `mcp/` subdirectories
+- Pattern: `tests/{layer}/{module}.test.ts` corresponds to `src/{layer}/{module}.ts`
 
 ## Key File Locations
 
 **Entry Points:**
-- `src/cli/index.ts`: CLI binary entry -- built to `dist/cli.js` with shebang
-- `src/mcp/index.ts`: MCP server entry -- built to `dist/mcp.js` (no shebang)
+- `src/cli/index.ts`: CLI binary entry (Commander program, 7 subcommands)
+- `src/mcp/index.ts`: MCP server entry (stdio transport, 4 tools)
 
 **Configuration:**
-- `src/lib/config.ts`: Runtime constants (paths, timeouts, thresholds)
-- `tsconfig.json`: TypeScript config (ES2022, Node16 module resolution, strict)
-- `tsup.config.ts`: Build config (two entries: cli + mcp, ESM format, node20 target)
-- `vitest.config.ts`: Test config (node environment, globals enabled)
-- `.mcp.json`: Registers `brain-cache` MCP server (`node ./dist/mcp.js`)
-- `.nvmrc`: Pins Node.js 22
-- `.npmrc`: Sets `legacy-peer-deps=true`
-
-**Type System:**
-- `src/lib/types.ts`: All shared types and Zod schemas
+- `src/lib/config.ts`: Runtime constants (paths, thresholds, batch sizes, timeouts)
+- `tsup.config.ts`: Build configuration (two entries: cli + mcp, ESM, node20 target, version injection)
+- `tsconfig.json`: TypeScript config (ES2022 target, Node16 module resolution, strict mode)
+- `vitest.config.ts`: Test runner config
+- `.mcp.json`: MCP server registration for Claude Code (`node ./dist/mcp.js`)
 
 **Core Logic:**
-- `src/workflows/index.ts`: The main indexing pipeline (most complex workflow)
-- `src/services/lancedb.ts`: Database layer -- schema definition, CRUD, state persistence
-- `src/services/chunker.ts`: AST parsing with tree-sitter for multiple languages
-- `src/services/retriever.ts`: Search and ranking logic
+- `src/workflows/index.ts`: Full indexing pipeline (~300 lines, most complex module)
+- `src/workflows/buildContext.ts`: Token-budgeted context assembly
+- `src/services/chunker.ts`: Tree-sitter AST parsing for 4 languages (~230 lines)
+- `src/services/lancedb.ts`: LanceDB operations and Arrow schema (~250 lines)
+- `src/services/retriever.ts`: Query intent classification and vector search
+- `src/services/embedder.ts`: Ollama embedding with retry and fallback
+
+**Type Definitions:**
+- `src/lib/types.ts`: All Zod schemas and TypeScript interfaces (~74 lines)
+- `src/services/lancedb.ts`: `ChunkRow` interface (LanceDB row shape)
 
 **Testing:**
-- `tests/services/*.test.ts`: Service-level unit tests
-- `tests/workflows/*.test.ts`: Workflow-level tests
-- `tests/mcp/server.test.ts`: MCP tool integration test
+- `tests/services/*.test.ts`: Unit tests for each service (9 files)
+- `tests/workflows/*.test.ts`: Workflow tests (6 files)
+- `tests/mcp/server.test.ts`: MCP tool registration tests
 
 ## Naming Conventions
 
 **Files:**
-- `camelCase.ts` for all source files: `askCodebase.ts`, `tokenCounter.ts`, `buildContext.ts`
-- `camelCase.test.ts` for test files: `askCodebase.test.ts`
+- `camelCase.ts` for all source files: `buildContext.ts`, `tokenCounter.ts`, `askCodebase.ts`
+- `camelCase.test.ts` for test files, matching the source file name: `buildContext.test.ts`
+- `index.ts` for barrel exports and entry points
 
 **Directories:**
-- `lowercase` plural for layer directories: `services/`, `workflows/`, `tools/`
-- `lowercase` singular for specific concerns: `cli/`, `lib/`, `mcp/`
+- Lowercase, single word: `services/`, `workflows/`, `lib/`, `cli/`, `mcp/`, `tools/`, `types/`
 
 **Exports:**
-- Named exports only (no default exports)
-- Functions use `camelCase`: `runInit`, `runDoctor`, `runSearch`, `embedBatchWithRetry`
-- Types use `PascalCase`: `CapabilityProfile`, `CodeChunk`, `RetrievedChunk`
-- Constants use `UPPER_SNAKE_CASE`: `DEFAULT_BATCH_SIZE`, `EMBED_TIMEOUT_MS`
+- Workflows export a single `run*` function: `runInit`, `runIndex`, `runSearch`, `runBuildContext`, `runAskCodebase`, `runDoctor`, `runStatus`
+- Services export named functions and types; no default exports anywhere in the codebase
+- Barrel files (`index.ts`) use explicit named re-exports, never `export *`
+
+**Variables/Functions:**
+- Functions: `camelCase` (`chunkFile`, `embedBatchWithRetry`, `classifyQueryIntent`)
+- Constants: `UPPER_SNAKE_CASE` (`DEFAULT_BATCH_SIZE`, `EMBED_TIMEOUT_MS`, `SOURCE_EXTENSIONS`)
+- Types/Interfaces: `PascalCase` (`CapabilityProfile`, `CodeChunk`, `RetrievedChunk`)
+- Zod schemas: `PascalCase` + `Schema` suffix (`CapabilityProfileSchema`, `IndexStateSchema`)
+- LanceDB columns: `snake_case` (`file_path`, `chunk_type`, `start_line`)
 
 ## Where to Add New Code
 
-**New CLI Command:**
-1. Create workflow at `src/workflows/{commandName}.ts`
-2. Add command registration in `src/cli/index.ts` using dynamic `import()`
-3. Add test at `tests/workflows/{commandName}.test.ts`
-
-**New Service (wrapping an external dependency):**
-1. Create service at `src/services/{serviceName}.ts`
-2. Export named functions (stateless preferred)
-3. Use `childLogger('{serviceName}')` for structured logging
-4. Add test at `tests/services/{serviceName}.test.ts`
+**New CLI Command (e.g., `brain-cache diff`):**
+1. Create workflow: `src/workflows/diff.ts` -- export a `runDiff()` function
+2. Add command in `src/cli/index.ts` using dynamic import pattern:
+   ```typescript
+   program.command('diff').action(async () => {
+     const { runDiff } = await import('../workflows/diff.js');
+     await runDiff();
+   });
+   ```
+3. Add tests: `tests/workflows/diff.test.ts`
 
 **New MCP Tool:**
-1. Add `server.registerTool()` block in `src/mcp/index.ts`
-2. Follow existing pattern: guard checks (profile, Ollama), try/catch, return `{ content: [{ type: 'text', text: JSON.stringify(result) }] }`
-3. Add test in `tests/mcp/server.test.ts`
+1. Add `server.registerTool(...)` block in `src/mcp/index.ts`
+2. Include pre-flight guards: check `readProfile()` and `isOllamaRunning()` before calling workflow
+3. Wrap workflow call in try/catch, return `{ isError: true, ... }` on failure
+4. Add tests in `tests/mcp/server.test.ts`
+
+**New Service (e.g., caching layer):**
+1. Create: `src/services/cache.ts`
+2. Use `childLogger('cache')` for structured logging
+3. Export named functions (stateless preferred)
+4. Add re-export to barrel: `src/services/index.ts`
+5. Add tests: `tests/services/cache.test.ts`
 
 **New Shared Type or Schema:**
-- Add to `src/lib/types.ts` (Zod schema + inferred TypeScript type)
+1. Add Zod schema + inferred TypeScript type to `src/lib/types.ts`
+2. Add re-export in `src/lib/index.ts`
 
-**New Constant or Config Value:**
-- Add to `src/lib/config.ts`
+**New Config Constant:**
+1. Add to `src/lib/config.ts`
+2. Add re-export in `src/lib/index.ts`
 
-**New Utility Function:**
-- If it wraps an external library: `src/services/{name}.ts`
-- If it is a pure helper with no dependencies: `src/lib/{name}.ts` (and update barrel export)
-- There is no dedicated `utils/` directory -- use `src/lib/` for pure helpers
+**Utilities/Helpers:**
+- Service-specific: Add as unexported function within the service file
+- Shared across services: Add to an existing service or create a new one in `src/services/`
+- Pure type/config helpers: Add to `src/lib/`
+- There is no `utils/` directory -- use `src/lib/` for pure helpers with no external deps
 
 ## Special Directories
 
-**`dist/`**
-- Purpose: Build output from `tsup`
-- Generated: Yes (via `npm run build`)
+**`.brain-cache/` (per-project, at project root):**
+- Purpose: LanceDB index data and metadata
+- Generated: Yes (by `brain-cache index`)
 - Committed: No (gitignored)
-- Contents: `cli.js` (with shebang, code-split), `mcp.js` (single bundle), shared chunks, `.d.ts` files
-- Note: `cli.js` uses dynamic imports so workflow code is code-split into separate `chunk-*.js` and named `*.js` files
+- Contents: `index/` (LanceDB Lance files), `index_state.json` (stats), `file-hashes.json` (SHA-256 manifest)
 
-**`.brain-cache/` (project-level)**
-- Purpose: Per-project data directory created by `brain-cache index`
-- Generated: Yes (at runtime)
-- Committed: No (gitignored)
-- Contains: LanceDB database files, `index_state.json`
-
-**`~/.brain-cache/` (global)**
-- Purpose: Global configuration directory
+**`~/.brain-cache/` (global, user home):**
+- Purpose: Hardware capability profile
 - Generated: Yes (by `brain-cache init`)
 - Committed: N/A (user home directory)
-- Contains: `profile.json` (capability profile), `config.json`
+- Contents: `profile.json` (CapabilityProfile), `config.json` (reserved)
 
-**`.planning/`**
-- Purpose: GSD workflow planning artifacts
-- Generated: Yes (by GSD commands)
+**`dist/`:**
+- Purpose: Build output from tsup
+- Generated: Yes (by `npm run build`)
 - Committed: No (gitignored)
+- Contents: `cli.js` (with shebang), `mcp.js`, code-split chunks, `.d.ts` declarations
 
-**`.devcontainer/`**
-- Purpose: Dev container configuration for Claude Code sandbox
-- Generated: No
-- Committed: No (gitignored)
-- Contains: `devcontainer.json`, `Dockerfile`, `init-firewall.sh`
+**`.planning/`:**
+- Purpose: GSD workflow planning artifacts and codebase analysis docs
+- Generated: By GSD commands
+- Committed: Varies (some tracked, some gitignored)
 
-## Build Output Structure
+**`.devcontainer/`:**
+- Purpose: Dev container configuration
+- Generated: No (checked in)
+- Contents: Container definition files
 
-The `tsup.config.ts` defines two entry points:
+## Build Output
 
-1. **`cli`** entry (`src/cli/index.ts` -> `dist/cli.js`):
-   - Has `#!/usr/bin/env node` shebang banner
-   - Code-split: workflow code lazy-loaded via dynamic `import()`
+The `tsup.config.ts` defines two separate build entries:
+
+1. **CLI entry** (`src/cli/index.ts` -> `dist/cli.js`):
+   - Has `#!/usr/bin/env node` shebang via `banner` option
+   - `clean: true` -- clears dist/ before building
+   - Code-split due to dynamic `import()` in command handlers
    - Registered as `bin.brain-cache` in `package.json`
 
-2. **`mcp`** entry (`src/mcp/index.ts` -> `dist/mcp.js`):
-   - No shebang (invoked via `node ./dist/mcp.js`)
-   - Single larger bundle (~33KB) since MCP server imports all tools eagerly
-   - Referenced in `.mcp.json` for Claude MCP registration
+2. **MCP entry** (`src/mcp/index.ts` -> `dist/mcp.js`):
+   - No shebang (invoked via `node ./dist/mcp.js` in `.mcp.json`)
+   - `clean: false` -- preserves CLI output from first build
+   - Eager imports (no code splitting)
 
-Both targets: ESM format, node20 target, `.d.ts` type declarations generated.
-
-## Dependency Flow
-
-```
-cli/index.ts ──> workflows/* ──> services/* ──> lib/{config,types}
-                                              ──> external packages (ollama, lancedb, etc.)
-
-mcp/index.ts ──> workflows/* ──> services/* ──> lib/{config,types}
-              ──> services/*                 ──> external packages
-```
-
-Rules:
-- `cli/` imports only from `workflows/` (via dynamic import)
-- `mcp/` imports from `workflows/` and `services/` (for guard checks)
-- `workflows/` imports from `services/` and `lib/`
-- `services/` imports from `lib/` and external packages
-- `lib/` imports only from external packages (zod)
-- No circular dependencies between layers
+Both targets: ESM format, node20 target, `.d.ts` type declarations, `__BRAIN_CACHE_VERSION__` injected from `package.json`.
 
 ---
 
