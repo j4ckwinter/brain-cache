@@ -14,19 +14,7 @@ brain-cache is an MCP server that gives Claude local, indexed access to your cod
 
 ## Use inside Claude Code (MCP)
 
-The primary way to use brain-cache is as an MCP server. Once configured, Claude automatically calls brain-cache tools instead of reading raw files — no prompting required.
-
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "brain-cache": {
-      "command": "brain-cache",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+The primary way to use brain-cache is as an MCP server. Run `brain-cache init` once — it auto-configures `.mcp.json` in your project root so Claude Code connects immediately. No manual JSON setup needed.
 
 Claude then has access to:
 
@@ -99,25 +87,23 @@ brain-cache init
 brain-cache index
 ```
 
-`brain-cache init` appends MCP tool instructions to your `CLAUDE.md` — so Claude knows when and how to prefer brain-cache tools over built-in file reading. Runs once; won’t duplicate.
+`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, and appends MCP tool instructions to `CLAUDE.md`. Runs once; idempotent.
 
-**Step 3: Add MCP server to Claude Code**
-
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "brain-cache": {
-      "command": "brain-cache",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-**Step 4: Use Claude normally**
+**Step 3: Use Claude normally**
 
 brain-cache tools are called automatically. You don’t change how you work — the context just gets better.
+
+> **Advanced:** `init` creates `.mcp.json` automatically. If you need to customise it manually, the expected shape is:
+> ```json
+> {
+>   "mcpServers": {
+>     "brain-cache": {
+>       "command": "brain-cache",
+>       "args": ["mcp"]
+>     }
+>   }
+> }
+> ```
 
 ---
 
