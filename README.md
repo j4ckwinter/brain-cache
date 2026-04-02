@@ -8,6 +8,8 @@ brain-cache indexes your code locally, retrieves only what matters, and cuts tok
 → Lower cost
 → Faster workflows
 
+![brain-cache only sends the parts of your codebase that matter — not everything.](assets/brain-cache.svg)
+
 ---
 
 ## ⚡ The problem
