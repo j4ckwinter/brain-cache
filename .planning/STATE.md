@@ -80,16 +80,17 @@ v1.2 roadmap: 1 phase (Phase 13), 8 requirements, all tightly coupled descriptio
 | 260401-ffn | Add token savings summary to build_context MCP tool response | 2026-04-01 | 3fe6452 | [260401-ffn-add-token-savings-summary-to-build-conte](./quick/260401-ffn-add-token-savings-summary-to-build-conte/) |
 | 260401-s69 | Prettify token savings log output across CLI, MCP, and workflow surfaces | 2026-04-02 | 630226c | [260401-s69-prettify-token-savings-log-output-across](./quick/260401-s69-prettify-token-savings-log-output-across/) |
 | 260401-s69 | Prettify token savings log output across all surfaces | 2026-04-02 | 82e8c97 | [260401-s69-prettify-token-savings-log-output-across](./quick/260401-s69-prettify-token-savings-log-output-across/) |
+| 260401-t4n | Improve MCP build_context and search_codebase descriptions for automatic tool selection | 2026-04-02 | 66687ac | [260401-t4n-improve-mcp-build-context-description-fo](./quick/260401-t4n-improve-mcp-build-context-description-fo/) |
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-02T03:08:26.411Z
+**Last session:** 2026-04-02T04:01:32Z
 
 **To resume:** Run `/gsd:plan-phase 13` to plan Phase 13.
 
-**Stopped at:** Completed 13-01-PLAN.md
+**Stopped at:** Quick task 260401-t4n complete
 
 **Next action:** `/gsd:plan-phase 13`
 
