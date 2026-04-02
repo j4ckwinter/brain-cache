@@ -176,7 +176,8 @@ describe('runIndex', () => {
     await runIndex('/project');
     expect(mockEmbedBatchWithRetry).toHaveBeenCalledWith(
       'nomic-embed-text',
-      expect.arrayContaining([expect.any(String)])
+      expect.arrayContaining([expect.any(String)]),
+      768
     );
   });
 

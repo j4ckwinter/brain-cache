@@ -32,6 +32,7 @@ describe('embedBatch', () => {
     expect(mockOllama.embed).toHaveBeenCalledWith({
       model: 'nomic-embed-text',
       input: ['hello world', 'foo bar'],
+      truncate: true,
     });
     expect(result).toEqual(fakeEmbeddings);
   });

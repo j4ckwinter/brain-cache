@@ -57,6 +57,14 @@ export async function runSearch(
   }
   const table = await db.openTable('chunks');
 
+  const rowCount = await table.countRows();
+  if (rowCount === 0) {
+    process.stderr.write(
+      `Error: Index is empty at ${rootDir}. No source files were indexed.\n`
+    );
+    process.exit(1);
+  }
+
   // 5. Classify intent and determine search strategy
   const intent = classifyQueryIntent(query);
   const strategy: SearchOptions = {

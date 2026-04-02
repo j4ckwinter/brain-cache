@@ -94,7 +94,7 @@ export async function runIndex(targetPath?: string): Promise<void> {
   for (let offset = 0; offset < allChunks.length; offset += DEFAULT_BATCH_SIZE) {
     const batch = allChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
     const texts = batch.map((chunk) => chunk.content);
-    const vectors = await embedBatchWithRetry(profile.embeddingModel, texts);
+    const vectors = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
 
     const rows: ChunkRow[] = batch.map((chunk, i) => ({
       id: chunk.id,

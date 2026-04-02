@@ -83,6 +83,7 @@ const queryVector = new Array(1024).fill(0.1);
 
 const mockTable = {
   query: vi.fn(),
+  countRows: vi.fn().mockResolvedValue(2),
 } as any;
 
 const mockDb = {
