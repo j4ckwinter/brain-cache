@@ -70,21 +70,23 @@ function isContextLengthError(err: unknown): boolean {
  *
  * When a batch fails with "input length exceeds the context length", falls back
  * to embedding each text individually. Texts that still exceed the limit are
- * replaced with zero vectors and a warning is logged.
+ * replaced with zero vectors and the count is tracked in the returned skip count.
  *
  * @param model   - Ollama model name
  * @param texts   - Array of text strings to embed
  * @param dimension - Embedding dimension (needed for zero-vector fallback)
  * @param attempt - Internal retry counter (0 = first attempt, 1 = retry)
+ * @returns Object with embeddings array and count of skipped texts
  */
 export async function embedBatchWithRetry(
   model: string,
   texts: string[],
   dimension: number = DEFAULT_EMBEDDING_DIMENSION,
   attempt = 0
-): Promise<number[][]> {
+): Promise<{ embeddings: number[][], skipped: number }> {
   try {
-    return await embedBatch(model, texts);
+    const embeddings = await embedBatch(model, texts);
+    return { embeddings, skipped: 0 };
   } catch (err) {
     if (attempt === 0 && isConnectionError(err)) {
       log.warn({ model }, 'Ollama cold-start suspected, retrying in 5s');
@@ -96,22 +98,22 @@ export async function embedBatchWithRetry(
     if (isContextLengthError(err)) {
       log.warn({ model, batchSize: texts.length }, 'Batch exceeded context length, falling back to individual embedding');
       const results: number[][] = [];
+      let skipped = 0;
       for (const text of texts) {
         try {
           const [vec] = await embedBatch(model, [text]);
           results.push(vec);
         } catch (innerErr) {
           if (isContextLengthError(innerErr)) {
-            process.stderr.write(
-              `\nbrain-cache: chunk too large for embedding model, skipping (${text.length} chars)\n`
-            );
+            // Count the skip — caller will report aggregate skip summary
+            skipped++;
             results.push(new Array(dimension).fill(0));
           } else {
             throw innerErr;
           }
         }
       }
-      return results;
+      return { embeddings: results, skipped };
     }
 
     throw err;

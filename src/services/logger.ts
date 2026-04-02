@@ -40,3 +40,11 @@ export const logger = pino(
 export function childLogger(component: string) {
   return logger.child({ component });
 }
+
+/**
+ * Set the pino logger level at runtime.
+ * Use 'silent' to suppress all output during CLI workflows that write their own output.
+ */
+export function setLogLevel(level: LogLevel): void {
+  logger.level = level;
+}

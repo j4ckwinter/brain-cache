@@ -6,6 +6,7 @@ import { isOllamaRunning } from '../services/ollama.js';
 import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
+import { setLogLevel } from '../services/logger.js';
 import {
   openDatabase,
   openOrCreateChunkTable,
@@ -49,6 +50,21 @@ function hashContent(content: string): string {
 export async function runIndex(targetPath?: string, opts?: { force?: boolean }): Promise<void> {
   const force = opts?.force ?? false;
 
+  // Suppress pino JSON output during indexing — the workflow writes its own human-friendly messages.
+  const previousLogLevel = process.env.BRAIN_CACHE_LOG ?? 'warn';
+  setLogLevel('silent');
+
+  // Filter LanceDB Rust-layer warnings that write directly to stderr.
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: any, ...args: any[]) => {
+    const str = typeof chunk === 'string' ? chunk : chunk.toString();
+    if (/^\[[\d\-T:Z]+ WARN lance/.test(str) || /^\[[\d\-T:Z]+ INFO lance/.test(str)) {
+      return true; // swallow
+    }
+    return originalStderrWrite(chunk, ...args);
+  }) as typeof process.stderr.write;
+
+  try {
   // Step 1: Resolve path
   const rootDir = resolve(targetPath ?? '.');
 
@@ -186,6 +202,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   let totalChunks = 0;
   let processedFiles = 0;
   let processedChunks = 0;
+  let skippedChunks = 0;
 
   for (let groupStart = 0; groupStart < filesToProcess.length; groupStart += FILE_READ_CONCURRENCY) {
     const group = filesToProcess.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
@@ -218,10 +235,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       const embeddableBatch = batch.filter((chunk) => {
         const tokens = countChunkTokens(chunk.content);
         if (tokens > EMBED_MAX_TOKENS) {
-          process.stderr.write(
-            `\nbrain-cache: skipping oversized chunk (${tokens} tokens > ${EMBED_MAX_TOKENS} limit): ` +
-            `${chunk.filePath} lines ${chunk.startLine}-${chunk.endLine}\n`
-          );
+          skippedChunks++;
           return false;
         }
         return true;
@@ -231,7 +245,8 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
 
       const texts = embeddableBatch.map((chunk) => chunk.content);
       totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
-      const vectors = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
+      const { embeddings: vectors, skipped } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
+      skippedChunks += skipped;
 
       const rows: ChunkRow[] = embeddableBatch.map((chunk, i) => ({
         id: chunk.id,
@@ -248,11 +263,13 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       await insertChunks(table, rows);
       processedChunks += batch.length;
       process.stderr.write(
-        `\rbrain-cache: embedding ${processedChunks}/${totalChunks} chunks (${Math.round((processedChunks / totalChunks) * 100)}%)`
+        `brain-cache: embedding ${processedChunks}/${totalChunks} chunks (${Math.round((processedChunks / totalChunks) * 100)}%)\n`
       );
     }
   }
-  process.stderr.write('\n');
+  if (skippedChunks > 0) {
+    process.stderr.write(`brain-cache: ${skippedChunks} chunks skipped (too large for model context)\n`);
+  }
   process.stderr.write(
     `brain-cache: ${totalChunks} chunks from ${filesToProcess.length} files\n`
   );
@@ -301,4 +318,9 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     `${savingsBlock}\n` +
     `  Stored in:                 ${rootDir}/.brain-cache/\n`
   );
+  } finally {
+    // Restore pino log level and stderr write
+    setLogLevel(previousLogLevel as Parameters<typeof setLogLevel>[0]);
+    process.stderr.write = originalStderrWrite;
+  }
 }

@@ -21,6 +21,16 @@ vi.mock('../../src/services/embedder.js', () => ({
   embedBatchWithRetry: vi.fn(),
 }));
 
+vi.mock('../../src/services/logger.js', () => ({
+  setLogLevel: vi.fn(),
+  childLogger: vi.fn().mockReturnValue({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  }),
+}));
+
 vi.mock('../../src/services/lancedb.js', () => ({
   openDatabase: vi.fn(),
   openOrCreateChunkTable: vi.fn(),
@@ -135,7 +145,7 @@ describe('runIndex', () => {
     mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockChunkFile.mockImplementation((filePath, _content) => [fakeChunk(filePath, 1)]);
-    mockEmbedBatchWithRetry.mockResolvedValue([zeroVector768, zeroVector768]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0 });
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
     mockInsertChunks.mockResolvedValue(undefined);
@@ -161,7 +171,7 @@ describe('runIndex', () => {
     const callOrder: string[] = [];
     mockCrawlSourceFiles.mockImplementation(async () => { callOrder.push('crawl'); return fakeFiles; });
     mockChunkFile.mockImplementation((fp, _c) => { callOrder.push('chunk'); return [fakeChunk(fp, 1)]; });
-    mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return [zeroVector768, zeroVector768]; });
+    mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return { embeddings: [zeroVector768, zeroVector768], skipped: 0 }; });
     mockInsertChunks.mockImplementation(async () => { callOrder.push('store'); });
     mockWriteIndexState.mockImplementation(async () => { callOrder.push('writeState'); });
 

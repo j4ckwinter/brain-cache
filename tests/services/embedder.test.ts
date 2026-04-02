@@ -78,7 +78,7 @@ describe('embedBatchWithRetry', () => {
     const result = await embedBatchWithRetry('nomic-embed-text', ['hello']);
 
     expect(mockOllama.embed).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(fakeEmbeddings);
+    expect(result).toEqual({ embeddings: fakeEmbeddings, skipped: 0 });
   });
 
   it('retries once on ECONNRESET connection error then succeeds', async () => {
@@ -101,7 +101,7 @@ describe('embedBatchWithRetry', () => {
     const result = await resultPromise;
 
     expect(mockOllama.embed).toHaveBeenCalledTimes(2);
-    expect(result).toEqual(fakeEmbeddings);
+    expect(result).toEqual({ embeddings: fakeEmbeddings, skipped: 0 });
   });
 
   it('throws on second failure (no infinite retry)', async () => {
