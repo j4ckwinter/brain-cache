@@ -21,10 +21,11 @@ vi.mock('../../src/services/embedder.js', () => ({
 vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
-  classifyQueryIntent: vi.fn(),
+  classifyRetrievalMode: vi.fn(),
   RETRIEVAL_STRATEGIES: {
-    diagnostic: { limit: 20, distanceThreshold: 0.4 },
-    knowledge: { limit: 10, distanceThreshold: 0.3 },
+    lookup:  { limit: 5,  distanceThreshold: 0.25 },
+    trace:   { limit: 3,  distanceThreshold: 0.30 },
+    explore: { limit: 20, distanceThreshold: 0.45 },
   },
 }));
 
@@ -48,7 +49,7 @@ import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
   deduplicateChunks,
-  classifyQueryIntent,
+  classifyRetrievalMode,
 } from '../../src/services/retriever.js';
 import { assembleContext, countChunkTokens } from '../../src/services/tokenCounter.js';
 import { readFile } from 'node:fs/promises';
@@ -60,7 +61,7 @@ const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
-const mockClassifyQueryIntent = vi.mocked(classifyQueryIntent);
+const mockClassifyRetrievalMode = vi.mocked(classifyRetrievalMode);
 const mockAssembleContext = vi.mocked(assembleContext);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockReadFile = vi.mocked(readFile);
@@ -132,7 +133,7 @@ describe('runBuildContext', () => {
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
-    mockClassifyQueryIntent.mockReturnValue('knowledge');
+    mockClassifyRetrievalMode.mockReturnValue('explore');
     mockSearchChunks.mockResolvedValue(dedupedChunks);
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     mockAssembleContext.mockReturnValue({
@@ -154,7 +155,7 @@ describe('runBuildContext', () => {
     vi.resetModules();
   });
 
-  it('returns a ContextResult with all 6 metadata fields present', async () => {
+  it('returns a ContextResult with all 5 metadata fields present', async () => {
     const result = await runBuildContext('how does authentication work');
     expect(result).toHaveProperty('content');
     expect(result).toHaveProperty('chunks');
@@ -162,7 +163,6 @@ describe('runBuildContext', () => {
     expect(result.metadata).toHaveProperty('tokensSent');
     expect(result.metadata).toHaveProperty('estimatedWithoutBraincache');
     expect(result.metadata).toHaveProperty('reductionPct');
-    expect(result.metadata).toHaveProperty('filesInContext');
     expect(result.metadata).toHaveProperty('localTasksPerformed');
     expect(result.metadata).toHaveProperty('cloudCallsMade');
   });
@@ -225,11 +225,9 @@ describe('runBuildContext', () => {
     expect(readFileCalls).toHaveLength(1);
   });
 
-  it('computes reductionPct including tool-call overhead in baseline', async () => {
-    // tokenCount = 150, each of 2 files = 500 tokens → fileContentTokens = 1000
-    // toolCallOverhead = (1 + 2) * 300 = 900
-    // estimatedWithoutBraincache = 1000 + 900 = 1900
-    // reductionPct = (1 - 150/1900) * 100 = 92
+  it('computes reductionPct as (1 - tokensSent/estimatedWithoutBraincache) * 100', async () => {
+    // tokenCount = 150, each of 2 files = 500 tokens → estimatedWithoutBraincache = 1000
+    // reductionPct = (1 - 150/1000) * 100 = 85
     mockAssembleContext.mockReturnValue({
       content: 'assembled',
       chunks: dedupedChunks,
@@ -239,18 +237,16 @@ describe('runBuildContext', () => {
 
     const result = await runBuildContext('test query');
     expect(result.metadata.tokensSent).toBe(150);
-    expect(result.metadata.estimatedWithoutBraincache).toBe(1900);
-    expect(result.metadata.reductionPct).toBe(92);
-    expect(result.metadata.filesInContext).toBe(2);
+    expect(result.metadata.estimatedWithoutBraincache).toBe(1000);
+    expect(result.metadata.reductionPct).toBe(85);
   });
 
-  it('includes tool-call overhead even when all files fail to read', async () => {
-    // No files could be read (all throw), but tool overhead still counted
-    // toolCallOverhead = (1 + 2) * 300 = 900
+  it('clamps reductionPct to 0 when estimatedWithoutBraincache is 0', async () => {
+    // No files could be read (all throw)
     mockReadFile.mockRejectedValue(new Error('ENOENT'));
     const result = await runBuildContext('test query');
-    expect(result.metadata.estimatedWithoutBraincache).toBe(900);
-    expect(result.metadata.reductionPct).toBeGreaterThanOrEqual(0);
+    expect(result.metadata.reductionPct).toBe(0);
+    expect(result.metadata.estimatedWithoutBraincache).toBe(0);
   });
 
   it('skips files that cannot be read (gracefully handles missing files)', async () => {
@@ -258,10 +254,9 @@ describe('runBuildContext', () => {
       if (path === '/project/src/auth.ts') throw new Error('ENOENT');
       return 'file content' as any;
     });
-    // 1 readable file (500 tokens) + toolCallOverhead (1 + 2) * 300 = 900
-    // Note: numFiles is still 2 (from chunks), but only 1 file contributes content tokens
+    // Should not throw, and estimatedWithoutBraincache should be for just 1 file (500 tokens)
     const result = await runBuildContext('test query');
-    expect(result.metadata.estimatedWithoutBraincache).toBe(500 + 900);
+    expect(result.metadata.estimatedWithoutBraincache).toBe(500);
   });
 
   it('throws when no profile found', async () => {

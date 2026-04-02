@@ -21,10 +21,11 @@ vi.mock('../../src/services/embedder.js', () => ({
 vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
-  classifyQueryIntent: vi.fn(),
+  classifyRetrievalMode: vi.fn(),
   RETRIEVAL_STRATEGIES: {
-    diagnostic: { limit: 20, distanceThreshold: 0.4 },
-    knowledge: { limit: 10, distanceThreshold: 0.3 },
+    lookup:  { limit: 5,  distanceThreshold: 0.25 },
+    trace:   { limit: 3,  distanceThreshold: 0.30 },
+    explore: { limit: 20, distanceThreshold: 0.45 },
   },
 }));
 
@@ -35,7 +36,7 @@ import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
   deduplicateChunks,
-  classifyQueryIntent,
+  classifyRetrievalMode,
 } from '../../src/services/retriever.js';
 
 const mockReadProfile = vi.mocked(readProfile);
@@ -45,7 +46,7 @@ const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
-const mockClassifyQueryIntent = vi.mocked(classifyQueryIntent);
+const mockClassifyRetrievalMode = vi.mocked(classifyRetrievalMode);
 
 const mockProfile = {
   version: 1 as const,
@@ -120,7 +121,7 @@ describe('runSearch', () => {
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
-    mockClassifyQueryIntent.mockReturnValue('knowledge');
+    mockClassifyRetrievalMode.mockReturnValue('explore');
 
     const rawChunks = [fakeChunk('a'), fakeChunk('b')];
     const dedupedChunks = [fakeChunk('a'), fakeChunk('b')];
@@ -139,7 +140,7 @@ describe('runSearch', () => {
 
   it('calls classifyQueryIntent with the query', async () => {
     await runSearch('how does authentication work');
-    expect(mockClassifyQueryIntent).toHaveBeenCalledWith('how does authentication work');
+    expect(mockClassifyRetrievalMode).toHaveBeenCalledWith('how does authentication work');
   });
 
   it('calls embedBatchWithRetry with model from indexState (not profile)', async () => {
@@ -151,13 +152,13 @@ describe('runSearch', () => {
     );
   });
 
-  it('calls searchChunks with the strategy from classifyQueryIntent', async () => {
-    mockClassifyQueryIntent.mockReturnValue('diagnostic');
+  it('calls searchChunks with the strategy from classifyRetrievalMode', async () => {
+    mockClassifyRetrievalMode.mockReturnValue('explore');
     await runSearch('why is the login broken');
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 20, distanceThreshold: 0.4 })
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.45 })
     );
   });
 
@@ -210,7 +211,7 @@ describe('runSearch', () => {
   });
 
   it('applies custom limit option', async () => {
-    mockClassifyQueryIntent.mockReturnValue('knowledge');
+    mockClassifyRetrievalMode.mockReturnValue('explore');
     await runSearch('test query', { limit: 5 });
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
@@ -219,13 +220,13 @@ describe('runSearch', () => {
     );
   });
 
-  it('uses knowledge strategy for non-diagnostic queries', async () => {
-    mockClassifyQueryIntent.mockReturnValue('knowledge');
+  it('uses explore strategy for general queries', async () => {
+    mockClassifyRetrievalMode.mockReturnValue('explore');
     await runSearch('how does routing work');
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 10, distanceThreshold: 0.3 })
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.45 })
     );
   });
 });
