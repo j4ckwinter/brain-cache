@@ -148,6 +148,26 @@ server.registerTool(
         content: [{ type: "text" as const, text: JSON.stringify(chunks) }],
       };
     } catch (err) {
+      if (err instanceof Error && err.message.includes("No index found")) {
+        const resolvedPath = resolve(path ?? ".");
+        await runIndex(resolvedPath);
+        try {
+          const chunks = await runSearch(query, { limit, path });
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(chunks) }],
+          };
+        } catch (retryErr) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `Search failed after auto-index: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+              },
+            ],
+          };
+        }
+      }
       return {
         isError: true,
         content: [
@@ -215,6 +235,28 @@ server.registerTool(
         content: [{ type: "text" as const, text: JSON.stringify(result) + savingsLine }],
       };
     } catch (err) {
+      if (err instanceof Error && err.message.includes("No index found")) {
+        const resolvedPath = resolve(path ?? ".");
+        await runIndex(resolvedPath);
+        try {
+          const result = await runBuildContext(query, { maxTokens, path });
+          const { tokensSent, estimatedWithoutBraincache, reductionPct } = result.metadata;
+          const savingsLine = `\n\n---\nbrain-cache token savings: ${tokensSent} tokens sent vs ~${estimatedWithoutBraincache} without brain-cache (${reductionPct}% reduction)`;
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(result) + savingsLine }],
+          };
+        } catch (retryErr) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `Context build failed after auto-index: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+              },
+            ],
+          };
+        }
+      }
       return {
         isError: true,
         content: [
