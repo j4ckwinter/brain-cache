@@ -102,7 +102,7 @@ server.registerTool(
   "search_codebase",
   {
     description:
-      "Find where code lives in the indexed codebase using semantic search. Finds functions, symbols, definitions, and implementations by meaning, not just keyword match — use this instead of grep or file-find for locating code. For deeper questions about how code works or why something is designed a certain way, use build_context instead. Requires: index_repo must have been run first.",
+      "Locate specific code — functions, symbols, definitions, implementations, and type declarations — using semantic search that finds code by meaning, not just keyword match. This is a locator tool — it finds WHERE code lives. For understanding HOW code works or answering questions that span multiple files, use build_context instead. Requires index_repo to have been run first.",
     inputSchema: {
       query: z.string().describe("Natural language query string"),
       limit: z
@@ -167,7 +167,7 @@ server.registerTool(
   "build_context",
   {
     description:
-      "Build a Claude-ready context block to answer questions about the codebase. Assembles relevant code from the index into a deduplicated, token-budgeted context — more efficient than reading multiple files individually. Use this for 'how does X work' and architecture questions. To just locate a function or symbol, use search_codebase instead. Requires: index_repo must have been run first.",
+      "Prefer this tool when answering questions like 'how does X work', 'explain the architecture', 'what happens when Y', or any question requiring understanding across multiple files. Retrieves semantically relevant code across the entire repo, deduplicates, and assembles a token-budgeted context block — more accurate and efficient than reading files individually or relying on memory. Use this before answering to ensure your response is grounded in actual code rather than assumptions. Ideal for explaining how systems work, understanding workflows and data flow, answering architectural questions, multi-file reasoning, and debugging unfamiliar code paths. Requires index_repo to have been run first.",
     inputSchema: {
       query: z.string().describe("Natural language query or question"),
       maxTokens: z
