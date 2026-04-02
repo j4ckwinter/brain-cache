@@ -73,3 +73,17 @@ export interface ContextResult {
   chunks: RetrievedChunk[];
   metadata: ContextMetadata;
 }
+
+export interface CallEdge {
+  fromChunkId: string;
+  fromFile: string;
+  fromSymbol: string | null;
+  toSymbol: string;
+  toFile: string | null;
+  edgeType: 'call' | 'import';
+}
+
+export interface ChunkResult {
+  chunks: CodeChunk[];
+  edges: CallEdge[];
+}

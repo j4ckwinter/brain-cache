@@ -24,7 +24,13 @@ export {
   writeFileHashes,
   deleteChunksByFilePath,
   chunkSchema,
+  edgeSchema,
+  openOrCreateEdgesTable,
+  insertEdges,
+  queryEdgesFrom,
+  withWriteLock,
   type ChunkRow,
+  type EdgeRow,
 } from './lancedb.js';
 
 export { logger, childLogger } from './logger.js';
