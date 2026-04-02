@@ -4,3 +4,5 @@ dist/
 .brain-cache/
 .claude/
 .devcontainer/
+.work
+.DS_Store
