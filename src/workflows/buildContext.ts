@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { readProfile } from '../services/capability.js';
 import { isOllamaRunning } from '../services/ollama.js';
@@ -9,7 +10,7 @@ import {
   classifyQueryIntent,
   RETRIEVAL_STRATEGIES,
 } from '../services/retriever.js';
-import { assembleContext } from '../services/tokenCounter.js';
+import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
 import { DEFAULT_TOKEN_BUDGET } from '../lib/config.js';
 import type { ContextResult, SearchOptions } from '../lib/types.js';
 
@@ -74,13 +75,27 @@ export async function runBuildContext(
   // 8. Assemble context within token budget
   const assembled = assembleContext(deduped, { maxTokens });
 
-  // 9. Estimate tokens without Braincache (total indexed project tokens)
-  const estimatedWithoutBraincache = indexState.totalTokens;
+  // 9. Estimate tokens without Braincache
+  // Realistic baseline: full content of files that had matching chunks.
+  // This represents what Claude would actually read after a targeted search.
+  const uniqueFiles = [...new Set(assembled.chunks.map((c) => c.filePath))];
+  let estimatedWithoutBraincache = 0;
+  for (const filePath of uniqueFiles) {
+    try {
+      const fileContent = await readFile(filePath, 'utf-8');
+      estimatedWithoutBraincache += countChunkTokens(fileContent);
+    } catch {
+      // File may have been deleted since indexing — skip
+    }
+  }
 
-  // 10. Compute reduction percentage
+  // 10. Compute reduction percentage (raw chunk content vs raw file content)
+  const rawChunkTokens = assembled.chunks.reduce(
+    (sum, c) => sum + countChunkTokens(c.content), 0
+  );
   const reductionPct =
     estimatedWithoutBraincache > 0
-      ? Math.round((1 - assembled.tokenCount / estimatedWithoutBraincache) * 100)
+      ? Math.round((1 - rawChunkTokens / estimatedWithoutBraincache) * 100)
       : 0;
 
   // 11. Build result
