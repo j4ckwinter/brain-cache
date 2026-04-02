@@ -110,6 +110,12 @@ Conventions not yet established. Will populate as patterns emerge during develop
 Architecture not yet mapped. Follow existing patterns found in the codebase.
 <!-- GSD:architecture-end -->
 
+## Brain-Cache MCP Tools
+
+When answering "how does X work", "explain the architecture", or any question requiring multi-file reasoning, call `mcp__brain-cache__build_context` with the question BEFORE reading individual files. It returns pre-built, relevant context with token savings.
+
+When locating functions, symbols, types, or definitions, call `mcp__brain-cache__search_codebase` instead of using Grep or file-find tools. It searches the local vector index and returns ranked results.
+
 <!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
 
