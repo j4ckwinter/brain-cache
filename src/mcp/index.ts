@@ -101,7 +101,7 @@ server.registerTool(
   "search_codebase",
   {
     description:
-      "Search the indexed codebase with a natural language query. Returns the top-N most relevant code chunks with similarity scores.",
+      "Locate specific code — functions, symbols, definitions, implementations, and type declarations — using semantic search that finds code by meaning, not just keyword match. This is a locator tool — it finds WHERE code lives. For understanding HOW code works or answering questions that span multiple files, use build_context instead. Requires index_repo to have been run first.",
     inputSchema: {
       query: z.string().describe("Natural language query string"),
       limit: z
@@ -166,7 +166,7 @@ server.registerTool(
   "build_context",
   {
     description:
-      "Build an assembled, deduplicated, token-budgeted context block from the indexed codebase for a given query. Returns the context string plus metadata (tokens sent, estimated tokens without brain-cache, reduction percentage).",
+      "Prefer this tool when answering questions like 'how does X work', 'explain the architecture', 'what happens when Y', or any question requiring understanding across multiple files. Retrieves semantically relevant code across the entire repo, deduplicates, and assembles a token-budgeted context block — more accurate and efficient than reading files individually or relying on memory. Use this before answering to ensure your response is grounded in actual code rather than assumptions. Ideal for explaining how systems work, understanding workflows and data flow, answering architectural questions, multi-file reasoning, and debugging unfamiliar code paths. Requires index_repo to have been run first.",
     inputSchema: {
       query: z.string().describe("Natural language query or question"),
       maxTokens: z
