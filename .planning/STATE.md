@@ -78,16 +78,17 @@ v1.2 roadmap: 1 phase (Phase 13), 8 requirements, all tightly coupled descriptio
 | 260401-a2b | Audit and update README after v1.1 Hardening | 2026-04-01 | 62dc1ff | [260401-a2b-audit-and-update-readme-after-v1-1-harde](./quick/260401-a2b-audit-and-update-readme-after-v1-1-harde/) |
 | 260401-azb | Implement 5 README/code improvements based on external AI audit | 2026-04-01 | 72d348f | [260401-azb-implement-5-readme-code-improvements-bas](./quick/260401-azb-implement-5-readme-code-improvements-bas/) |
 | 260401-ffn | Add token savings summary to build_context MCP tool response | 2026-04-01 | 3fe6452 | [260401-ffn-add-token-savings-summary-to-build-conte](./quick/260401-ffn-add-token-savings-summary-to-build-conte/) |
+| 260401-wv4 | Auto-index recovery in MCP search_codebase and build_context | 2026-04-02 | aec3e83 | [260401-wv4-auto-index-recovery-in-mcp-build-context](./quick/260401-wv4-auto-index-recovery-in-mcp-build-context/) |
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-02T02:44:17.566Z
+**Last session:** 2026-04-02T06:43:08Z
 
 **To resume:** Run `/gsd:plan-phase 13` to plan Phase 13.
 
-**Stopped at:** Phase 13 context gathered
+**Stopped at:** Completed quick-260401-wv4 (auto-index recovery in MCP tools)
 
 **Next action:** `/gsd:plan-phase 13`
 
