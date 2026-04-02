@@ -119,7 +119,7 @@ describe('runSearch', () => {
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue([queryVector]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
     mockClassifyQueryIntent.mockReturnValue('knowledge');
 
     const rawChunks = [fakeChunk('a'), fakeChunk('b')];

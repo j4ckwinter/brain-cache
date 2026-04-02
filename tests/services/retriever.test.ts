@@ -217,17 +217,17 @@ describe('classifyQueryIntent', () => {
 });
 
 describe('RETRIEVAL_STRATEGIES', () => {
-  it('diagnostic strategy has limit=20 and distanceThreshold=0.4', () => {
+  it('diagnostic strategy has limit=20 and distanceThreshold=0.45', () => {
     expect(RETRIEVAL_STRATEGIES['diagnostic']).toEqual({
       limit: 20,
-      distanceThreshold: 0.4,
+      distanceThreshold: 0.45,
     });
   });
 
-  it('knowledge strategy has limit=10 and distanceThreshold=0.3', () => {
+  it('knowledge strategy has limit=10 and distanceThreshold=0.4', () => {
     expect(RETRIEVAL_STRATEGIES['knowledge']).toEqual({
       limit: 10,
-      distanceThreshold: 0.3,
+      distanceThreshold: 0.4,
     });
   });
 });
