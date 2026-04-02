@@ -71,3 +71,15 @@ export interface ContextResult {
   chunks: RetrievedChunk[];
   metadata: ContextMetadata;
 }
+
+// --- Phase 16: Flow tracing types ---
+
+export interface FlowHop {
+  chunkId: string;
+  filePath: string;
+  name: string | null;
+  startLine: number;
+  endLine: number;
+  content: string;
+  hopDepth: number;
+}
