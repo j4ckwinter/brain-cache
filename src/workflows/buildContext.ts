@@ -65,7 +65,7 @@ export async function runBuildContext(
   );
 
   // 6. Embed query using model from index state
-  const vectors = await embedBatchWithRetry(indexState.embeddingModel, [query]);
+  const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
   const queryVector = vectors[0];
 
   // 7. Search and deduplicate

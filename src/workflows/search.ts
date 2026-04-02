@@ -70,7 +70,7 @@ export async function runSearch(
   );
 
   // 6. Embed the query using the model from index state (not profile — prevents mismatch)
-  const vectors = await embedBatchWithRetry(indexState.embeddingModel, [query]);
+  const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
   const queryVector = vectors[0];
 
   // 7. Search and deduplicate
