@@ -14,7 +14,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 
 ### Retrieval Intelligence
 
-- [ ] **INTENT-01**: Intent-aware retrieval modes (lookup/trace/explore) with distinct k, distance threshold, and post-processing per mode
+- [x] **INTENT-01**: Intent-aware retrieval modes (lookup/trace/explore) with distinct k, distance threshold, and post-processing per mode
 - [ ] **ADV-01**: Configurable retrieval depth per query type via `~/.brain-cache/config.json` and MCP tool input overrides
 
 ### Context Quality
@@ -58,7 +58,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 |-------------|-------|--------|
 | EXC-01 | Phase 15 | Complete |
 | FLOW-01 | Phase 16 | Complete |
-| INTENT-01 | Phase 16 | Pending |
+| INTENT-01 | Phase 16 | Complete |
 | COH-01 | Phase 16 | Pending |
 | FLOW-02 | Phase 17 | Pending |
 | TOOL-02 | Phase 17 | Pending |

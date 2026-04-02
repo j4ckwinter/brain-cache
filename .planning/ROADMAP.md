@@ -89,10 +89,10 @@ Plans:
   3. An explore query (e.g. "explain the architecture") retrieves broad results across modules with a relaxed threshold
   4. Context assembled by `build_context` is grouped by file/module with chunks in source-line order, not retrieval-score order
   5. The flow tracer never returns the same symbol twice (cycle detection via visited set) and stops at the configured hop depth
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 16-01-PLAN.md — Three-mode intent classifier (lookup/trace/explore) and strategy map
+- [x] 16-01-PLAN.md — Three-mode intent classifier (lookup/trace/explore) and strategy map
 - [x] 16-02-PLAN.md — BFS flow tracer service with cycle detection
 - [ ] 16-03-PLAN.md — Cohesion grouping service and buildContext wiring
 
@@ -149,7 +149,7 @@ Plans:
 | 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete | 2026-04-02 |
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
-| 16. Retrieval Intelligence | v2.0 | 1/3 | In Progress|  |
+| 16. Retrieval Intelligence | v2.0 | 2/3 | In Progress|  |
 | 17. New MCP Tools and Workflows | v2.0 | 0/? | Not started | - |
 | 18. File Watcher | v2.0 | 0/? | Not started | - |
 | 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |

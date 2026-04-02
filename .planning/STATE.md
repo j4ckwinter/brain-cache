@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 16-02-PLAN.md
-last_updated: "2026-04-02T19:43:03.792Z"
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-04-02T19:44:39.795Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 100
 ---
 
@@ -33,11 +33,11 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 ## Current Position
 
 Phase: 16 (retrieval-intelligence) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-02
 
-Progress: [██████████] 100% (Phase 15 complete)
+Progress: [████████░░] 83% (Phase 16, Plan 01 complete)
 
 ---
 
@@ -46,6 +46,13 @@ Progress: [██████████] 100% (Phase 15 complete)
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 16, Plan 01 — three-mode intent classifier)
+
+- TRACE_KEYWORDS use multi-word phrases only (not single token 'trace') to avoid false positives on phrases like 'trace the error'
+- Ambiguity guard: 'trace the architecture' -> explore (not trace) because broad architectural terms win over trace prefix
+- classifyQueryIntent kept as deprecated re-export alias for backward compatibility with external callers
+- DIAGNOSTIC_DISTANCE_THRESHOLD and DIAGNOSTIC_SEARCH_LIMIT removed from config — inlined in RETRIEVAL_STRATEGIES
 
 ### Key Decisions (Phase 15, Plan 03 — chunker edge extraction and pipeline wiring)
 
@@ -88,9 +95,9 @@ See prior STATE.md entries for v1.x quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-02T19:43:03.789Z
+**Last session:** 2026-04-02T19:44:39.792Z
 
-**Stopped at:** Completed 16-02-PLAN.md
+**Stopped at:** Completed 16-01-PLAN.md
 
 **Next action:** `/gsd:plan-phase 15`
 
