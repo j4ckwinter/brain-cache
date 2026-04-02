@@ -34,6 +34,7 @@ export const IndexStateSchema = z.object({
   indexedAt:      z.string().datetime(),
   fileCount:      z.number().int(),
   chunkCount:     z.number().int(),
+  totalTokens:    z.number().int().default(0),
 });
 export type IndexState = z.infer<typeof IndexStateSchema>;
 

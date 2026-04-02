@@ -166,7 +166,13 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   // Step 6h: Filter to only new + changed files for processing
   const filesToProcess = [...newFiles, ...changedFiles];
 
-  // Step 6i: Nothing to do
+  // Step 6i: Compute total raw tokens across all files (for savings baseline)
+  let allFilesTotalTokens = 0;
+  for (const [, content] of contentMap) {
+    allFilesTotalTokens += countChunkTokens(content);
+  }
+
+  // Step 6j: Nothing to do
   if (filesToProcess.length === 0) {
     process.stderr.write(`brain-cache: nothing to re-index\n`);
     // Write updated manifest (may have removed some entries) and index state
@@ -185,6 +191,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       indexedAt: new Date().toISOString(),
       fileCount: totalFiles,
       chunkCount,
+      totalTokens: allFilesTotalTokens,
     });
     process.stderr.write(
       `brain-cache: indexing complete\n` +
@@ -297,6 +304,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     indexedAt: new Date().toISOString(),
     fileCount: totalFiles,
     chunkCount,
+    totalTokens: allFilesTotalTokens,
   });
 
   // Step 10: Print summary with token savings stats
