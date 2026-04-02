@@ -311,8 +311,8 @@ describe('MCP tool handlers', () => {
 
       expect(result.isError).toBeUndefined();
 
-      // Response is JSON + savings line separated by \n\n---\n
-      const [jsonPart, savingsPart] = result.content[0].text.split('\n\n---\n');
+      // Response is JSON + savings block separated by \n\nIMPORTANT:
+      const [jsonPart, savingsPart] = result.content[0].text.split('\n\nIMPORTANT:');
       const parsed = JSON.parse(jsonPart);
       expect(parsed).toHaveProperty('content');
       expect(parsed).toHaveProperty('chunks');
@@ -321,8 +321,12 @@ describe('MCP tool handlers', () => {
       expect(parsed.metadata.reductionPct).toBe(85);
       expect(parsed.metadata.cloudCallsMade).toBe(0);
 
-      // Verify the plain-text savings summary line
-      expect(savingsPart).toBe('brain-cache token savings: 150 tokens sent vs ~1000 without brain-cache (85% reduction)');
+      // Verify the formatted savings block
+      expect(savingsPart).toContain('brain-cache');
+      expect(savingsPart).toContain('Tokens sent to Claude:');
+      expect(savingsPart).toContain('150');
+      expect(savingsPart).toContain('~1,000');
+      expect(savingsPart).toContain('85%');
     });
   });
 

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { formatTokenSavings } from "../lib/format.js";
 
 declare const __BRAIN_CACHE_VERSION__: string;
 const version = __BRAIN_CACHE_VERSION__;
@@ -89,8 +90,11 @@ program
         if (!result.content.endsWith("\n")) {
           process.stdout.write("\n");
         }
+        const estimatedWithout = result.metadata.reductionPct > 0
+          ? Math.round(result.metadata.tokensSent / (1 - result.metadata.reductionPct / 100))
+          : result.metadata.tokensSent;
         process.stderr.write(
-          `\n--- brain-cache: ${result.metadata.tokensSent} tokens, ${result.metadata.reductionPct}% reduction, ${result.chunks.length} chunks ---\n`,
+          `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.metadata.tokensSent, estimatedWithout, reductionPct: result.metadata.reductionPct })}\n`,
         );
       }
     },
@@ -112,7 +116,7 @@ program
     });
     process.stderr.write(`\n${result.answer}\n`);
     process.stderr.write(
-      `\n--- brain-cache: ${result.contextMetadata.tokensSent} tokens sent (${result.contextMetadata.reductionPct}% reduction) via ${result.model} ---\n`,
+      `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.contextMetadata.tokensSent, estimatedWithout: result.contextMetadata.estimatedWithoutBraincache, reductionPct: result.contextMetadata.reductionPct })}\n`,
     );
   });
 

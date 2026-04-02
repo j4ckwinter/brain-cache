@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { runBuildContext } from './buildContext.js';
 import type { BuildContextOptions } from './buildContext.js';
 import { childLogger } from '../services/logger.js';
+import { formatTokenSavings } from '../lib/format.js';
 
 const log = childLogger('ask-codebase');
 
@@ -48,7 +49,7 @@ export async function runAskCodebase(
   const contextResult = await runBuildContext(question, buildOpts);
 
   process.stderr.write(
-    `brain-cache: context assembled (${contextResult.metadata.tokensSent} tokens, ${contextResult.metadata.reductionPct}% reduction)\n`
+    `brain-cache: context assembled\n${formatTokenSavings({ tokensSent: contextResult.metadata.tokensSent, estimatedWithout: contextResult.metadata.estimatedWithoutBraincache, reductionPct: contextResult.metadata.reductionPct })}\n`
   );
 
   // 3. Send ONLY assembled content to Claude — NOT raw chunks (CLD-02)
