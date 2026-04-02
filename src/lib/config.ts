@@ -14,7 +14,13 @@ export const CONFIG_PATH = join(GLOBAL_CONFIG_DIR, "config.json");
 export const PROJECT_DATA_DIR = ".brain-cache";
 
 // ── Embedding ──────────────────────────────────────────────────────────────
-export const EMBEDDING_DIMENSIONS = 768; // nomic-embed-text default
+/** Maps each supported Ollama embedding model to its output vector dimension. */
+export const EMBEDDING_DIMENSIONS: Record<string, number> = {
+  'nomic-embed-text': 768,
+  'mxbai-embed-large': 1024,
+};
+/** Fallback dimension used when a model is not listed in EMBEDDING_DIMENSIONS. */
+export const DEFAULT_EMBEDDING_DIMENSION = 768;
 export const DEFAULT_BATCH_SIZE = 50;
 export const FILE_READ_CONCURRENCY = 20; // max parallel file reads during crawl
 export const VECTOR_INDEX_THRESHOLD = 256; // rows needed before creating IVF_PQ index

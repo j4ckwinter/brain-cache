@@ -3,7 +3,7 @@ import { Index } from '@lancedb/lancedb';
 import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, FILE_HASHES_FILENAME } from '../lib/config.js';
+import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME } from '../lib/config.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
@@ -156,7 +156,7 @@ export async function createVectorIndexIfNeeded(
   }
 
   // Derive numSubVectors from embedding dimension
-  const dim = EMBEDDING_DIMENSIONS[embeddingModel] ?? 768;
+  const dim = EMBEDDING_DIMENSIONS[embeddingModel] ?? DEFAULT_EMBEDDING_DIMENSION;
   const numSubVectors = Math.floor(dim / 8);
 
   log.info(

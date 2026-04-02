@@ -1,5 +1,5 @@
 import ollama from 'ollama';
-import { EMBED_TIMEOUT_MS, COLD_START_RETRY_DELAY_MS } from '../lib/config.js';
+import { EMBED_TIMEOUT_MS, COLD_START_RETRY_DELAY_MS, DEFAULT_EMBEDDING_DIMENSION } from '../lib/config.js';
 import { childLogger } from './logger.js';
 
 const log = childLogger('embedder');
@@ -80,7 +80,7 @@ function isContextLengthError(err: unknown): boolean {
 export async function embedBatchWithRetry(
   model: string,
   texts: string[],
-  dimension: number = 768,
+  dimension: number = DEFAULT_EMBEDDING_DIMENSION,
   attempt = 0
 ): Promise<number[][]> {
   try {

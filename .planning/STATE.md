@@ -78,7 +78,10 @@ v1.2 roadmap: 1 phase (Phase 13), 8 requirements, all tightly coupled descriptio
 | 260401-a2b | Audit and update README after v1.1 Hardening | 2026-04-01 | 62dc1ff | [260401-a2b-audit-and-update-readme-after-v1-1-harde](./quick/260401-a2b-audit-and-update-readme-after-v1-1-harde/) |
 | 260401-azb | Implement 5 README/code improvements based on external AI audit | 2026-04-01 | 72d348f | [260401-azb-implement-5-readme-code-improvements-bas](./quick/260401-azb-implement-5-readme-code-improvements-bas/) |
 | 260401-ffn | Add token savings summary to build_context MCP tool response | 2026-04-01 | 3fe6452 | [260401-ffn-add-token-savings-summary-to-build-conte](./quick/260401-ffn-add-token-savings-summary-to-build-conte/) |
-| 260401-wgz | brain-cache init auto-appends Brain-Cache MCP Tools to CLAUDE.md | 2026-04-02 | 87eef17 | [260401-wgz-brain-cache-init-auto-appends-claude-md-](./quick/260401-wgz-brain-cache-init-auto-appends-claude-md-/) |
+| 260401-s69 | Prettify token savings log output across CLI, MCP, and workflow surfaces | 2026-04-02 | 630226c | [260401-s69-prettify-token-savings-log-output-across](./quick/260401-s69-prettify-token-savings-log-output-across/) |
+| 260401-t4n | Improve MCP build_context and search_codebase descriptions for automatic tool selection | 2026-04-02 | 66687ac | [260401-t4n-improve-mcp-build-context-description-fo](./quick/260401-t4n-improve-mcp-build-context-description-fo/) |
+| 260401-tnn | Add brain-cache MCP tool adoption instructions to CLAUDE.md | 2026-04-02 | a40e8b6 | [260401-tnn-add-brain-cache-mcp-tool-adoption-instru](./quick/260401-tnn-add-brain-cache-mcp-tool-adoption-instru/) |
+| 260401-wgz | brain-cache init auto-appends Brain-Cache MCP Tools to CLAUDE.md | 2026-04-02 | 634305b | [260401-wgz-brain-cache-init-auto-appends-claude-md-](./quick/260401-wgz-brain-cache-init-auto-appends-claude-md-/) |
 
 ---
 

@@ -17,7 +17,7 @@ import {
   deleteChunksByFilePath,
   type ChunkRow,
 } from '../services/lancedb.js';
-import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
+import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
 import { formatTokenSavings } from '../lib/format.js';
@@ -65,12 +65,11 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   }
 
   // Step 4: Determine dimensions
-  let dim = EMBEDDING_DIMENSIONS[profile.embeddingModel];
-  if (dim === undefined) {
+  const dim = EMBEDDING_DIMENSIONS[profile.embeddingModel] ?? DEFAULT_EMBEDDING_DIMENSION;
+  if (!(profile.embeddingModel in EMBEDDING_DIMENSIONS)) {
     process.stderr.write(
-      `Warning: Unknown embedding model '${profile.embeddingModel}', defaulting to 768 dimensions.\n`
+      `Warning: Unknown embedding model '${profile.embeddingModel}', defaulting to ${DEFAULT_EMBEDDING_DIMENSION} dimensions.\n`
     );
-    dim = 768;
   }
 
   // Step 5: Open LanceDB
