@@ -107,6 +107,20 @@ brain-cache tools are called automatically. You don’t change how you work — 
 
 ---
 
+## 📊 Optional: Token savings footer
+
+brain-cache returns token usage stats in its tool responses (tokens sent, estimated without, reduction %). By default, Claude decides whether to surface these — no footer is forced.
+
+If you'd like Claude to always show the stats, add this to your project's `CLAUDE.md`:
+
+```
+When using brain-cache build_context, include the token savings summary from the response at the end of your answer.
+```
+
+This keeps it transparent and under your control.
+
+---
+
 ## 🧩 Core capabilities
 
 - 🧠 Local embeddings via Ollama — no API calls, no data sent out
