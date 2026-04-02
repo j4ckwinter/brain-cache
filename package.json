@@ -26,6 +26,7 @@
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
+    "prepare": "npm run build",
     "link": "npm link",
     "test": "vitest run",
     "test:watch": "vitest"
