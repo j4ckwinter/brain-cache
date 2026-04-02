@@ -11,6 +11,8 @@ export { chunkFile } from './chunker.js';
 
 export { crawlSourceFiles, SOURCE_EXTENSIONS } from './crawler.js';
 
+export { loadIgnorePatterns } from './ignorePatterns.js';
+
 export { embedBatchWithRetry } from './embedder.js';
 
 export {
