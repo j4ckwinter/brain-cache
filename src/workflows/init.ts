@@ -1,3 +1,4 @@
+import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import {
   detectCapabilities,
   writeProfile,
@@ -88,4 +89,21 @@ export async function runInit(): Promise<void> {
     `  Embedding model: ${profileWithVersion.embeddingModel}\n` +
     `  VRAM tier: ${profileWithVersion.vramTier}\n`
   );
+
+  // Step 10: Append brain-cache instructions to CLAUDE.md (idempotent)
+  const claudeMdPath = 'CLAUDE.md';
+  const brainCacheSection = `\n## Brain-Cache MCP Tools\n\nWhen answering "how does X work", "explain the architecture", or any question requiring multi-file reasoning, call \`mcp__brain-cache__build_context\` with the question BEFORE reading individual files. It returns pre-built, relevant context with token savings.\n\nWhen locating functions, symbols, types, or definitions, call \`mcp__brain-cache__search_codebase\` instead of using Grep or file-find tools. It searches the local vector index and returns ranked results.\n`;
+
+  if (existsSync(claudeMdPath)) {
+    const content = readFileSync(claudeMdPath, 'utf-8');
+    if (content.includes('## Brain-Cache MCP Tools')) {
+      process.stderr.write('brain-cache: CLAUDE.md already contains Brain-Cache MCP Tools section, skipping.\n');
+    } else {
+      appendFileSync(claudeMdPath, brainCacheSection);
+      process.stderr.write('brain-cache: appended Brain-Cache MCP Tools section to CLAUDE.md.\n');
+    }
+  } else {
+    writeFileSync(claudeMdPath, brainCacheSection.trimStart());
+    process.stderr.write('brain-cache: created CLAUDE.md with Brain-Cache MCP Tools section.\n');
+  }
 }

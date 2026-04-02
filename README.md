@@ -111,6 +111,16 @@ No more copy/pasting code into prompts.
 
 ---
 
+## 📄 CLAUDE.md auto-setup
+
+`brain-cache init` automatically adds tool instructions to your project's `CLAUDE.md`.
+
+Why? MCP tools load as deferred tools — Claude sees tool names but not descriptions until fetched. `CLAUDE.md` is always loaded at conversation start, so it's the reliable way to tell Claude when and how to use brain-cache tools.
+
+The section is appended once. Running `init` again won't duplicate it.
+
+---
+
 ## 🧪 Commands
 
 ```
