@@ -19,6 +19,11 @@ export {
   insertChunks,
   readIndexState,
   writeIndexState,
+  createVectorIndexIfNeeded,
+  readFileHashes,
+  writeFileHashes,
+  deleteChunksByFilePath,
+  chunkSchema,
   type ChunkRow,
 } from './lancedb.js';
 
