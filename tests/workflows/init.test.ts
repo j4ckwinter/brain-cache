@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Mock node:fs so init.ts file operations don't touch disk
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  appendFileSync: vi.fn(),
+}));
+
+import * as nodeFsMock from 'node:fs';
+
 // Mock service modules before importing workflows
 vi.mock('../../src/services/capability.js', () => ({
   detectCapabilities: vi.fn(),
@@ -60,6 +70,11 @@ const mockGetOllamaVersion = vi.mocked(getOllamaVersion);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockOllamaList = vi.mocked(ollamaClient.list);
 
+const mockExistsSync = vi.mocked(nodeFsMock.existsSync);
+const mockReadFileSync = vi.mocked(nodeFsMock.readFileSync);
+const mockWriteFileSync = vi.mocked(nodeFsMock.writeFileSync);
+const mockAppendFileSync = vi.mocked(nodeFsMock.appendFileSync);
+
 const mockProfile = {
   version: 1 as const,
   detectedAt: '2026-03-31T00:00:00.000Z',
@@ -103,6 +118,19 @@ describe('runInit', () => {
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
     mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+
+    // Default fs mocks: CLAUDE.md already contains section (idempotent), no .mcp.json
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return false;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      return '';
+    });
+    mockWriteFileSync.mockImplementation(() => undefined);
+    mockAppendFileSync.mockImplementation(() => undefined);
 
     // Dynamically import to ensure mocks are in place
     const mod = await import('../../src/workflows/init.js');
@@ -235,6 +263,202 @@ describe('runInit', () => {
     const combined = stderrOutput.join('');
     expect(combined).toContain('warming model');
     expect(combined).toContain('model warm.');
+  });
+});
+
+describe('.mcp.json management', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    vi.spyOn(process, 'exit').mockImplementation((_code?: unknown) => {
+      throw new Error(`process.exit(${_code})`);
+    });
+
+    // Service mocks
+    mockDetectCapabilities.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaInstalled.mockResolvedValue(true);
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockStartOllama.mockResolvedValue(true);
+    mockPullModelIfMissing.mockResolvedValue(undefined);
+    mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
+    mockWriteProfile.mockResolvedValue(undefined);
+    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+
+    // CLAUDE.md: already has section (idempotent)
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return false;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      return '';
+    });
+    mockWriteFileSync.mockImplementation(() => undefined);
+    mockAppendFileSync.mockImplementation(() => undefined);
+
+    const mod = await import('../../src/workflows/init.js');
+    runInit = mod.runInit;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('creates .mcp.json with brain-cache entry when file does not exist', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return false;
+      return false;
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => c[0] === '.mcp.json'
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    expect(written).toEqual({
+      mcpServers: {
+        'brain-cache': {
+          command: 'node',
+          args: ['node_modules/brain-cache/dist/mcp.js'],
+        },
+      },
+    });
+  });
+
+  it('merges brain-cache entry into existing .mcp.json preserving other servers', async () => {
+    const existing = {
+      mcpServers: {
+        'other-mcp': { command: 'other', args: [] },
+      },
+    };
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (p === '.mcp.json') return JSON.stringify(existing);
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => c[0] === '.mcp.json'
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    expect(written.mcpServers['other-mcp']).toEqual({ command: 'other', args: [] });
+    expect(written.mcpServers['brain-cache']).toEqual({
+      command: 'node',
+      args: ['node_modules/brain-cache/dist/mcp.js'],
+    });
+  });
+
+  it('does not rewrite .mcp.json when brain-cache entry already exists (idempotent)', async () => {
+    const existing = {
+      mcpServers: {
+        'brain-cache': {
+          command: 'node',
+          args: ['node_modules/brain-cache/dist/mcp.js'],
+        },
+      },
+    };
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (p === '.mcp.json') return JSON.stringify(existing);
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => c[0] === '.mcp.json'
+    );
+    expect(writeCall).toBeUndefined();
+  });
+
+  it('prints stderr message indicating .mcp.json was created', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return false;
+      return false;
+    });
+
+    await runInit();
+
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('.mcp.json');
+    expect(combined).toContain('brain-cache');
+  });
+
+  it('prints stderr message when brain-cache entry added to existing .mcp.json', async () => {
+    const existing = {
+      mcpServers: {
+        'other-mcp': { command: 'other', args: [] },
+      },
+    };
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (p === '.mcp.json') return JSON.stringify(existing);
+      return '';
+    });
+
+    await runInit();
+
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('.mcp.json');
+  });
+
+  it('prints stderr message when brain-cache entry already exists in .mcp.json', async () => {
+    const existing = {
+      mcpServers: {
+        'brain-cache': {
+          command: 'node',
+          args: ['node_modules/brain-cache/dist/mcp.js'],
+        },
+      },
+    };
+    mockExistsSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return true;
+      if (p === '.mcp.json') return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (p === '.mcp.json') return JSON.stringify(existing);
+      return '';
+    });
+
+    await runInit();
+
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('already');
+    expect(combined).toContain('.mcp.json');
   });
 });
 

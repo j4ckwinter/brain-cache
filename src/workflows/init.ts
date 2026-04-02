@@ -90,6 +90,31 @@ export async function runInit(): Promise<void> {
     `  VRAM tier: ${profileWithVersion.vramTier}\n`
   );
 
+  // Step 11: Create or update .mcp.json with brain-cache MCP server entry (idempotent)
+  const brainCacheMcpEntry = {
+    command: 'node',
+    args: ['node_modules/brain-cache/dist/mcp.js'],
+  };
+  const mcpJsonPath = '.mcp.json';
+
+  if (existsSync(mcpJsonPath)) {
+    const mcpContent = readFileSync(mcpJsonPath, 'utf-8');
+    const parsed = JSON.parse(mcpContent) as { mcpServers?: Record<string, { command: string; args: string[] }> };
+    const existing = parsed.mcpServers?.['brain-cache'];
+    if (existing && JSON.stringify(existing) === JSON.stringify(brainCacheMcpEntry)) {
+      process.stderr.write('brain-cache: .mcp.json already contains brain-cache MCP server, skipping.\n');
+    } else {
+      parsed.mcpServers = parsed.mcpServers ?? {};
+      parsed.mcpServers['brain-cache'] = brainCacheMcpEntry;
+      writeFileSync(mcpJsonPath, JSON.stringify(parsed, null, 2) + '\n');
+      process.stderr.write('brain-cache: added brain-cache MCP server to .mcp.json.\n');
+    }
+  } else {
+    const mcpConfig = { mcpServers: { 'brain-cache': brainCacheMcpEntry } };
+    writeFileSync(mcpJsonPath, JSON.stringify(mcpConfig, null, 2) + '\n');
+    process.stderr.write('brain-cache: created .mcp.json with brain-cache MCP server.\n');
+  }
+
   // Step 10: Append brain-cache instructions to CLAUDE.md (idempotent)
   const claudeMdPath = 'CLAUDE.md';
   const brainCacheSection = `\n## Brain-Cache MCP Tools\n\nWhen answering "how does X work", "explain the architecture", or any question requiring multi-file reasoning, call \`mcp__brain-cache__build_context\` with the question BEFORE reading individual files. It returns pre-built, relevant context with token savings.\n\nWhen locating functions, symbols, types, or definitions, call \`mcp__brain-cache__search_codebase\` instead of using Grep or file-find tools. It searches the local vector index and returns ranked results.\n`;
