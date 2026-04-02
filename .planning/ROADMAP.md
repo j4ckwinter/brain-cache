@@ -55,7 +55,7 @@
 
 **v2.0 MCP Magic (Phases 15-19)**
 
-- [ ] **Phase 15: Storage Foundation and Index Pipeline** - Add LanceDB edges table, `.braincacheignore` support, and LanceDB write mutex; extend chunker to emit call edges
+- [x] **Phase 15: Storage Foundation and Index Pipeline** - Add LanceDB edges table, `.braincacheignore` support, and LanceDB write mutex; extend chunker to emit call edges (completed 2026-04-02)
 - [ ] **Phase 16: Retrieval Intelligence** - Expand intent classifier to lookup/trace/explore modes, build flow tracer BFS service, add context cohesion grouping
 - [ ] **Phase 17: New MCP Tools and Workflows** - Ship `trace_flow` and `explain_codebase` MCP tools, configurable retrieval depth, and structural context compression
 - [ ] **Phase 18: File Watcher** - Live re-indexing via chokidar v5 with debounce and write-safe incremental updates
@@ -72,12 +72,12 @@
   2. A `.braincacheignore` file in the project root causes matching files to be excluded from the indexed corpus, the same way `.gitignore` entries are
   3. Running `brain-cache index` twice concurrently does not corrupt the LanceDB table (no partial-write errors)
   4. The chunker returns `{ chunks, edges }` from a single tree-sitter traversal — no double-parse of source files
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 15-01-PLAN.md — Types, LanceDB edges table functions, and write mutex
 - [x] 15-02-PLAN.md — .braincacheignore service and crawler integration
-- [ ] 15-03-PLAN.md — Chunker edge extraction and index workflow wiring
+- [x] 15-03-PLAN.md — Chunker edge extraction and index workflow wiring
 
 ### Phase 16: Retrieval Intelligence
 **Goal**: Brain-cache routes queries to one of three retrieval modes (lookup, trace, explore), traces multi-hop call paths across files, and groups assembled context by file for readability
@@ -143,7 +143,7 @@ Plans:
 | 12. Integration Gap Cleanup | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete | 2026-04-02 |
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
-| 15. Storage Foundation and Index Pipeline | v2.0 | 2/3 | In Progress|  |
+| 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete   | 2026-04-02 |
 | 16. Retrieval Intelligence | v2.0 | 0/? | Not started | - |
 | 17. New MCP Tools and Workflows | v2.0 | 0/? | Not started | - |
 | 18. File Watcher | v2.0 | 0/? | Not started | - |

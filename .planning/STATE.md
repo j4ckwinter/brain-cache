@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-04-02T19:04:18.849Z"
+status: verifying
+stopped_at: Completed 15-03-PLAN.md
+last_updated: "2026-04-02T19:14:45.668Z"
 last_activity: 2026-04-02
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -34,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-04-02)
 
 Phase: 15 (storage-foundation-and-index-pipeline) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-02
 
-Progress: [░░░░░░░░░░] 0% (v2.0 milestone)
+Progress: [██████████] 100% (Phase 15 complete)
 
 ---
 
@@ -46,6 +46,13 @@ Progress: [░░░░░░░░░░] 0% (v2.0 milestone)
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 15, Plan 03 — chunker edge extraction and pipeline wiring)
+
+- Edge extraction positioned before `nodeTypes.has()` guard so call_expression/import_statement nodes run for all AST nodes (not just chunkable ones)
+- `currentChunkId` tracking is approximate — updates after chunk push, top-level call expressions fall back to `filePath:0`
+- `toFile` is `null` at index time for call edges — symbol resolution deferred to query time
+- Import edges use `filePath:0` as `fromChunkId` — imports are file-level constructs
 
 ### Key Decisions (Phase 15, Plan 02 — .braincacheignore support)
 
@@ -81,9 +88,9 @@ See prior STATE.md entries for v1.x quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-02T19:04:18.846Z
+**Last session:** 2026-04-02T19:14:45.665Z
 
-**Stopped at:** Completed 15-01-PLAN.md
+**Stopped at:** Completed 15-03-PLAN.md
 
 **Next action:** `/gsd:plan-phase 15`
 
