@@ -78,6 +78,7 @@ v1.2 roadmap: 1 phase (Phase 13), 8 requirements, all tightly coupled descriptio
 | 260401-a2b | Audit and update README after v1.1 Hardening | 2026-04-01 | 62dc1ff | [260401-a2b-audit-and-update-readme-after-v1-1-harde](./quick/260401-a2b-audit-and-update-readme-after-v1-1-harde/) |
 | 260401-azb | Implement 5 README/code improvements based on external AI audit | 2026-04-01 | 72d348f | [260401-azb-implement-5-readme-code-improvements-bas](./quick/260401-azb-implement-5-readme-code-improvements-bas/) |
 | 260401-ffn | Add token savings summary to build_context MCP tool response | 2026-04-01 | 3fe6452 | [260401-ffn-add-token-savings-summary-to-build-conte](./quick/260401-ffn-add-token-savings-summary-to-build-conte/) |
+| 260401-s69 | Prettify token savings log output across all surfaces | 2026-04-02 | 82e8c97 | [260401-s69-prettify-token-savings-log-output-across](./quick/260401-s69-prettify-token-savings-log-output-across/) |
 
 ---
 

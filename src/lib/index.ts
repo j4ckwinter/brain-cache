@@ -33,3 +33,5 @@ export {
   type ContextMetadata,
   type ContextResult,
 } from './types.js';
+
+export { formatTokenSavings, type TokenSavingsInput } from './format.js';

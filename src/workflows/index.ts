@@ -20,6 +20,7 @@ import {
 import { EMBEDDING_DIMENSIONS, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk } from '../lib/types.js';
+import { formatTokenSavings } from '../lib/format.js';
 
 /**
  * Compute a SHA-256 hex digest of file content.
@@ -287,14 +288,18 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     ? Math.round((1 - totalChunkTokens / totalRawTokens) * 100)
     : 0;
 
+  const savingsBlock = formatTokenSavings({
+    tokensSent: totalChunkTokens,
+    estimatedWithout: totalRawTokens,
+    reductionPct,
+  }).split('\n').map(line => `  ${line}`).join('\n');
+
   process.stderr.write(
     `brain-cache: indexing complete\n` +
-    `  Files:        ${totalFiles}\n` +
-    `  Chunks:       ${totalChunks}\n` +
-    `  Model:        ${profile.embeddingModel}\n` +
-    `  Raw tokens:   ${totalRawTokens.toLocaleString()}\n` +
-    `  Chunk tokens: ${totalChunkTokens.toLocaleString()}\n` +
-    `  Reduction:    ${reductionPct}%\n` +
-    `  Stored in:    ${rootDir}/.brain-cache/\n`
+    `  Files:                     ${totalFiles}\n` +
+    `  Chunks:                    ${totalChunks}\n` +
+    `  Model:                     ${profile.embeddingModel}\n` +
+    `${savingsBlock}\n` +
+    `  Stored in:                 ${rootDir}/.brain-cache/\n`
   );
 }
