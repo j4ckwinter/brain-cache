@@ -1,13 +1,28 @@
 {
   "name": "brain-cache",
   "version": "0.1.0",
+  "description": "Local MCP-first context engine for Claude. Index your codebase, retrieve only what matters, and cut token usage.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "brain-cache": "./dist/cli.js"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "README.md",
+    "LICENSE"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "homepage": "https://github.com/j4ckwinter/brain-cache",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/j4ckwinter/brain-cache.git"
+  },
+  "bugs": {
+    "url": "https://github.com/j4ckwinter/brain-cache/issues"
+  },
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
