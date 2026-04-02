@@ -90,11 +90,8 @@ program
         if (!result.content.endsWith("\n")) {
           process.stdout.write("\n");
         }
-        const estimatedWithout = result.metadata.reductionPct > 0
-          ? Math.round(result.metadata.tokensSent / (1 - result.metadata.reductionPct / 100))
-          : result.metadata.tokensSent;
         process.stderr.write(
-          `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.metadata.tokensSent, estimatedWithout, reductionPct: result.metadata.reductionPct })}\n`,
+          `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.metadata.tokensSent, estimatedWithout: result.metadata.estimatedWithoutBraincache, reductionPct: result.metadata.reductionPct, filesInContext: result.metadata.filesInContext })}\n`,
         );
       }
     },
@@ -116,7 +113,7 @@ program
     });
     process.stderr.write(`\n${result.answer}\n`);
     process.stderr.write(
-      `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.contextMetadata.tokensSent, estimatedWithout: result.contextMetadata.estimatedWithoutBraincache, reductionPct: result.contextMetadata.reductionPct })}\n`,
+      `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.contextMetadata.tokensSent, estimatedWithout: result.contextMetadata.estimatedWithoutBraincache, reductionPct: result.contextMetadata.reductionPct, filesInContext: result.contextMetadata.filesInContext })}\n`,
     );
   });
 

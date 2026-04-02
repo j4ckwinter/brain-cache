@@ -316,6 +316,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     tokensSent: totalChunkTokens,
     estimatedWithout: totalRawTokens,
     reductionPct,
+    filesInContext: totalFiles,
   }).split('\n').map(line => `  ${line}`).join('\n');
 
   process.stderr.write(

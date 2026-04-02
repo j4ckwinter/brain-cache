@@ -35,3 +35,7 @@ export const DIAGNOSTIC_DISTANCE_THRESHOLD = 0.45; // looser for diagnostic quer
 export const DIAGNOSTIC_SEARCH_LIMIT = 20;
 export const DEFAULT_TOKEN_BUDGET = 4096;
 export const FILE_HASHES_FILENAME = "file-hashes.json";
+
+// ── Token estimation ──────────────────────────────────────────────────────
+/** Estimated token overhead per tool call (Grep/Glob/Read prompt + response framing) */
+export const TOOL_CALL_OVERHEAD_TOKENS = 300;

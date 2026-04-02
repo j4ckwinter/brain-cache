@@ -11,7 +11,7 @@ import {
   RETRIEVAL_STRATEGIES,
 } from '../services/retriever.js';
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
-import { DEFAULT_TOKEN_BUDGET } from '../lib/config.js';
+import { DEFAULT_TOKEN_BUDGET, TOOL_CALL_OVERHEAD_TOKENS } from '../lib/config.js';
 import type { ContextResult, SearchOptions } from '../lib/types.js';
 
 export interface BuildContextOptions {
@@ -75,27 +75,30 @@ export async function runBuildContext(
   // 8. Assemble context within token budget
   const assembled = assembleContext(deduped, { maxTokens });
 
-  // 9. Estimate tokens without Braincache
-  // Realistic baseline: full content of files that had matching chunks.
-  // This represents what Claude would actually read after a targeted search.
+  // 9. Estimate tokens without brain-cache
+  // Baseline: full file content + tool-call overhead for the search workflow.
+  // Without brain-cache, Claude would: 1 Grep to locate files + 1 Read per file.
   const uniqueFiles = [...new Set(assembled.chunks.map((c) => c.filePath))];
-  let estimatedWithoutBraincache = 0;
+  const numFiles = uniqueFiles.length;
+  let fileContentTokens = 0;
   for (const filePath of uniqueFiles) {
     try {
       const fileContent = await readFile(filePath, 'utf-8');
-      estimatedWithoutBraincache += countChunkTokens(fileContent);
+      fileContentTokens += countChunkTokens(fileContent);
     } catch {
       // File may have been deleted since indexing — skip
     }
   }
 
-  // 10. Compute reduction percentage (raw chunk content vs raw file content)
-  const rawChunkTokens = assembled.chunks.reduce(
-    (sum, c) => sum + countChunkTokens(c.content), 0
-  );
+  // Tool-call overhead: 1 Grep/Glob search + 1 Read per file
+  const toolCalls = 1 + numFiles;
+  const toolCallOverhead = toolCalls * TOOL_CALL_OVERHEAD_TOKENS;
+  const estimatedWithoutBraincache = fileContentTokens + toolCallOverhead;
+
+  // 10. Compute reduction (assembled output vs realistic alternative)
   const reductionPct =
     estimatedWithoutBraincache > 0
-      ? Math.round((1 - rawChunkTokens / estimatedWithoutBraincache) * 100)
+      ? Math.max(0, Math.round((1 - assembled.tokenCount / estimatedWithoutBraincache) * 100))
       : 0;
 
   // 11. Build result
@@ -106,6 +109,7 @@ export async function runBuildContext(
       tokensSent: assembled.tokenCount,
       estimatedWithoutBraincache,
       reductionPct,
+      filesInContext: numFiles,
       localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'token_budget'],
       cloudCallsMade: 0,
     },

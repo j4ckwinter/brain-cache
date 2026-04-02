@@ -28,6 +28,7 @@ export interface AskCodebaseResult {
     tokensSent: number;
     estimatedWithoutBraincache: number;
     reductionPct: number;
+    filesInContext: number;
   };
   model: string;
 }
@@ -49,7 +50,7 @@ export async function runAskCodebase(
   const contextResult = await runBuildContext(question, buildOpts);
 
   process.stderr.write(
-    `brain-cache: context assembled\n${formatTokenSavings({ tokensSent: contextResult.metadata.tokensSent, estimatedWithout: contextResult.metadata.estimatedWithoutBraincache, reductionPct: contextResult.metadata.reductionPct })}\n`
+    `brain-cache: context assembled\n${formatTokenSavings({ tokensSent: contextResult.metadata.tokensSent, estimatedWithout: contextResult.metadata.estimatedWithoutBraincache, reductionPct: contextResult.metadata.reductionPct, filesInContext: contextResult.metadata.filesInContext })}\n`
   );
 
   // 3. Send ONLY assembled content to Claude — NOT raw chunks (CLD-02)
@@ -88,6 +89,7 @@ export async function runAskCodebase(
       tokensSent: contextResult.metadata.tokensSent,
       estimatedWithoutBraincache: contextResult.metadata.estimatedWithoutBraincache,
       reductionPct: contextResult.metadata.reductionPct,
+      filesInContext: contextResult.metadata.filesInContext,
     },
     model,
   };

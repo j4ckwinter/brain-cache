@@ -63,6 +63,7 @@ export interface ContextMetadata {
   tokensSent: number;
   estimatedWithoutBraincache: number;
   reductionPct: number;
+  filesInContext: number;
   localTasksPerformed: string[];
   cloudCallsMade: number;
 }
