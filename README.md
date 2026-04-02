@@ -207,3 +207,9 @@ Early stage — actively improving:
 Give it a star — or try it on your repo and let me know what breaks.
 
 ---
+
+## 📄 License
+
+MIT — see LICENSE for details.
+
+---
