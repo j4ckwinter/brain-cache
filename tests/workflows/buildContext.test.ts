@@ -21,10 +21,11 @@ vi.mock('../../src/services/embedder.js', () => ({
 vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
-  classifyQueryIntent: vi.fn(),
+  classifyRetrievalMode: vi.fn(),
   RETRIEVAL_STRATEGIES: {
-    diagnostic: { limit: 20, distanceThreshold: 0.4 },
-    knowledge: { limit: 10, distanceThreshold: 0.3 },
+    lookup:  { limit: 5,  distanceThreshold: 0.25 },
+    trace:   { limit: 3,  distanceThreshold: 0.30 },
+    explore: { limit: 20, distanceThreshold: 0.45 },
   },
 }));
 
@@ -48,7 +49,7 @@ import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
   deduplicateChunks,
-  classifyQueryIntent,
+  classifyRetrievalMode,
 } from '../../src/services/retriever.js';
 import { assembleContext, countChunkTokens } from '../../src/services/tokenCounter.js';
 import { readFile } from 'node:fs/promises';
@@ -60,7 +61,7 @@ const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
-const mockClassifyQueryIntent = vi.mocked(classifyQueryIntent);
+const mockClassifyRetrievalMode = vi.mocked(classifyRetrievalMode);
 const mockAssembleContext = vi.mocked(assembleContext);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockReadFile = vi.mocked(readFile);
@@ -131,8 +132,8 @@ describe('runBuildContext', () => {
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue([queryVector]);
-    mockClassifyQueryIntent.mockReturnValue('knowledge');
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockClassifyRetrievalMode.mockReturnValue('explore');
     mockSearchChunks.mockResolvedValue(dedupedChunks);
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     mockAssembleContext.mockReturnValue({

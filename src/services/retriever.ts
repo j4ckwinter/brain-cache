@@ -1,12 +1,6 @@
 import type { Table } from '@lancedb/lancedb';
 import { childLogger } from './logger.js';
 import type { RetrievedChunk, SearchOptions, QueryIntent } from '../lib/types.js';
-import {
-  DEFAULT_SEARCH_LIMIT,
-  DEFAULT_DISTANCE_THRESHOLD,
-  DIAGNOSTIC_SEARCH_LIMIT,
-  DIAGNOSTIC_DISTANCE_THRESHOLD,
-} from '../lib/config.js';
 
 const log = childLogger('retriever');
 
@@ -23,20 +17,32 @@ interface RawChunkRow {
   _distance: number;
 }
 
-const DIAGNOSTIC_KEYWORDS = [
-  'why', 'broken', 'error', 'bug', 'fail', 'crash', 'exception',
-  'undefined', 'null', 'wrong', 'issue', 'problem',
-  'causes', 'caused', 'debug', 'fix', 'incorrect', 'unexpected',
+// Multi-word phrase patterns for trace mode — explicit call-path / flow queries
+const TRACE_KEYWORDS = [
+  'trace the', 'trace flow', 'call path', 'flow of', 'follows from',
+  'calls into', 'invokes', 'trace from',
 ];
 
-const DIAGNOSTIC_BIGRAMS = [
+// Regex pattern for 'how does.*flow' (multi-word, can span words)
+const TRACE_REGEX = /how does\b.*\bflow\b/i;
+
+// High-confidence lookup signals (formerly DIAGNOSTIC_BIGRAMS)
+const LOOKUP_BIGRAMS = [
   'stack trace', 'null pointer', 'not defined',
   'type error', 'reference error', 'syntax error',
   'runtime error', 'segmentation fault',
   'not working', 'throws exception',
 ];
 
-const DIAGNOSTIC_EXCLUSIONS = [
+// Single-keyword lookup signals
+const LOOKUP_KEYWORDS = [
+  'where is', 'find the', 'definition of', 'signature of',
+  'show me the', 'what does', 'what is the type',
+];
+
+// Exclusion patterns: when a lookup keyword matches but one of these also matches,
+// the query is actually an explore query
+const EXPLORE_EXCLUSIONS = [
   'error handler', 'error handling', 'error boundary',
   'error type', 'error message', 'error code', 'error class',
   'null object', 'null check', 'null pattern',
@@ -45,29 +51,44 @@ const DIAGNOSTIC_EXCLUSIONS = [
   'fix the config', 'fix the setup',
 ];
 
-export function classifyQueryIntent(query: string): QueryIntent {
+export function classifyRetrievalMode(query: string): QueryIntent {
   const lower = query.toLowerCase();
 
-  // Bigram match -> always diagnostic (strong signal, per D-07)
-  if (DIAGNOSTIC_BIGRAMS.some((bg) => lower.includes(bg))) {
-    return 'diagnostic';
-  }
-
-  // Single keyword match, but check exclusion patterns first (per D-08)
-  const hasKeyword = DIAGNOSTIC_KEYWORDS.some((kw) => lower.includes(kw));
-  if (hasKeyword) {
-    const isExcluded = DIAGNOSTIC_EXCLUSIONS.some((ex) => lower.includes(ex));
-    if (!isExcluded) {
-      return 'diagnostic';
+  // 1. Check TRACE_KEYWORDS first (multi-word phrase signals)
+  if (TRACE_KEYWORDS.some((kw) => lower.includes(kw)) || TRACE_REGEX.test(lower)) {
+    // Ambiguity guard: if the query contains broad/architectural language, explore wins
+    const broadTerms = ['architecture', 'overview', 'structure', 'system', 'design', 'pipeline', 'codebase'];
+    const isBroad = broadTerms.some((t) => lower.includes(t));
+    if (!isBroad) {
+      return 'trace';
     }
   }
 
-  return 'knowledge';
+  // 2. Check LOOKUP_BIGRAMS (strong, always-lookup signals)
+  if (LOOKUP_BIGRAMS.some((bg) => lower.includes(bg))) {
+    return 'lookup';
+  }
+
+  // 3. Check LOOKUP_KEYWORDS with EXPLORE_EXCLUSIONS guard
+  const hasLookupKeyword = LOOKUP_KEYWORDS.some((kw) => lower.includes(kw));
+  if (hasLookupKeyword) {
+    const isExcluded = EXPLORE_EXCLUSIONS.some((ex) => lower.includes(ex));
+    if (!isExcluded) {
+      return 'lookup';
+    }
+  }
+
+  // 4. Default to explore
+  return 'explore';
 }
 
+/** @deprecated Use classifyRetrievalMode instead */
+export const classifyQueryIntent = classifyRetrievalMode;
+
 export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
-  diagnostic: { limit: DIAGNOSTIC_SEARCH_LIMIT, distanceThreshold: DIAGNOSTIC_DISTANCE_THRESHOLD },
-  knowledge: { limit: DEFAULT_SEARCH_LIMIT, distanceThreshold: DEFAULT_DISTANCE_THRESHOLD },
+  lookup:  { limit: 5,  distanceThreshold: 0.25 },
+  trace:   { limit: 3,  distanceThreshold: 0.30 },
+  explore: { limit: 20, distanceThreshold: 0.45 },
 };
 
 export async function searchChunks(

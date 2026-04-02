@@ -14,8 +14,6 @@ export {
   EMBED_MAX_TOKENS,
   DEFAULT_SEARCH_LIMIT,
   DEFAULT_DISTANCE_THRESHOLD,
-  DIAGNOSTIC_DISTANCE_THRESHOLD,
-  DIAGNOSTIC_SEARCH_LIMIT,
   DEFAULT_TOKEN_BUDGET,
   FILE_HASHES_FILENAME,
 } from './config.js';
@@ -33,6 +31,7 @@ export {
   type RetrievedChunk,
   type ContextMetadata,
   type ContextResult,
+  type FlowHop,
 } from './types.js';
 
 export { formatTokenSavings, type TokenSavingsInput } from './format.js';

@@ -39,11 +39,23 @@ export type IndexState = z.infer<typeof IndexStateSchema>;
 
 // --- Phase 3: Retrieval types ---
 
-export type QueryIntent = 'diagnostic' | 'knowledge';
+export type QueryIntent = 'lookup' | 'trace' | 'explore';
 
 export interface SearchOptions {
   limit: number;
   distanceThreshold: number; // cosine distance (0.3 = 0.7 similarity)
+}
+
+// --- Phase 16: Flow tracing types ---
+
+export interface FlowHop {
+  chunkId: string;
+  filePath: string;
+  name: string | null;
+  startLine: number;
+  endLine: number;
+  content: string;
+  hopDepth: number;
 }
 
 export interface RetrievedChunk {

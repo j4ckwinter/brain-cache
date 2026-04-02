@@ -7,7 +7,7 @@ import { embedBatchWithRetry } from '../services/embedder.js';
 import {
   searchChunks,
   deduplicateChunks,
-  classifyQueryIntent,
+  classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
 } from '../services/retriever.js';
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
@@ -52,16 +52,16 @@ export async function runBuildContext(
   const table = await db.openTable('chunks');
 
   // 5. Classify intent and determine search strategy
-  const intent = classifyQueryIntent(query);
+  const mode = classifyRetrievalMode(query);
   const strategy: SearchOptions = {
-    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[intent].limit,
-    distanceThreshold: RETRIEVAL_STRATEGIES[intent].distanceThreshold,
+    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
+    distanceThreshold: RETRIEVAL_STRATEGIES[mode].distanceThreshold,
   };
 
   const maxTokens = opts?.maxTokens ?? DEFAULT_TOKEN_BUDGET;
 
   process.stderr.write(
-    `brain-cache: building context (intent=${intent}, budget=${maxTokens} tokens)\n`
+    `brain-cache: building context (mode=${mode}, budget=${maxTokens} tokens)\n`
   );
 
   // 6. Embed query using model from index state
