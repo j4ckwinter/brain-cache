@@ -112,13 +112,13 @@ Architecture not yet mapped. Follow existing patterns found in the codebase.
 
 ## Brain-Cache MCP Tools
 
-When answering questions about the codebase, prefer using brain-cache tools before reading files directly.
+Use brain-cache tools before reading files or using Grep/Glob for codebase questions.
 
 ### build_context (use for understanding)
 
-Call `mcp__brain-cache__build_context` with the user's question to retrieve semantically relevant code from across the repo. It deduplicates results and fits them to a token budget.
+Call `mcp__brain-cache__build_context` with the user's question before reading individual files. It retrieves semantically relevant code from across the repo, deduplicates results, and fits them to a token budget.
 
-Works well for questions like:
+Use for questions like:
 - "How does X work?" / "Explain X end to end"
 - "Walk me through the flow of X"
 - "What does this page/feature/component do?"
@@ -127,7 +127,7 @@ Works well for questions like:
 - Any question that requires understanding code across multiple files
 - Debugging unfamiliar code paths or understanding error flows
 
-This typically returns better results with fewer tokens than manually reading files.
+This returns better results with fewer tokens than reading files individually.
 
 ### search_codebase (use for locating)
 
