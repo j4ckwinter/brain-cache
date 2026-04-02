@@ -5,6 +5,9 @@
   "bin": {
     "brain-cache": "./dist/cli.js"
   },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",

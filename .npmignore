@@ -1,0 +1,22 @@
+# Source and tests — dist/ is all that ships
+src/
+tests/
+
+# Config files
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+.mcp.json
+
+# Dev/project files
+.planning/
+.brain-cache/
+.claude/
+.devcontainer/
+CLAUDE.md
+.nvmrc
+.github/
+.git/
+
+# Assets (SVG logo not needed in package)
+assets/
