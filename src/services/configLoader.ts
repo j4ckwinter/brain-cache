@@ -12,6 +12,10 @@ export interface UserConfig {
     trace?: Partial<SearchOptions>;
     explore?: Partial<SearchOptions>;
   };
+  stats?: {
+    /** Default: 2. Session stats older than this many hours reset on next accumulation. */
+    ttlHours?: number;
+  };
 }
 
 /**

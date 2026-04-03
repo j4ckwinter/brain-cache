@@ -138,21 +138,17 @@ describe('sessionStats', () => {
   });
 
   it('Test 6: does not throw on write failure', async () => {
+    // Use /etc/passwd/subdir as GLOBAL_CONFIG_DIR — mkdir will fail fast with ENOTDIR
+    // because /etc/passwd is a file, not a directory.
+    const configMod = await import('../../src/lib/config.js');
+    (configMod as Record<string, unknown>).GLOBAL_CONFIG_DIR = '/etc/passwd/brain_cache_test';
+
     const { accumulateStats } = await import('../../src/services/sessionStats.js');
 
-    // Use a path under /proc where writing will fail (read-only kernel fs).
-    // We simulate failure by mocking the whole temp dir as unwritable root.
-    // Simplest approach: mock writeFile to throw.
-    const fsPromises = await import('node:fs/promises');
-    const originalWriteFile = fsPromises.writeFile;
-    vi.spyOn(fsPromises, 'writeFile').mockRejectedValueOnce(new Error('EACCES: permission denied'));
-
-    // Should resolve without throwing.
+    // Should resolve without throwing even though mkdir fails.
     await expect(
       accumulateStats({ tokensSent: 100, estimatedWithoutBraincache: 300 })
     ).resolves.toBeUndefined();
-
-    vi.restoreAllMocks();
   });
 
   it('Test 7: stats file is valid JSON with exactly the four expected keys', async () => {
