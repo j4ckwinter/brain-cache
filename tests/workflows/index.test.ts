@@ -40,6 +40,13 @@ vi.mock('../../src/services/lancedb.js', () => ({
   readFileHashes: vi.fn(),
   writeFileHashes: vi.fn(),
   deleteChunksByFilePath: vi.fn(),
+  openOrCreateEdgesTable: vi.fn(),
+  insertEdges: vi.fn(),
+  withWriteLock: vi.fn().mockImplementation((fn: () => Promise<unknown>) => fn()),
+}));
+
+vi.mock('../../src/services/ignorePatterns.js', () => ({
+  loadIgnorePatterns: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -68,7 +75,10 @@ import {
   readFileHashes,
   writeFileHashes,
   deleteChunksByFilePath,
+  openOrCreateEdgesTable,
+  insertEdges,
 } from '../../src/services/lancedb.js';
+import { loadIgnorePatterns } from '../../src/services/ignorePatterns.js';
 import { readFile } from 'node:fs/promises';
 import { countChunkTokens } from '../../src/services/tokenCounter.js';
 
@@ -87,6 +97,9 @@ const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockReadFileHashes = vi.mocked(readFileHashes);
 const mockWriteFileHashes = vi.mocked(writeFileHashes);
 const mockDeleteChunksByFilePath = vi.mocked(deleteChunksByFilePath);
+const mockOpenOrCreateEdgesTable = vi.mocked(openOrCreateEdgesTable);
+const mockInsertEdges = vi.mocked(insertEdges);
+const mockLoadIgnorePatterns = vi.mocked(loadIgnorePatterns);
 
 const mockProfile = {
   version: 1 as const,
@@ -101,6 +114,7 @@ const mockProfile = {
 
 const mockDb = {} as any;
 const mockTable = { countRows: vi.fn().mockResolvedValue(2) } as any;
+const mockEdgesTable = { countRows: vi.fn().mockResolvedValue(5), delete: vi.fn().mockResolvedValue(undefined) } as any;
 
 const fakeFiles = ['/project/src/foo.ts', '/project/src/bar.ts'];
 
@@ -144,18 +158,23 @@ describe('runIndex', () => {
     mockIsOllamaRunning.mockResolvedValue(true);
     mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
-    mockChunkFile.mockImplementation((filePath, _content) => [fakeChunk(filePath, 1)]);
+    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0 });
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
+    mockOpenOrCreateEdgesTable.mockResolvedValue(mockEdgesTable);
     mockInsertChunks.mockResolvedValue(undefined);
+    mockInsertEdges.mockResolvedValue(undefined);
     mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
     mockWriteIndexState.mockResolvedValue(undefined);
     // Default: no stored hashes (first run)
     mockReadFileHashes.mockResolvedValue({});
     mockWriteFileHashes.mockResolvedValue(undefined);
     mockDeleteChunksByFilePath.mockResolvedValue(undefined);
+    mockLoadIgnorePatterns.mockResolvedValue([]);
     mockTable.countRows.mockResolvedValue(2);
+    mockEdgesTable.countRows.mockResolvedValue(5);
+    mockEdgesTable.delete.mockResolvedValue(undefined);
 
     // Dynamically import after mocks are in place
     const mod = await import('../../src/workflows/index.js');
@@ -170,7 +189,7 @@ describe('runIndex', () => {
   it('calls pipeline in correct order: crawl -> chunk -> embed -> store -> writeIndexState', async () => {
     const callOrder: string[] = [];
     mockCrawlSourceFiles.mockImplementation(async () => { callOrder.push('crawl'); return fakeFiles; });
-    mockChunkFile.mockImplementation((fp, _c) => { callOrder.push('chunk'); return [fakeChunk(fp, 1)]; });
+    mockChunkFile.mockImplementation((fp, _c) => { callOrder.push('chunk'); return { chunks: [fakeChunk(fp, 1)], edges: [] }; });
     mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return { embeddings: [zeroVector768, zeroVector768], skipped: 0 }; });
     mockInsertChunks.mockImplementation(async () => { callOrder.push('store'); });
     mockWriteIndexState.mockImplementation(async () => { callOrder.push('writeState'); });
@@ -186,7 +205,7 @@ describe('runIndex', () => {
 
   it('calls crawlSourceFiles with the resolved target path', async () => {
     await runIndex('/project');
-    expect(mockCrawlSourceFiles).toHaveBeenCalledWith('/project');
+    expect(mockCrawlSourceFiles).toHaveBeenCalledWith('/project', expect.objectContaining({}));
   });
 
   it('calls chunkFile for each crawled file', async () => {

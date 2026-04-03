@@ -311,8 +311,8 @@ describe('MCP tool handlers', () => {
 
       expect(result.isError).toBeUndefined();
 
-      // Response has two content blocks: JSON data + savings summary
-      expect(result.content).toHaveLength(2);
+      // Response has single content block with JSON data including tokenSavings
+      expect(result.content).toHaveLength(1);
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toHaveProperty('content');
@@ -322,12 +322,12 @@ describe('MCP tool handlers', () => {
       expect(parsed.metadata.reductionPct).toBe(85);
       expect(parsed.metadata.cloudCallsMade).toBe(0);
 
-      // Verify the formatted savings block
-      expect(result.content[1].text).toContain('brain-cache');
-      expect(result.content[1].text).toContain('Tokens sent to Claude:');
-      expect(result.content[1].text).toContain('150');
-      expect(result.content[1].text).toContain('~1,000');
-      expect(result.content[1].text).toContain('85%');
+      // Token savings are included as data in the JSON, not as a separate directive
+      expect(parsed).toHaveProperty('tokenSavings');
+      expect(parsed.tokenSavings).toContain('Tokens sent to Claude:');
+      expect(parsed.tokenSavings).toContain('150');
+      expect(parsed.tokenSavings).toContain('~1,000');
+      expect(parsed.tokenSavings).toContain('85%');
     });
   });
 

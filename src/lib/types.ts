@@ -34,16 +34,29 @@ export const IndexStateSchema = z.object({
   indexedAt:      z.string().datetime(),
   fileCount:      z.number().int(),
   chunkCount:     z.number().int(),
+  totalTokens:    z.number().int().default(0),
 });
 export type IndexState = z.infer<typeof IndexStateSchema>;
 
 // --- Phase 3: Retrieval types ---
 
-export type QueryIntent = 'diagnostic' | 'knowledge';
+export type QueryIntent = 'lookup' | 'trace' | 'explore';
 
 export interface SearchOptions {
   limit: number;
   distanceThreshold: number; // cosine distance (0.3 = 0.7 similarity)
+}
+
+// --- Phase 16: Flow tracing types ---
+
+export interface FlowHop {
+  chunkId: string;
+  filePath: string;
+  name: string | null;
+  startLine: number;
+  endLine: number;
+  content: string;
+  hopDepth: number;
 }
 
 export interface RetrievedChunk {
@@ -62,6 +75,7 @@ export interface ContextMetadata {
   tokensSent: number;
   estimatedWithoutBraincache: number;
   reductionPct: number;
+  filesInContext: number;
   localTasksPerformed: string[];
   cloudCallsMade: number;
 }
@@ -70,4 +84,28 @@ export interface ContextResult {
   content: string;
   chunks: RetrievedChunk[];
   metadata: ContextMetadata;
+}
+
+export interface CallEdge {
+  fromChunkId: string;
+  fromFile: string;
+  fromSymbol: string | null;
+  toSymbol: string;
+  toFile: string | null;
+  edgeType: 'call' | 'import';
+}
+
+export interface ChunkResult {
+  chunks: CodeChunk[];
+  edges: CallEdge[];
+}
+
+export interface FlowHop {
+  chunkId: string;
+  filePath: string;
+  name: string | null;
+  startLine: number;
+  endLine: number;
+  content: string;
+  hopDepth: number;
 }

@@ -29,7 +29,10 @@ export const ALWAYS_EXCLUDE_GLOBS: string[] = [
   '**/*.min.js',
 ];
 
-export async function crawlSourceFiles(rootDir: string): Promise<string[]> {
+export async function crawlSourceFiles(
+  rootDir: string,
+  opts?: { extraIgnorePatterns?: string[] }
+): Promise<string[]> {
   const ig = ignore();
 
   try {
@@ -37,6 +40,10 @@ export async function crawlSourceFiles(rootDir: string): Promise<string[]> {
     ig.add(gitignoreContent);
   } catch {
     // no .gitignore — skip
+  }
+
+  if (opts?.extraIgnorePatterns?.length) {
+    ig.add(opts.extraIgnorePatterns);
   }
 
   const files = await fg('**/*', {

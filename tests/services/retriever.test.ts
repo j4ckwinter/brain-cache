@@ -16,7 +16,7 @@ vi.mock('../../src/services/logger.js', () => ({
 import {
   searchChunks,
   deduplicateChunks,
-  classifyQueryIntent,
+  classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
 } from '../../src/services/retriever.js';
 import type { RetrievedChunk } from '../../src/lib/types.js';
@@ -157,77 +157,97 @@ describe('deduplicateChunks', () => {
   });
 });
 
-describe('classifyQueryIntent', () => {
-  it('returns "diagnostic" for "why is this broken"', () => {
-    expect(classifyQueryIntent('why is this broken')).toBe('diagnostic');
+describe('classifyRetrievalMode', () => {
+  // --- lookup mode ---
+  it('returns "lookup" for "find the definition of foo"', () => {
+    expect(classifyRetrievalMode('find the definition of foo')).toBe('lookup');
   });
 
-  it('returns "diagnostic" for "error in module"', () => {
-    expect(classifyQueryIntent('error in module')).toBe('diagnostic');
+  it('returns "lookup" for "where is the auth handler"', () => {
+    expect(classifyRetrievalMode('where is the auth handler')).toBe('lookup');
   });
 
-  it('returns "diagnostic" for queries with bug/crash keywords', () => {
-    expect(classifyQueryIntent('the app crashes on startup')).toBe('diagnostic');
-    expect(classifyQueryIntent('there is a bug in the auth flow')).toBe('diagnostic');
-    expect(classifyQueryIntent('help me fix the failing test')).toBe('diagnostic');
+  it('returns "lookup" for "signature of classifyQueryIntent"', () => {
+    expect(classifyRetrievalMode('signature of classifyQueryIntent')).toBe('lookup');
   });
 
-  it('returns "knowledge" for "how does auth work"', () => {
-    expect(classifyQueryIntent('how does auth work')).toBe('knowledge');
+  // Bigram-based lookup (formerly diagnostic bigrams)
+  it('returns "lookup" for bigram "stack trace"', () => {
+    expect(classifyRetrievalMode('I got a stack trace')).toBe('lookup');
   });
 
-  it('returns "knowledge" for "explain the database schema"', () => {
-    expect(classifyQueryIntent('explain the database schema')).toBe('knowledge');
+  it('returns "lookup" for bigram "null pointer"', () => {
+    expect(classifyRetrievalMode('null pointer in the loop')).toBe('lookup');
   });
 
-  it('returns "knowledge" for general knowledge queries', () => {
-    expect(classifyQueryIntent('what is the purpose of the chunker')).toBe('knowledge');
-    expect(classifyQueryIntent('describe the embedding pipeline')).toBe('knowledge');
+  it('returns "lookup" for bigram "type error"', () => {
+    expect(classifyRetrievalMode('it throws a type error')).toBe('lookup');
   });
 
-  // Bigram tests (always diagnostic regardless of exclusions)
-  it('returns "diagnostic" for bigram "stack trace"', () => {
-    expect(classifyQueryIntent('I got a stack trace')).toBe('diagnostic');
+  it('returns "lookup" for bigram "not working"', () => {
+    expect(classifyRetrievalMode('the feature is not working')).toBe('lookup');
   });
 
-  it('returns "diagnostic" for bigram "null pointer"', () => {
-    expect(classifyQueryIntent('null pointer in the loop')).toBe('diagnostic');
+  // --- trace mode ---
+  it('returns "trace" for "trace the call path from CLI to LanceDB"', () => {
+    expect(classifyRetrievalMode('trace the call path from CLI to LanceDB')).toBe('trace');
   });
 
-  it('returns "diagnostic" for bigram "type error"', () => {
-    expect(classifyQueryIntent('it throws a type error')).toBe('diagnostic');
+  it('returns "trace" for "how does indexing flow from CLI to storage"', () => {
+    expect(classifyRetrievalMode('how does indexing flow from CLI to storage')).toBe('trace');
   });
 
-  it('returns "diagnostic" for bigram "not working"', () => {
-    expect(classifyQueryIntent('the feature is not working')).toBe('diagnostic');
+  it('returns "trace" for "trace flow of build_context"', () => {
+    expect(classifyRetrievalMode('trace flow of build_context')).toBe('trace');
   });
 
-  // Exclusion tests (keyword present but suppressed by exclusion pattern)
-  it('returns "knowledge" for "how does the error handler work" (exclusion)', () => {
-    expect(classifyQueryIntent('how does the error handler work')).toBe('knowledge');
+  // --- explore mode ---
+  it('returns "explore" for "explain the architecture"', () => {
+    expect(classifyRetrievalMode('explain the architecture')).toBe('explore');
   });
 
-  it('returns "knowledge" for "what is undefined behavior" (exclusion)', () => {
-    expect(classifyQueryIntent('what is undefined behavior in Rust')).toBe('knowledge');
+  it('returns "explore" for "how does auth work"', () => {
+    expect(classifyRetrievalMode('how does auth work')).toBe('explore');
   });
 
-  it('returns "knowledge" for "explain the null object pattern" (exclusion)', () => {
-    expect(classifyQueryIntent('explain the null object pattern')).toBe('knowledge');
+  it('returns "explore" for "walk me through the retrieval pipeline"', () => {
+    expect(classifyRetrievalMode('walk me through the retrieval pipeline')).toBe('explore');
+  });
+
+  // Exclusion tests — lookup keyword present but exclusion pattern overrides to explore
+  it('returns "explore" for "how does the error handler work" (exclusion)', () => {
+    expect(classifyRetrievalMode('how does the error handler work')).toBe('explore');
+  });
+
+  it('returns "explore" for "explain the null object pattern" (exclusion)', () => {
+    expect(classifyRetrievalMode('explain the null object pattern')).toBe('explore');
+  });
+
+  // Ambiguity test: "trace the" prefix but architecture context → explore wins
+  it('returns "explore" for "trace the architecture of this repo" (ambiguity)', () => {
+    expect(classifyRetrievalMode('trace the architecture of this repo')).toBe('explore');
   });
 });
 
 describe('RETRIEVAL_STRATEGIES', () => {
-  it('diagnostic strategy has limit=20 and distanceThreshold=0.4', () => {
-    expect(RETRIEVAL_STRATEGIES['diagnostic']).toEqual({
-      limit: 20,
-      distanceThreshold: 0.4,
+  it('lookup strategy has limit=5 and distanceThreshold=0.25', () => {
+    expect(RETRIEVAL_STRATEGIES['lookup']).toEqual({
+      limit: 5,
+      distanceThreshold: 0.25,
     });
   });
 
-  it('knowledge strategy has limit=10 and distanceThreshold=0.3', () => {
-    expect(RETRIEVAL_STRATEGIES['knowledge']).toEqual({
-      limit: 10,
-      distanceThreshold: 0.3,
+  it('trace strategy has limit=3 and distanceThreshold=0.30', () => {
+    expect(RETRIEVAL_STRATEGIES['trace']).toEqual({
+      limit: 3,
+      distanceThreshold: 0.30,
+    });
+  });
+
+  it('explore strategy has limit=20 and distanceThreshold=0.45', () => {
+    expect(RETRIEVAL_STRATEGIES['explore']).toEqual({
+      limit: 20,
+      distanceThreshold: 0.45,
     });
   });
 });

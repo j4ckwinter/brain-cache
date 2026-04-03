@@ -159,3 +159,47 @@ describe('crawlSourceFiles', () => {
     expect(basenames).toContain('app.js');
   });
 });
+
+describe('crawlSourceFiles with extraIgnorePatterns', () => {
+  it('excludes .test.ts files when extraIgnorePatterns contains *.test.ts', async () => {
+    await mkdir(join(tempDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'src', 'app.ts'), 'export const x = 1;');
+    await writeFile(join(tempDir, 'src', 'app.test.ts'), 'export const x = 1;');
+
+    const files = await crawlSourceFiles(tempDir, { extraIgnorePatterns: ['*.test.ts'] });
+
+    const basenames = files.map(f => f.split('/').pop()!);
+    expect(basenames).toContain('app.ts');
+    expect(basenames).not.toContain('app.test.ts');
+  });
+
+  it('excludes files in fixtures/ directory when extraIgnorePatterns contains fixtures/', async () => {
+    await mkdir(join(tempDir, 'src'), { recursive: true });
+    await mkdir(join(tempDir, 'fixtures'), { recursive: true });
+    await writeFile(join(tempDir, 'src', 'app.ts'), 'export const x = 1;');
+    await writeFile(join(tempDir, 'src', 'app.test.ts'), 'export const x = 1;');
+    await writeFile(join(tempDir, 'fixtures', 'data.ts'), 'export const x = 1;');
+
+    const files = await crawlSourceFiles(tempDir, { extraIgnorePatterns: ['fixtures/'] });
+
+    const basenames = files.map(f => f.split('/').pop()!);
+    expect(basenames).toContain('app.ts');
+    expect(basenames).toContain('app.test.ts');
+    expect(basenames).not.toContain('data.ts');
+  });
+
+  it('returns all files when no opts are provided (backward compat)', async () => {
+    await mkdir(join(tempDir, 'src'), { recursive: true });
+    await mkdir(join(tempDir, 'fixtures'), { recursive: true });
+    await writeFile(join(tempDir, 'src', 'app.ts'), 'export const x = 1;');
+    await writeFile(join(tempDir, 'src', 'app.test.ts'), 'export const x = 1;');
+    await writeFile(join(tempDir, 'fixtures', 'data.ts'), 'export const x = 1;');
+
+    const files = await crawlSourceFiles(tempDir);
+
+    const basenames = files.map(f => f.split('/').pop()!);
+    expect(basenames).toContain('app.ts');
+    expect(basenames).toContain('app.test.ts');
+    expect(basenames).toContain('data.ts');
+  });
+});

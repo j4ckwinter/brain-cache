@@ -16,11 +16,15 @@ import {
   readFileHashes,
   writeFileHashes,
   deleteChunksByFilePath,
+  openOrCreateEdgesTable,
+  insertEdges,
+  withWriteLock,
   type ChunkRow,
 } from '../services/lancedb.js';
+import { loadIgnorePatterns } from '../services/ignorePatterns.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
-import type { CodeChunk } from '../lib/types.js';
+import type { CodeChunk, CallEdge } from '../lib/types.js';
 import { formatTokenSavings } from '../lib/format.js';
 
 /**
@@ -68,6 +72,12 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   // Step 1: Resolve path
   const rootDir = resolve(targetPath ?? '.');
 
+  // Step 1b: Load .braincacheignore patterns
+  const ignorePatterns = await loadIgnorePatterns(rootDir);
+  if (ignorePatterns.length > 0) {
+    process.stderr.write(`brain-cache: loaded ${ignorePatterns.length} patterns from .braincacheignore\n`);
+  }
+
   // Step 2: Read profile
   const profile = await readProfile();
   if (profile === null) {
@@ -91,9 +101,12 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   // Step 5: Open LanceDB
   const db = await openDatabase(rootDir);
   const table = await openOrCreateChunkTable(db, rootDir, profile.embeddingModel, dim);
+  const edgesTable = await openOrCreateEdgesTable(db);
 
   // Step 6: Crawl source files
-  const files = await crawlSourceFiles(rootDir);
+  const files = await crawlSourceFiles(rootDir, {
+    extraIgnorePatterns: ignorePatterns.length > 0 ? ignorePatterns : undefined,
+  });
   process.stderr.write(`brain-cache: found ${files.length} source files\n`);
 
   if (files.length === 0) {
@@ -155,6 +168,11 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   // Step 6f: Delete chunks for removed + changed files
   for (const filePath of [...removedFiles, ...changedFiles]) {
     await deleteChunksByFilePath(table, filePath);
+    // Also delete edges for this file
+    await withWriteLock(async () => {
+      const escaped = filePath.replace(/'/g, "''");
+      await edgesTable.delete(`from_file = '${escaped}'`);
+    });
   }
 
   // Step 6g: Remove hash entries for removed files
@@ -166,7 +184,13 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   // Step 6h: Filter to only new + changed files for processing
   const filesToProcess = [...newFiles, ...changedFiles];
 
-  // Step 6i: Nothing to do
+  // Step 6i: Compute total raw tokens across all files (for savings baseline)
+  let allFilesTotalTokens = 0;
+  for (const [, content] of contentMap) {
+    allFilesTotalTokens += countChunkTokens(content);
+  }
+
+  // Step 6j: Nothing to do
   if (filesToProcess.length === 0) {
     process.stderr.write(`brain-cache: nothing to re-index\n`);
     // Write updated manifest (may have removed some entries) and index state
@@ -185,6 +209,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       indexedAt: new Date().toISOString(),
       fileCount: totalFiles,
       chunkCount,
+      totalTokens: allFilesTotalTokens,
     });
     process.stderr.write(
       `brain-cache: indexing complete\n` +
@@ -207,12 +232,14 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   for (let groupStart = 0; groupStart < filesToProcess.length; groupStart += FILE_READ_CONCURRENCY) {
     const group = filesToProcess.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
     const groupChunks: CodeChunk[] = [];
+    const groupEdges: CallEdge[] = [];
 
     for (const filePath of group) {
       const content = contentMap.get(filePath)!;
       totalRawTokens += countChunkTokens(content);
-      const chunks = chunkFile(filePath, content);
+      const { chunks, edges } = chunkFile(filePath, content);
       groupChunks.push(...chunks);
+      groupEdges.push(...edges);
     }
     processedFiles += group.length;
     totalChunks += groupChunks.length;
@@ -266,6 +293,11 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
         `brain-cache: embedding ${processedChunks}/${totalChunks} chunks (${Math.round((processedChunks / totalChunks) * 100)}%)\n`
       );
     }
+
+    // Insert call/import edges for this group
+    if (groupEdges.length > 0) {
+      await insertEdges(edgesTable, groupEdges);
+    }
   }
   if (skippedChunks > 0) {
     process.stderr.write(`brain-cache: ${skippedChunks} chunks skipped (too large for model context)\n`);
@@ -273,6 +305,14 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   process.stderr.write(
     `brain-cache: ${totalChunks} chunks from ${filesToProcess.length} files\n`
   );
+
+  // Log edge stats
+  const edgeCount = await edgesTable.countRows();
+  if (edgeCount === 0) {
+    process.stderr.write(`brain-cache: no call edges extracted — check source files\n`);
+  } else {
+    process.stderr.write(`brain-cache: ${edgeCount} call/import edges stored\n`);
+  }
 
   // Step 8b: Create vector index if table is large enough
   await createVectorIndexIfNeeded(table, profile.embeddingModel);
@@ -297,6 +337,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     indexedAt: new Date().toISOString(),
     fileCount: totalFiles,
     chunkCount,
+    totalTokens: allFilesTotalTokens,
   });
 
   // Step 10: Print summary with token savings stats
@@ -308,6 +349,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     tokensSent: totalChunkTokens,
     estimatedWithout: totalRawTokens,
     reductionPct,
+    filesInContext: totalFiles,
   }).split('\n').map(line => `  ${line}`).join('\n');
 
   process.stderr.write(

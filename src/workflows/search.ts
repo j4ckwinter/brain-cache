@@ -6,7 +6,7 @@ import { embedBatchWithRetry } from "../services/embedder.js";
 import {
   searchChunks,
   deduplicateChunks,
-  classifyQueryIntent,
+  classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
 } from "../services/retriever.js";
 import type { RetrievedChunk, SearchOptions } from "../lib/types.js";
@@ -58,15 +58,15 @@ export async function runSearch(
     );
   }
 
-  // 5. Classify intent and determine search strategy
-  const intent = classifyQueryIntent(query);
+  // 5. Classify retrieval mode and determine search strategy
+  const mode = classifyRetrievalMode(query);
   const strategy: SearchOptions = {
-    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[intent].limit,
-    distanceThreshold: RETRIEVAL_STRATEGIES[intent].distanceThreshold,
+    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
+    distanceThreshold: RETRIEVAL_STRATEGIES[mode].distanceThreshold,
   };
 
   process.stderr.write(
-    `brain-cache: searching (intent=${intent}, limit=${strategy.limit})\n`,
+    `brain-cache: searching (mode=${mode}, limit=${strategy.limit})\n`,
   );
 
   // 6. Embed the query using the model from index state (not profile — prevents mismatch)

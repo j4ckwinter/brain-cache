@@ -107,6 +107,33 @@ brain-cache tools are called automatically. You don’t change how you work — 
 
 ---
 
+## 📊 Optional: Token savings footer
+
+brain-cache returns token usage stats in its tool responses (tokens sent, estimated without, reduction %). By default, Claude decides whether to surface these — no footer is forced.
+
+If you'd like Claude to always show the stats, add this to your project's `CLAUDE.md`:
+
+```
+When using brain-cache build_context, include the token savings summary from the response at the end of your answer.
+```
+
+This keeps it transparent and under your control.
+
+## 🎛 Tuning how much Claude uses brain-cache
+
+`brain-cache init` adds a section to your project's `CLAUDE.md` with clear instructions to use brain-cache tools first. This works well for most users.
+
+If you want to go further, you can strengthen the language yourself. For example:
+
+```
+ALWAYS use brain-cache build_context before reading files or using Grep/Glob.
+Do not skip brain-cache tools — they return better results with fewer tokens.
+```
+
+Or soften it if you prefer Claude to decide on its own. It's your `CLAUDE.md` — edit it to match how you want to work.
+
+---
+
 ## 🧩 Core capabilities
 
 - 🧠 Local embeddings via Ollama — no API calls, no data sent out

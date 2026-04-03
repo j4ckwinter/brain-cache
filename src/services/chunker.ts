@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import { extname } from 'node:path';
+import { extname, resolve, dirname } from 'node:path';
 import { childLogger } from './logger.js';
-import type { CodeChunk } from '../lib/types.js';
+import type { CodeChunk, CallEdge, ChunkResult } from '../lib/types.js';
 import type TreeSitter from 'tree-sitter';
 type SyntaxNode = TreeSitter.SyntaxNode;
 
@@ -146,17 +146,20 @@ function* walkNodes(node: SyntaxNode): Generator<SyntaxNode> {
 }
 
 /**
- * Parses source code at AST function/class/method boundaries and returns CodeChunk objects.
+ * Parses source code at AST function/class/method boundaries and returns ChunkResult.
  *
- * Returns an empty array for unsupported file extensions.
+ * Returns empty chunks/edges for unsupported file extensions.
  * Returns a single file-type fallback chunk if no AST nodes are extractable (e.g. type-only files).
+ * Call edges are extracted from call_expression nodes in the same walkNodes traversal.
+ * Import edges are extracted from import_statement nodes in the same walkNodes traversal.
+ * Dynamic call targets (subscript_expression, etc.) are silently skipped.
  */
-export function chunkFile(filePath: string, content: string): CodeChunk[] {
+export function chunkFile(filePath: string, content: string): ChunkResult {
   const ext = extname(filePath);
   const lang = LANGUAGE_MAP[ext];
 
   if (!lang) {
-    return [];
+    return { chunks: [], edges: [] };
   }
 
   const category = getLanguageCategory(ext);
@@ -167,8 +170,57 @@ export function chunkFile(filePath: string, content: string): CodeChunk[] {
   const tree = parser.parse(content);
 
   const chunks: CodeChunk[] = [];
+  const edges: CallEdge[] = [];
+
+  let currentChunkId: string | null = null;
+  let currentSymbol: string | null = null;
 
   for (const node of walkNodes(tree.rootNode)) {
+    // Extract call edges from call_expression nodes (runs for ALL nodes)
+    if (node.type === 'call_expression') {
+      const funcNode = node.childForFieldName('function');
+      if (funcNode) {
+        let toSymbol: string | null = null;
+        if (funcNode.type === 'identifier') {
+          toSymbol = funcNode.text;
+        } else if (funcNode.type === 'member_expression' || funcNode.type === 'optional_member_expression') {
+          toSymbol = funcNode.childForFieldName('property')?.text ?? null;
+        }
+        // Skip dynamic call targets (subscript_expression, etc.) per pitfall 6
+        if (toSymbol) {
+          const chunkId = currentChunkId ?? `${filePath}:0`;
+          const symbol = currentSymbol;
+          edges.push({
+            fromChunkId: chunkId,
+            fromFile: filePath,
+            fromSymbol: symbol,
+            toSymbol,
+            toFile: null, // Resolved at query time, not index time
+            edgeType: 'call',
+          });
+        }
+      }
+    }
+
+    // Extract import edges from import_statement nodes (runs for ALL nodes)
+    if (node.type === 'import_statement') {
+      const source = node.childForFieldName('source');
+      if (source) {
+        const raw = source.text.replace(/['"]/g, '');
+        const isRelative = raw.startsWith('./') || raw.startsWith('../');
+        const toFile = isRelative ? resolve(dirname(filePath), raw) : null;
+        edges.push({
+          fromChunkId: `${filePath}:0`,
+          fromFile: filePath,
+          fromSymbol: null,
+          toSymbol: raw,
+          toFile,
+          edgeType: 'import',
+        });
+      }
+    }
+
+    // Chunk extraction: only for chunkable node types
     if (!nodeTypes.has(node.type)) {
       continue;
     }
@@ -209,6 +261,10 @@ export function chunkFile(filePath: string, content: string): CodeChunk[] {
       startLine: node.startPosition.row + 1,
       endLine:   node.endPosition.row + 1,
     });
+
+    // Update currentChunkId tracking for associating call_expressions with their enclosing chunk
+    currentChunkId = `${filePath}:${node.startPosition.row}`;
+    currentSymbol = extractName(node);
   }
 
   // Fallback: if language was found but no chunks extracted, emit one file-type chunk
@@ -225,7 +281,7 @@ export function chunkFile(filePath: string, content: string): CodeChunk[] {
     });
   }
 
-  log.debug({ filePath, chunkCount: chunks.length }, 'File chunked');
+  log.debug({ filePath, chunkCount: chunks.length, edgeCount: edges.length }, 'File chunked');
 
-  return chunks;
+  return { chunks, edges };
 }

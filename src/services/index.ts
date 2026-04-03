@@ -11,6 +11,8 @@ export { chunkFile } from './chunker.js';
 
 export { crawlSourceFiles, SOURCE_EXTENSIONS } from './crawler.js';
 
+export { loadIgnorePatterns } from './ignorePatterns.js';
+
 export { embedBatchWithRetry } from './embedder.js';
 
 export {
@@ -24,7 +26,13 @@ export {
   writeFileHashes,
   deleteChunksByFilePath,
   chunkSchema,
+  edgeSchema,
+  openOrCreateEdgesTable,
+  insertEdges,
+  queryEdgesFrom,
+  withWriteLock,
   type ChunkRow,
+  type EdgeRow,
 } from './lancedb.js';
 
 export { logger, childLogger } from './logger.js';
@@ -46,3 +54,5 @@ export {
 } from './retriever.js';
 
 export { countChunkTokens, assembleContext, formatChunk } from './tokenCounter.js';
+
+export { traceFlow, resolveSymbolToChunkId } from './flowTracer.js';

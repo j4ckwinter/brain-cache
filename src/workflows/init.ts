@@ -117,7 +117,7 @@ export async function runInit(): Promise<void> {
 
   // Step 10: Append brain-cache instructions to CLAUDE.md (idempotent)
   const claudeMdPath = 'CLAUDE.md';
-  const brainCacheSection = `\n## Brain-Cache MCP Tools\n\nWhen answering "how does X work", "explain the architecture", or any question requiring multi-file reasoning, call \`mcp__brain-cache__build_context\` with the question BEFORE reading individual files. It returns pre-built, relevant context with token savings.\n\nWhen locating functions, symbols, types, or definitions, call \`mcp__brain-cache__search_codebase\` instead of using Grep or file-find tools. It searches the local vector index and returns ranked results.\n`;
+  const { CLAUDE_MD_SECTION: brainCacheSection } = await import('../lib/claude-md-section.js');
 
   if (existsSync(claudeMdPath)) {
     const content = readFileSync(claudeMdPath, 'utf-8');

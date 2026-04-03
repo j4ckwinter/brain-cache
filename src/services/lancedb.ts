@@ -5,10 +5,26 @@ import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME } from '../lib/config.js';
 import { childLogger } from './logger.js';
-import type { CodeChunk, IndexState } from '../lib/types.js';
+import type { CodeChunk, IndexState, CallEdge } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
 
 const log = childLogger('lancedb');
+
+// --- Write mutex ---
+
+let _writeMutex: Promise<void> = Promise.resolve();
+
+/**
+ * Serializes concurrent write operations within the same Node.js process.
+ * Prevents LanceDB table corruption when multiple index operations run concurrently.
+ * Always advances the mutex chain, even on error — prevents deadlock.
+ */
+export function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = _writeMutex.then(() => fn());
+  // Always advance mutex regardless of success/failure to prevent deadlock
+  _writeMutex = next.then(() => undefined, () => undefined);
+  return next;
+}
 
 /**
  * Builds the Apache Arrow schema for the chunks table.
@@ -29,6 +45,21 @@ export function chunkSchema(dim: number): Schema {
       new FixedSizeList(dim, new Field('item', new Float32(), true)),
       false
     ),
+  ]);
+}
+
+/**
+ * Builds the Apache Arrow schema for the edges table.
+ * No vector column — this is a plain relational table queried via SQL predicates.
+ */
+export function edgeSchema(): Schema {
+  return new Schema([
+    new Field('from_chunk_id', new Utf8(), false),
+    new Field('from_file',     new Utf8(), false),
+    new Field('from_symbol',   new Utf8(), true),
+    new Field('to_symbol',     new Utf8(), false),
+    new Field('to_file',       new Utf8(), true),
+    new Field('edge_type',     new Utf8(), false),
   ]);
 }
 
@@ -57,6 +88,21 @@ export interface ChunkRow {
   start_line: number;
   end_line: number;
   vector: number[];
+  /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
+  [key: string]: unknown;
+}
+
+/**
+ * Shape of a row stored in the LanceDB edges table.
+ * Field names use snake_case to match the Arrow schema column names.
+ */
+export interface EdgeRow {
+  from_chunk_id: string;
+  from_file: string;
+  from_symbol: string | null;
+  to_symbol: string;
+  to_file: string | null;
+  edge_type: 'call' | 'import';
   /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
   [key: string]: unknown;
 }
@@ -93,6 +139,10 @@ export async function openOrCreateChunkTable(
         'Embedding model or dimension changed — dropping and recreating chunks table'
       );
       await db.dropTable('chunks');
+      if (tableNames.includes('edges')) {
+        await db.dropTable('edges');
+        log.warn('Also dropped edges table (stale chunk IDs)');
+      }
     } else {
       log.info({ model, dim }, 'Opened existing chunks table');
       return db.openTable('chunks');
@@ -115,8 +165,10 @@ export async function insertChunks(table: lancedb.Table, rows: ChunkRow[]): Prom
   if (rows.length === 0) {
     return;
   }
-  await table.add(rows);
-  log.debug({ count: rows.length }, 'Inserted chunk rows');
+  await withWriteLock(async () => {
+    await table.add(rows);
+    log.debug({ count: rows.length }, 'Inserted chunk rows');
+  });
 }
 
 /**
@@ -234,13 +286,96 @@ export async function writeFileHashes(
 /**
  * Deletes all LanceDB rows where file_path matches the given filePath.
  * Uses SQL-style predicate with single-quote escaping.
+ * Wrapped in withWriteLock to prevent interleaving with concurrent inserts.
  */
 export async function deleteChunksByFilePath(
   table: lancedb.Table,
   filePath: string
 ): Promise<void> {
   const escaped = filePath.replace(/'/g, "''");
-  await table.delete(`file_path = '${escaped}'`);
+  await withWriteLock(async () => {
+    await table.delete(`file_path = '${escaped}'`);
+  });
+}
+
+// --- Edges table ---
+
+/**
+ * Opens the 'edges' table if it already exists, or creates it with the edge schema.
+ * Pass { shouldReset: true } to drop and recreate (used when chunks table is reset
+ * due to embedding model change — old chunk IDs become stale).
+ */
+export async function openOrCreateEdgesTable(
+  db: lancedb.Connection,
+  opts?: { shouldReset?: boolean }
+): Promise<lancedb.Table> {
+  const tableNames = await db.tableNames();
+  if (tableNames.includes('edges')) {
+    if (opts?.shouldReset) {
+      log.warn('Resetting edges table (chunks table was recreated)');
+      await db.dropTable('edges');
+    } else {
+      log.info('Opened existing edges table');
+      return db.openTable('edges');
+    }
+  }
+  const schema = edgeSchema();
+  const emptyData = lancedb.makeArrowTable([], { schema });
+  const table = await db.createTable('edges', emptyData, { mode: 'overwrite' });
+  log.info('Created new edges table');
+  return table;
+}
+
+/**
+ * Inserts a batch of call edges into the LanceDB edges table.
+ * No-ops if edges is empty. Wrapped in withWriteLock.
+ */
+export async function insertEdges(
+  table: lancedb.Table,
+  edges: CallEdge[]
+): Promise<void> {
+  if (edges.length === 0) return;
+  const rows: EdgeRow[] = edges.map(e => ({
+    from_chunk_id: e.fromChunkId,
+    from_file:     e.fromFile,
+    from_symbol:   e.fromSymbol,
+    to_symbol:     e.toSymbol,
+    to_file:       e.toFile,
+    edge_type:     e.edgeType,
+  }));
+  await withWriteLock(async () => {
+    await table.add(rows);
+    log.debug({ count: rows.length }, 'Inserted edge rows');
+  });
+}
+
+/**
+ * Returns all edge rows where from_chunk_id matches the given value.
+ * Returns empty array if no matches. Uses SQL predicate with single-quote escaping.
+ */
+export async function queryEdgesFrom(
+  edgesTable: lancedb.Table,
+  fromChunkId: string
+): Promise<EdgeRow[]> {
+  const escaped = fromChunkId.replace(/'/g, "''");
+  return edgesTable.query().where(`from_chunk_id = '${escaped}'`).toArray() as Promise<EdgeRow[]>;
+}
+
+// --- Edges table ---
+
+/**
+ * Shape of a row stored in the LanceDB edges table.
+ * Field names use snake_case to match the Arrow schema column names.
+ */
+export interface EdgeRow {
+  from_chunk_id: string;
+  from_file: string;
+  from_symbol: string | null;
+  to_symbol: string;
+  to_file: string | null;
+  edge_type: 'call' | 'import';
+  /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
+  [key: string]: unknown;
 }
 
 // Re-export CodeChunk for consumers of this module that only import from lancedb.ts
