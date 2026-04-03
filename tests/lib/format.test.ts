@@ -5,8 +5,13 @@ import {
   formatTokenSavings,
   formatDoctorOutput,
   formatIndexResult,
+  formatSearchResults,
+  formatTraceFlow,
+  formatContext,
 } from '../../src/lib/format.js';
 import type { DoctorHealth, IndexResult } from '../../src/lib/format.js';
+import type { RetrievedChunk, ContextResult, ContextMetadata } from '../../src/lib/types.js';
+import type { TraceFlowResult } from '../../src/workflows/traceFlow.js';
 
 describe('formatToolResponse', () => {
   it('joins summary and body with a blank line separator', () => {
@@ -254,5 +259,203 @@ describe('formatIndexResult', () => {
       chunkCount: 50,
     };
     expect(formatIndexResult(result)).toContain('/custom/path/here');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatSearchResults
+// ---------------------------------------------------------------------------
+
+const makeChunk = (overrides: Partial<RetrievedChunk> = {}): RetrievedChunk => ({
+  id: 'chunk-1',
+  filePath: 'src/foo.ts',
+  chunkType: 'function',
+  scope: null,
+  name: 'doWork',
+  content: 'function doWork() {}',
+  startLine: 10,
+  endLine: 20,
+  similarity: 0.92,
+  ...overrides,
+});
+
+describe('formatSearchResults', () => {
+  it('returns clean sentence for zero results (not an empty list)', () => {
+    const result = formatSearchResults([]);
+    expect(result).toBe('No results found for the given query.');
+    expect(result).not.toContain('[');
+    expect(result).not.toContain(']');
+  });
+
+  it('contains rank number 1 for a single result', () => {
+    const result = formatSearchResults([makeChunk()]);
+    expect(result).toContain('1.');
+  });
+
+  it('contains name for a single result', () => {
+    const result = formatSearchResults([makeChunk()]);
+    expect(result).toContain('doWork');
+  });
+
+  it('contains chunkType for a single result', () => {
+    const result = formatSearchResults([makeChunk()]);
+    expect(result).toContain('function');
+  });
+
+  it('contains filePath:startLine for a single result', () => {
+    const result = formatSearchResults([makeChunk()]);
+    expect(result).toContain('src/foo.ts:10');
+  });
+
+  it('contains similarity score formatted to 3 decimal places', () => {
+    const result = formatSearchResults([makeChunk({ similarity: 0.92 })]);
+    expect(result).toContain('0.920');
+  });
+
+  it('produces numbered entries for multiple results', () => {
+    const chunks = [
+      makeChunk({ id: 'c1', name: 'alpha', similarity: 0.95 }),
+      makeChunk({ id: 'c2', name: 'beta', similarity: 0.80 }),
+    ];
+    const result = formatSearchResults(chunks);
+    expect(result).toContain('1.');
+    expect(result).toContain('2.');
+    expect(result).toContain('alpha');
+    expect(result).toContain('beta');
+  });
+
+  it('shows (anonymous) for null name', () => {
+    const result = formatSearchResults([makeChunk({ name: null })]);
+    expect(result).toContain('(anonymous)');
+  });
+
+  it('does not contain JSON braces or brackets', () => {
+    const result = formatSearchResults([makeChunk()]);
+    expect(result).not.toContain('{');
+    expect(result).not.toContain('[');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatTraceFlow
+// ---------------------------------------------------------------------------
+
+const makeHop = (overrides: Partial<TraceFlowResult['hops'][number]> = {}): TraceFlowResult['hops'][number] => ({
+  filePath: 'src/foo.ts',
+  name: 'doWork',
+  startLine: 10,
+  content: 'function doWork() {}',
+  callsFound: ['helperA', 'helperB'],
+  hopDepth: 0,
+  ...overrides,
+});
+
+const emptyTraceResult: TraceFlowResult = {
+  hops: [],
+  metadata: { seedChunkId: null, totalHops: 0, localTasksPerformed: [] },
+};
+
+describe('formatTraceFlow', () => {
+  it('returns clean sentence for zero hops (not an empty frame)', () => {
+    const result = formatTraceFlow(emptyTraceResult);
+    expect(result).toContain('No call hops found');
+    expect(result).not.toContain('[');
+    expect(result).not.toContain('{');
+  });
+
+  it('zero-hop message mentions index_repo', () => {
+    const result = formatTraceFlow(emptyTraceResult);
+    expect(result).toContain('index_repo');
+  });
+
+  it('contains hop number 1 for a single hop', () => {
+    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('1.');
+  });
+
+  it('contains hopDepth in output', () => {
+    const result = formatTraceFlow({ hops: [makeHop({ hopDepth: 0 })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('0');
+  });
+
+  it('contains filePath:startLine for a single hop', () => {
+    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('src/foo.ts:10');
+  });
+
+  it('contains name for a single hop', () => {
+    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('doWork');
+  });
+
+  it('contains callsFound comma-separated for a single hop', () => {
+    const result = formatTraceFlow({ hops: [makeHop({ callsFound: ['helperA', 'helperB'] })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('helperA');
+    expect(result).toContain('helperB');
+  });
+
+  it('shows (none) for empty callsFound', () => {
+    const result = formatTraceFlow({ hops: [makeHop({ callsFound: [] })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('(none)');
+  });
+
+  it('produces numbered entries for multiple hops', () => {
+    const result = formatTraceFlow({
+      hops: [makeHop({ name: 'alpha' }), makeHop({ name: 'beta', hopDepth: 1 })],
+      metadata: { seedChunkId: 'c1', totalHops: 2, localTasksPerformed: [] },
+    });
+    expect(result).toContain('1.');
+    expect(result).toContain('2.');
+  });
+
+  it('shows (anonymous) for null name', () => {
+    const result = formatTraceFlow({ hops: [makeHop({ name: null })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).toContain('(anonymous)');
+  });
+
+  it('does not contain JSON braces or brackets', () => {
+    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
+    expect(result).not.toContain('{');
+    expect(result).not.toContain('[');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatContext
+// ---------------------------------------------------------------------------
+
+const makeContextResult = (content: string = 'some content'): ContextResult => {
+  const metadata: ContextMetadata = {
+    tokensSent: 100,
+    estimatedWithoutBraincache: 500,
+    reductionPct: 80,
+    filesInContext: 3,
+    localTasksPerformed: ['embed', 'search'],
+    cloudCallsMade: 1,
+  };
+  return {
+    content,
+    chunks: [],
+    metadata,
+  };
+};
+
+describe('formatContext', () => {
+  it('returns the content string from ContextResult as-is', () => {
+    const ctx = makeContextResult('# Architecture\nSome overview');
+    const result = formatContext(ctx);
+    expect(result).toBe('# Architecture\nSome overview');
+  });
+
+  it('does not add any extra wrapper or heading', () => {
+    const ctx = makeContextResult('plain content');
+    const result = formatContext(ctx);
+    expect(result).toBe('plain content');
+  });
+
+  it('returns empty string when content is empty', () => {
+    const ctx = makeContextResult('');
+    const result = formatContext(ctx);
+    expect(result).toBe('');
   });
 });
