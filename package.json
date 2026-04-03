@@ -1,6 +1,6 @@
 {
   "name": "brain-cache",
-  "version": "0.4.2",
+  "version": "2.0.0",
   "description": "Local MCP-first context engine for Claude. Index your codebase, retrieve only what matters, and cut token usage.",
   "license": "MIT",
   "type": "module",
