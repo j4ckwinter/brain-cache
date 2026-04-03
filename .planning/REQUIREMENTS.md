@@ -3,96 +3,66 @@
 **Defined:** 2026-04-03
 **Core Value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
 
-## v2.1 Requirements
+## v2.2 Requirements
 
-Requirements for Presentation Magic milestone. Each maps to roadmap phases.
+Requirements for Retrieval Quality milestone. Each maps to roadmap phases.
 
-### Formatter Foundation
+### Retrieval Accuracy
 
-- [x] **FMT-01**: All MCP tools route output through a shared `formatToolResponse` function that produces a consistent envelope (summary + body + metadata)
-- [x] **FMT-02**: Every tool response begins with a one-sentence summary line that immediately answers the user's question
+- [ ] **RET-01**: Keyword boost weight is tunable per intent mode (lookup: 0.40, explore: 0.10, trace: 0.20) so that query-term matches rank proportionally higher in modes where the user names a specific symbol
+- [ ] **RET-02**: Chunks whose file name or symbol name matches a query term have their similarity score promoted above the 0.85 high-relevance threshold, preventing compression of the most relevant results
+- [ ] **RET-03**: trace_flow resolves the entry point via exact SQL name lookup on the chunks table before falling back to vector search, so verbose queries like "how does chunkFile work" anchor to the correct function
 
-### Tool Renderers
+### Output Quality
 
-- [x] **REND-01**: `search_codebase` returns a numbered ranked list with score, file path, line number, symbol name, and chunk type instead of raw JSON
-- [x] **REND-02**: `trace_flow` returns numbered hops showing hop depth, file path, line number, symbol name, and calls-found list instead of raw JSON
-- [x] **REND-03**: `doctor` returns a fixed-width health dashboard showing service status instead of raw JSON
-- [x] **REND-04**: `index_repo` returns a single-line completion summary instead of raw JSON
+- [x] **OUT-01**: trace_flow hop serialization emits each callee exactly once per hop — no duplicated callsFound entries in the output
+- [ ] **OUT-02**: Token savings are only reported when the result is non-empty and relevant — trace_flow with zero hops or wrong-seed results reports no savings instead of a fabricated percentage
 
-### Metadata & Errors
+### Search Noise
 
-- [x] **META-01**: Token savings metadata footer appears consistently on all 4 retrieval tools (search_codebase, build_context, trace_flow, explain_codebase)
-- [x] **META-02**: All 6 tools use a consistent error envelope with Error label, message, and optional Suggestion line
-- [x] **META-03**: Retrieval tools show a pipeline label in the metadata footer summarising local tasks performed
+- [ ] **NOISE-01**: Build tool config files (vitest.config, tsup.config, tsconfig, jest.config, eslint.config) receive a score penalty in search results unless the query explicitly mentions the tool name
 
-## v2.0 Requirements (Validated)
+### Tool Routing
 
-### Flow Tracing
-
-- [x] **FLOW-01**: Multi-hop flow tracing follows call/import paths across files via AST extraction with configurable hop depth (default 3)
-- [x] **FLOW-02**: `trace_flow` MCP tool exposes flow tracing to Claude with structured hop output
-
-### Retrieval Intelligence
-
-- [x] **INTENT-01**: Intent-aware retrieval modes (lookup/trace/explore) with distinct k, distance threshold, and post-processing per mode
-- [x] **ADV-01**: Configurable retrieval depth per query type via config and MCP tool input overrides
-
-### Context Quality
-
-- [x] **COH-01**: Context cohesion groups chunks by file/module, preserves source ordering
-- [x] **COMP-01**: Context compression via structural truncation — keep signatures, strip bodies
-- [x] **TOOL-02**: `explain_codebase` MCP tool returns module-grouped architecture summaries
-
-### Infrastructure
-
-- [x] **INC-02**: File watcher via chokidar v5 with debounce and automatic incremental re-indexing
-- [x] **EXC-01**: `.braincacheignore` custom exclusion patterns parsed alongside `.gitignore`
-
-### Adoption
-
-- [x] **ADOPT-01**: CLAUDE.md refinements to guide Claude toward new MCP tools with routing guidance
+- [ ] **ROUTE-01**: MCP tool descriptions include explicit negative examples ("Do NOT use this tool when...") and CLAUDE.md routing table is refined so Claude selects build_context for code understanding queries instead of defaulting to trace_flow
 
 ## Future Requirements
 
-### Advanced Retrieval (v2.x)
+Deferred to future release. Tracked but not in current roadmap.
 
-- **RANK-01**: Cross-encoder reranking for improved relevance (deferred — Ollama has no native rerank endpoint)
-- **ADV-03**: MCP server metadata (name, description) updated to reinforce brain-cache positioning
-- **ADV-04**: Input parameter descriptions improved with usage hints
+### Advanced Retrieval
+
+- **RANK-01**: Cross-encoder reranking for improved relevance (from v2.1 active backlog)
+- **FTS-01**: LanceDB full-text search for hybrid vector+keyword retrieval (deferred to v2.3 per research)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Emoji status indicators | CLAUDE.md no-emojis constraint; inconsistent rendering in tool panels |
-| ANSI colour codes | MCP text content not rendered in terminal; 50-80% token inflation |
-| Structured content field | MCP spec proposal not finalised; no practical benefit today |
-| Per-tool output format toggle | MCP tools consumed by LLM, not scripts; no use case |
-| Streaming/incremental output | MCP stdio buffers complete responses; not protocol-supported |
-| Markdown tables in output | Render as raw pipe characters in many Claude Code contexts |
-| Workflow/service changes | Presentation layer only; formatters sit in lib/ and mcp/ |
-| Second LLM call for reranking | Adds cloud latency and cost; defeats local-first purpose |
-| Graph database for call relationships | Requires external server; violates no-server constraint |
+| Cross-encoder reranking model | Heavy dependency, deferred — keyword boost covers v2.2 gap |
+| LanceDB FTS index | Requires re-indexing all repos; keyword boost sufficient for v2.2 |
+| BM25 scoring | Over-engineered for current scale; score penalty is simpler |
+| New MCP tools | v2.2 is refinement of existing tools, not new capabilities |
 
 ## Traceability
 
+Which phases cover which requirements. Updated during roadmap creation.
+
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FMT-01 | Phase 20 | Complete |
-| FMT-02 | Phase 20 | Complete |
-| REND-01 | Phase 20 | Complete |
-| REND-02 | Phase 20 | Complete |
-| REND-03 | Phase 20 | Complete |
-| REND-04 | Phase 20 | Complete |
-| META-01 | Phase 21 | Complete |
-| META-02 | Phase 20 | Complete |
-| META-03 | Phase 21 | Complete |
+| RET-01 | Phase 24 | Pending |
+| RET-02 | Phase 24 | Pending |
+| RET-03 | Phase 22 | Pending |
+| OUT-01 | Phase 22 | Complete |
+| OUT-02 | Phase 24 | Pending |
+| NOISE-01 | Phase 23 | Pending |
+| ROUTE-01 | Phase 25 | Pending |
 
 **Coverage:**
-- v2.1 requirements: 9 total
-- Mapped to phases: 9
+- v2.2 requirements: 7 total
+- Mapped to phases: 7
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 — traceability updated after v2.1 roadmap creation*
+*Last updated: 2026-04-03 — traceability filled in after roadmap creation*
