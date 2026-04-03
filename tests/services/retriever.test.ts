@@ -123,6 +123,51 @@ describe('searchChunks', () => {
 
     expect(results).toHaveLength(0);
   });
+
+  describe('config file noise penalty', () => {
+    it('penalizes config files for generic queries', async () => {
+      const configRow = makeRow({ id: 'config', file_path: 'vitest.config.ts', _distance: 0.20 });
+      const appRow = makeRow({ id: 'app', file_path: 'src/services/configLoader.ts', _distance: 0.25 });
+      const table = makeMockTable([configRow, appRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'config values');
+
+      // app code ranks first despite higher distance because vitest.config.ts receives noise penalty
+      expect(results[0].id).toBe('app');
+    });
+
+    it('does not penalize config files when query names the tool', async () => {
+      const tsupRow = makeRow({ id: 'tsup-config', file_path: 'tsup.config.ts', _distance: 0.20 });
+      const buildRow = makeRow({ id: 'build', file_path: 'src/build.ts', _distance: 0.25 });
+      const table = makeMockTable([tsupRow, buildRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'how does tsup build the project');
+
+      // tsup.config.ts ranks first because query contains "tsup" — penalty is bypassed
+      expect(results[0].id).toBe('tsup-config');
+    });
+
+    it('does not penalize non-config files with config in the name', async () => {
+      const appRow = makeRow({ id: 'app-config', file_path: 'src/lib/config.ts', _distance: 0.20 });
+      const table = makeMockTable([appRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'config values');
+
+      // src/lib/config.ts is not a build tool config file — no penalty
+      expect(results[0].id).toBe('app-config');
+      expect(results).toHaveLength(1);
+    });
+
+    it('penalized config files are still returned, not excluded', async () => {
+      const vitestRow = makeRow({ id: 'vitest-cfg', file_path: 'vitest.config.ts', _distance: 0.20 });
+      const table = makeMockTable([vitestRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'config values');
+
+      // Penalty is a score subtraction, not a hard filter — file still appears
+      expect(results).toHaveLength(1);
+    });
+  });
 });
 
 describe('deduplicateChunks', () => {
