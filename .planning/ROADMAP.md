@@ -121,10 +121,10 @@ Plans:
   2. Saving multiple files in rapid succession (e.g. a formatter run) triggers a single debounced re-index pass, not one pass per file
   3. Files matching `.braincacheignore` patterns are not re-indexed when modified
   4. The file watcher and a concurrent `brain-cache index` command do not corrupt the LanceDB table
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 18-01-PLAN.md — fileWatcher service and watch workflow with debounce, cross-process lock, signal cleanup
+- [x] 18-01-PLAN.md — fileWatcher service and watch workflow with debounce, cross-process lock, signal cleanup
 - [ ] 18-02-PLAN.md — CLI watch command wiring, chokidar install, end-to-end verification
 
 ### Phase 19: CLAUDE.md Refinements
@@ -163,7 +163,7 @@ Plans:
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
 | 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
 | 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete    | 2026-04-03 |
-| 18. File Watcher | v2.0 | 0/2 | Planned | - |
+| 18. File Watcher | v2.0 | 1/2 | In Progress|  |
 | 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |
 
 ---

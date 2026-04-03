@@ -25,7 +25,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INC-02**: File watcher via chokidar v5 with debounce, write mutex, and automatic incremental re-indexing on file save
+- [x] **INC-02**: File watcher via chokidar v5 with debounce, write mutex, and automatic incremental re-indexing on file save
 - [x] **EXC-01**: `.braincacheignore` custom exclusion patterns parsed alongside `.gitignore` at index time
 
 ### Adoption
@@ -64,7 +64,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 | TOOL-02 | Phase 17 | Complete |
 | ADV-01 | Phase 17 | Complete |
 | COMP-01 | Phase 17 | Complete |
-| INC-02 | Phase 18 | Pending |
+| INC-02 | Phase 18 | Complete |
 | ADOPT-01 | Phase 19 | Pending |
 
 **Coverage:**
