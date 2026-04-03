@@ -61,6 +61,10 @@ vi.mock('../../src/services/logger.js', () => ({
   })),
 }));
 
+vi.mock('../../src/services/sessionStats.js', () => ({
+  accumulateStats: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { readProfile, detectCapabilities } from '../../src/services/capability.js';
 import {
   isOllamaInstalled,
@@ -73,8 +77,10 @@ import { runSearch } from '../../src/workflows/search.js';
 import { runBuildContext } from '../../src/workflows/buildContext.js';
 import { runTraceFlow } from '../../src/workflows/traceFlow.js';
 import { runExplainCodebase } from '../../src/workflows/explainCodebase.js';
+import { accumulateStats } from '../../src/services/sessionStats.js';
 
 const mockReadProfile = vi.mocked(readProfile);
+const mockAccumulateStats = vi.mocked(accumulateStats);
 const mockDetectCapabilities = vi.mocked(detectCapabilities);
 const mockIsOllamaInstalled = vi.mocked(isOllamaInstalled);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
@@ -511,6 +517,126 @@ describe('MCP tool handlers', () => {
       const desc = registeredTools.get('explain_codebase')!.schema.description as string;
       expect(desc).toContain('Do NOT use this tool');
       expect(desc).toContain('build_context');
+    });
+  });
+
+  // ---- stats accumulation ----
+
+  describe('stats accumulation', () => {
+    it('accumulateStats is called with correct delta after successful build_context', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunBuildContext.mockResolvedValue(fakeContextResult);
+      mockAccumulateStats.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('build_context')!;
+      await handler({ query: 'how does auth work' });
+
+      expect(mockAccumulateStats).toHaveBeenCalledWith({
+        tokensSent: 150,
+        estimatedWithoutBraincache: 1000,
+      });
+    });
+
+    it('accumulateStats is NOT called when build_context throws', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunBuildContext.mockRejectedValue(new Error('Context build failed'));
+
+      const { handler } = registeredTools.get('build_context')!;
+      const result = await handler({ query: 'how does auth work' });
+
+      expect(result.isError).toBe(true);
+      expect(mockAccumulateStats).not.toHaveBeenCalled();
+    });
+
+    it('accumulateStats is called with correct delta after successful search_codebase', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      // chunk content: 'function fn_1() {}' = 18 chars, 'function fn_2() {}' = 18 chars => 36 total
+      // tokensSent = Math.round(36 / 4) = 9, estimatedWithoutBraincache = 9 * 3 = 27
+      const chunk1 = fakeChunk('1');
+      const chunk2 = fakeChunk('2');
+      mockRunSearch.mockResolvedValue([chunk1, chunk2]);
+      mockAccumulateStats.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('search_codebase')!;
+      await handler({ query: 'find auth functions' });
+
+      const expectedTokensSent = Math.round(
+        (chunk1.content.length + chunk2.content.length) / 4
+      );
+      expect(mockAccumulateStats).toHaveBeenCalledWith({
+        tokensSent: expectedTokensSent,
+        estimatedWithoutBraincache: expectedTokensSent * 3,
+      });
+    });
+
+    it('accumulateStats is called with correct delta after successful trace_flow', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunTraceFlow.mockResolvedValue({
+        hops: [],
+        metadata: {
+          seedChunkId: 'chunk-1',
+          totalHops: 0,
+          localTasksPerformed: [],
+          tokensSent: 50,
+          estimatedWithoutBraincache: 200,
+          reductionPct: 75,
+          filesInContext: 1,
+        },
+      } as any);
+      mockAccumulateStats.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('trace_flow')!;
+      await handler({ entrypoint: 'runBuildContext' });
+
+      expect(mockAccumulateStats).toHaveBeenCalledWith({
+        tokensSent: 50,
+        estimatedWithoutBraincache: 200,
+      });
+    });
+
+    it('accumulateStats is called with correct delta after successful explain_codebase', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunExplainCodebase.mockResolvedValue({
+        content: 'Architecture overview text',
+        chunks: [],
+        metadata: {
+          tokensSent: 300,
+          estimatedWithoutBraincache: 1200,
+          reductionPct: 75,
+          filesInContext: 4,
+          localTasksPerformed: ['embed_query', 'vector_search'],
+          cloudCallsMade: 0,
+        },
+      } as any);
+      mockAccumulateStats.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('explain_codebase')!;
+      await handler({ path: '/my/project' });
+
+      expect(mockAccumulateStats).toHaveBeenCalledWith({
+        tokensSent: 300,
+        estimatedWithoutBraincache: 1200,
+      });
+    });
+
+    it('accumulateStats failure does not affect handler response (fire-and-forget)', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunBuildContext.mockResolvedValue(fakeContextResult);
+      // Simulate accumulateStats failing — handler should still return a valid response
+      mockAccumulateStats.mockRejectedValue(new Error('disk full'));
+
+      const { handler } = registeredTools.get('build_context')!;
+      const result = await handler({ query: 'how does auth work' });
+
+      // Handler returns successfully despite accumulateStats failure (caught by .catch)
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('Context assembled for');
     });
   });
 
