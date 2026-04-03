@@ -21,8 +21,8 @@ Requirements for Final Quality Pass milestone. Each maps to roadmap phases.
 
 - [x] **TRACE-01**: trace_flow excludes test files from BFS traversal
 - [x] **TRACE-02**: trace_flow filters native/standard library calls from hop lists
-- [ ] **TRACE-03**: trace_flow surfaces a confidence warning when seed search similarity is below threshold, instead of silently tracing the nearest unrelated match
-- [ ] **TRACE-04**: trace_flow prefers CLI entry files as seeds when the query mentions CLI entrypoints
+- [x] **TRACE-03**: trace_flow surfaces a confidence warning when seed search similarity is below threshold, instead of silently tracing the nearest unrelated match
+- [x] **TRACE-04**: trace_flow prefers CLI entry files as seeds when the query mentions CLI entrypoints
 
 ### Explain Quality
 
@@ -86,8 +86,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMP-02 | Phase 27 | Complete |
 | TRACE-01 | Phase 28 | Complete |
 | TRACE-02 | Phase 28 | Complete |
-| TRACE-03 | Phase 28 | Pending |
-| TRACE-04 | Phase 28 | Pending |
+| TRACE-03 | Phase 28 | Complete |
+| TRACE-04 | Phase 28 | Complete |
 | EXPL-01 | Phase 29 | Pending |
 
 **Coverage:**
