@@ -189,12 +189,14 @@ export async function runTraceFlow(
       };
     });
 
+    const exactSavings = await computeHopSavings(hops);
     return {
       hops,
       metadata: {
         seedChunkId,
         totalHops: hops.length,
         localTasksPerformed: ['exact_name_lookup', 'bfs_trace', 'compress'],
+        ...exactSavings,
       },
     };
   }

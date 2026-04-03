@@ -340,6 +340,7 @@ describe('token savings computation (OUT-02)', () => {
     mockLoadUserConfig.mockResolvedValue({});
     mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.30 });
     mockCompressChunk.mockImplementation((chunk) => chunk);
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
 
     const mod = await import('../../src/workflows/traceFlow.js');
     runTraceFlow = mod.runTraceFlow;
