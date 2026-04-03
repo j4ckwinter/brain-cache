@@ -425,3 +425,179 @@ describe('token savings computation (OUT-02)', () => {
     expect(result.metadata).toHaveProperty('filesInContext');
   });
 });
+
+describe('test file hop exclusion (TRACE-01)', () => {
+  beforeEach(async () => {
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockDb.openTable.mockImplementation(async (name: string) => {
+      if (name === 'edges') return mockEdgesTable;
+      return mockTable;
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockLoadUserConfig.mockResolvedValue({});
+    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.5 });
+    mockCompressChunk.mockImplementation((chunk) => chunk);
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+
+    const mod = await import('../../src/workflows/traceFlow.js');
+    runTraceFlow = mod.runTraceFlow;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const hopsWithTestFiles = [
+    {
+      chunkId: 'prod-1',
+      filePath: '/project/src/services/logger.ts',
+      name: 'createLogger',
+      startLine: 1,
+      endLine: 20,
+      content: 'function createLogger() { ... }',
+      hopDepth: 0,
+      callsFound: ['pino'],
+    },
+    {
+      chunkId: 'test-1',
+      filePath: '/project/tests/services/logger.test.ts',
+      name: 'describe',
+      startLine: 1,
+      endLine: 50,
+      content: 'describe("logger", () => { ... })',
+      hopDepth: 1,
+      callsFound: ['createLogger'],
+    },
+    {
+      chunkId: 'test-2',
+      filePath: '/project/src/__tests__/auth.test.ts',
+      name: 'testAuth',
+      startLine: 1,
+      endLine: 30,
+      content: 'test("auth", () => { ... })',
+      hopDepth: 1,
+      callsFound: ['authenticate'],
+    },
+  ];
+
+  it('excludes hop with .test. in filePath from result.hops (vector path)', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithTestFiles);
+    const result = await runTraceFlow('createLogger function');
+    expect(result.hops).toHaveLength(1);
+    expect(result.hops[0].filePath).toBe('/project/src/services/logger.ts');
+  });
+
+  it('does NOT exclude production file hops (vector path)', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithTestFiles);
+    const result = await runTraceFlow('createLogger function');
+    const prodHop = result.hops.find(h => h.filePath === '/project/src/services/logger.ts');
+    expect(prodHop).toBeDefined();
+  });
+
+  it('excludes hop with /__tests__/ in filePath (vector path)', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithTestFiles);
+    const result = await runTraceFlow('createLogger function');
+    const testHop = result.hops.find(h => h.filePath.includes('/__tests__/'));
+    expect(testHop).toBeUndefined();
+  });
+
+  it('also excludes test file hops on exact-name path', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue('prod-1');
+    mockTraceFlow.mockResolvedValue(hopsWithTestFiles);
+    const result = await runTraceFlow('how does createLogger work');
+    expect(result.hops).toHaveLength(1);
+    expect(result.hops[0].filePath).toBe('/project/src/services/logger.ts');
+  });
+
+  it('metadata.totalHops reflects filtered count (not pre-filter count)', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithTestFiles);
+    const result = await runTraceFlow('createLogger function');
+    expect(result.metadata.totalHops).toBe(1);
+  });
+});
+
+describe('stdlib symbol filtering (TRACE-02)', () => {
+  beforeEach(async () => {
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockDb.openTable.mockImplementation(async (name: string) => {
+      if (name === 'edges') return mockEdgesTable;
+      return mockTable;
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockLoadUserConfig.mockResolvedValue({});
+    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.5 });
+    mockCompressChunk.mockImplementation((chunk) => chunk);
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+
+    const mod = await import('../../src/workflows/traceFlow.js');
+    runTraceFlow = mod.runTraceFlow;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  const hopsWithStdlib = [
+    {
+      chunkId: 'prod-1',
+      filePath: '/project/src/auth.ts',
+      name: 'authenticate',
+      startLine: 10,
+      endLine: 30,
+      content: 'function authenticate() { ... }',
+      hopDepth: 0,
+      callsFound: ['findUser', 'map', 'filter', 'includes', 'resolve', 'push', 'has'],
+    },
+    {
+      chunkId: 'prod-2',
+      filePath: '/project/src/db.ts',
+      name: 'findUser',
+      startLine: 5,
+      endLine: 20,
+      content: 'function findUser() { ... }',
+      hopDepth: 1,
+      callsFound: ['query', 'then', 'catch', 'toString'],
+    },
+  ];
+
+  it('strips stdlib method names (map, filter, includes, resolve, push, has) from callsFound (vector path)', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithStdlib);
+    const result = await runTraceFlow('authenticate function');
+    expect(result.hops[0].callsFound).toEqual(['findUser']);
+  });
+
+  it('retains project-owned symbols like findUser and authenticate not in blocklist', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithStdlib);
+    const result = await runTraceFlow('authenticate function');
+    expect(result.hops[0].callsFound).toContain('findUser');
+    expect(result.hops[1].callsFound).toContain('query');
+  });
+
+  it('callsFound filtering works on exact-name path hops too', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue('prod-1');
+    mockTraceFlow.mockResolvedValue(hopsWithStdlib);
+    const result = await runTraceFlow('how does authenticate work');
+    expect(result.hops[0].callsFound).toEqual(['findUser']);
+  });
+
+  it('hop with mixed stdlib and project symbols returns only project symbols', async () => {
+    mockTraceFlow.mockResolvedValue(hopsWithStdlib);
+    const result = await runTraceFlow('authenticate function');
+    // hop[1] has query (project) + then, catch, toString (stdlib)
+    expect(result.hops[1].callsFound).toEqual(['query']);
+  });
+});
