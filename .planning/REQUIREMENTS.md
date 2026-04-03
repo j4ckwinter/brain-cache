@@ -20,7 +20,7 @@ Requirements for Retrieval Quality milestone. Each maps to roadmap phases.
 
 ### Search Noise
 
-- [ ] **NOISE-01**: Build tool config files (vitest.config, tsup.config, tsconfig, jest.config, eslint.config) receive a score penalty in search results unless the query explicitly mentions the tool name
+- [x] **NOISE-01**: Build tool config files (vitest.config, tsup.config, tsconfig, jest.config, eslint.config) receive a score penalty in search results unless the query explicitly mentions the tool name
 
 ### Tool Routing
 
@@ -55,7 +55,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RET-03 | Phase 22 | Complete |
 | OUT-01 | Phase 22 | Complete |
 | OUT-02 | Phase 24 | Pending |
-| NOISE-01 | Phase 23 | Pending |
+| NOISE-01 | Phase 23 | Complete |
 | ROUTE-01 | Phase 25 | Pending |
 
 **Coverage:**

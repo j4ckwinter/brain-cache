@@ -79,7 +79,7 @@
 **Milestone Goal:** Fix tool routing, retrieval accuracy, and output quality issues discovered during v2.1 testing — make brain-cache reliably return the right content via the right tool.
 
 - [x] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop (completed 2026-04-03)
-- [ ] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise
+- [x] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise (completed 2026-04-03)
 - [ ] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings
 - [ ] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior
 
@@ -220,7 +220,10 @@ Plans:
   2. A search for "how does tsup build the project" still surfaces tsup.config.ts in results — the penalty does not apply when the tool name appears in the query
   3. The penalty is a score coefficient subtracted from the blended score, not a hard exclusion — penalized files remain reachable for explicit queries
   4. The penalty constant is named and documented in retriever.ts so its intent is clear without reading surrounding code
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [x] 23-01-PLAN.md — TDD: config file noise penalty in searchChunks blended scoring
 
 ### Phase 24: Compression and Savings Accuracy
 **Goal**: Chunks whose file or symbol name matches a query term are protected from body compression, and token savings figures reflect only results that were actually returned and relevant
@@ -232,7 +235,10 @@ Plans:
   3. Calling `trace_flow` on a query that resolves to zero hops reports zero token savings, not a fabricated percentage
   4. Calling `trace_flow` on a query that resolves to the wrong entry point reports zero savings rather than an inflated number based on discarded results
   5. Token savings on successful trace_flow calls are computed from the actual content returned, not a hardcoded constant
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 23-01-PLAN.md — TDD: config file noise penalty in searchChunks blended scoring
 **UI hint**: no
 
 ### Phase 25: Tool Routing Documentation
@@ -244,7 +250,10 @@ Plans:
   2. Given "trace how X calls Y" (call path), Claude calls `trace_flow` — not `build_context`
   3. Each MCP tool description contains at least one "Do NOT use this tool when..." negative example that names a specific anti-pattern query
   4. The CLAUDE.md routing table rows reflect the behavior delivered by Phases 22-24, not prior intent
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 23-01-PLAN.md — TDD: config file noise penalty in searchChunks blended scoring
 
 ## Progress
 
