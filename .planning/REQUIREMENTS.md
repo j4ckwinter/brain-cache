@@ -19,7 +19,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 
 ### Context Quality
 
-- [ ] **COH-01**: Context cohesion groups chunks by file/module, preserves source ordering, includes parent class when method chunk is selected
+- [x] **COH-01**: Context cohesion groups chunks by file/module, preserves source ordering, includes parent class when method chunk is selected
 - [ ] **COMP-01**: Context compression via structural truncation — keep function/class signatures, strip bodies for chunks exceeding compression threshold
 - [ ] **TOOL-02**: `explain_codebase` MCP tool returns module-grouped architecture summaries using explore mode + cohesion
 
@@ -59,7 +59,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 | EXC-01 | Phase 15 | Complete |
 | FLOW-01 | Phase 16 | Complete |
 | INTENT-01 | Phase 16 | Complete |
-| COH-01 | Phase 16 | Pending |
+| COH-01 | Phase 16 | Complete |
 | FLOW-02 | Phase 17 | Pending |
 | TOOL-02 | Phase 17 | Pending |
 | ADV-01 | Phase 17 | Pending |
