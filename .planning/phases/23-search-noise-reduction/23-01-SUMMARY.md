@@ -121,6 +121,16 @@ None - no external service configuration required.
 - Phase 24 (compression-and-savings-accuracy) can build on this — it needs per-intent keyword boost weights and compressed vs. uncompressed logic
 - NOISE-01 requirement satisfied: config files rank below app code for generic queries, bypass works for tool-name queries
 
+## Self-Check: PASSED
+
+- FOUND: src/services/retriever.ts (contains CONFIG_FILE_NOISE_PENALTY, computeNoisePenalty)
+- FOUND: tests/services/retriever.test.ts (contains describe('config file noise penalty'))
+- FOUND: .planning/phases/23-search-noise-reduction/23-01-SUMMARY.md
+- FOUND: 7dec1e9 (test RED commit)
+- FOUND: 107d63d (feat GREEN commit)
+- FOUND: 5278efc (docs final commit)
+- VERIFIED: npm test — 401 tests pass, 0 failures
+
 ---
 *Phase: 23-search-noise-reduction*
 *Completed: 2026-04-03*
