@@ -117,7 +117,10 @@
   2. Two MCP tool calls executing concurrently produce a stats file containing the sum of both calls' savings — no call's contribution is silently discarded by a concurrent write
   3. A stats file whose `lastUpdatedAt` timestamp is older than the configured TTL (default 2 hours) is treated as expired — the next accumulation resets the counters to zero before adding the new delta
   4. A failure in stats accumulation does not fail or delay the tool call response — the side effect is fire-and-forget
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
+- [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
 
 ### Phase 31: Status Line Rendering
 **Goal**: Claude Code displays brain-cache's cumulative token savings after every prompt via a Node.js status line script that gracefully handles missing or expired stats
@@ -129,7 +132,10 @@
   3. When the stats file exists but its `lastUpdatedAt` is older than the TTL, the status line script prints `brain-cache  idle` — stale data is never displayed
   4. If the script encounters any runtime error (malformed JSON, missing file, permissions), it catches the error and prints `brain-cache  idle` rather than exiting with a non-zero code or producing no output
   5. The script completes under 100ms cold-start — it does only synchronous file reads and string formatting with no subprocess spawning or network calls
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
+- [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
 **UI hint**: yes
 
 ### Phase 32: Init Integration
@@ -141,7 +147,10 @@
   2. Running `brain-cache init` on a machine where `~/.claude/settings.json` already has other keys (env vars, keybindings, other hooks) leaves all existing keys intact — only the `statusLine` key is added
   3. Running `brain-cache init` on a machine where `~/.claude/settings.json` already has a `statusLine` entry prints a visible warning and skips overwriting — the existing entry is preserved
   4. Running `brain-cache init` twice on a clean machine produces identical results both times — the operation is idempotent
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
+- [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
 
 ## Progress
 
