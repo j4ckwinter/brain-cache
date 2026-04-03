@@ -115,6 +115,15 @@ None - no external service configuration required.
 - `src/mcp/index.ts` still uses inline types for DoctorHealth and IndexResult — Phase 21 will wire the new exported interfaces
 - No blockers
 
+## Self-Check: PASSED
+
+- src/lib/format.ts: FOUND
+- tests/lib/format.test.ts: FOUND
+- .planning/phases/20-formatter-foundation/20-01-SUMMARY.md: FOUND
+- Commit 39ea376 (RED): FOUND
+- Commit b43aae0 (GREEN): FOUND
+- Commit 757606d (docs): FOUND
+
 ---
 *Phase: 20-formatter-foundation*
 *Completed: 2026-04-03*
