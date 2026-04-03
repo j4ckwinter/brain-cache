@@ -132,7 +132,7 @@ export async function runBuildContext(
     const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
     const queryVector = vectors[0];
 
-    const results = await searchChunks(table, queryVector, strategy);
+    const results = await searchChunks(table, queryVector, strategy, query);
     const deduped = deduplicateChunks(results);
     const assembled = assembleContext(deduped, { maxTokens });
     const enriched = await enrichWithParentClass(assembled.chunks, table, { maxTokens, currentTokens: assembled.tokenCount });

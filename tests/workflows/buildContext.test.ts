@@ -386,6 +386,14 @@ describe('runBuildContext', () => {
     expect(mockResolveStrategy).toHaveBeenCalledWith('lookup', {}, undefined);
   });
 
+  it('passes query string as 4th argument to searchChunks on lookup path (RET-01)', async () => {
+    mockClassifyRetrievalMode.mockReturnValue('lookup');
+    await runBuildContext('find the auth function');
+    expect(mockSearchChunks).toHaveBeenCalled();
+    const call = mockSearchChunks.mock.calls[0];
+    expect(call[3]).toBe('find the auth function');
+  });
+
   describe('trace mode with edges table', () => {
     const seedChunk = fakeChunk('seed-1', '/project/src/auth.ts');
     const traceHops = [

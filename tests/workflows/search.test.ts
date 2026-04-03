@@ -158,8 +158,16 @@ describe('runSearch', () => {
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 20, distanceThreshold: 0.6 })
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.6 }),
+      'why is the login broken'
     );
+  });
+
+  it('passes query string as 4th argument to searchChunks (RET-01)', async () => {
+    await runSearch('find the compression function');
+    expect(mockSearchChunks).toHaveBeenCalled();
+    const call = mockSearchChunks.mock.calls[0];
+    expect(call[3]).toBe('find the compression function');
   });
 
   it('calls deduplicateChunks on search results', async () => {
@@ -216,7 +224,8 @@ describe('runSearch', () => {
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 5 })
+      expect.objectContaining({ limit: 5 }),
+      'test query'
     );
   });
 
@@ -226,7 +235,8 @@ describe('runSearch', () => {
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 20, distanceThreshold: 0.6 })
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.6 }),
+      'how does routing work'
     );
   });
 });

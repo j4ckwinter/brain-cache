@@ -74,7 +74,7 @@ export async function runSearch(
   const queryVector = vectors[0];
 
   // 7. Search and deduplicate
-  const results = await searchChunks(table, queryVector, strategy);
+  const results = await searchChunks(table, queryVector, strategy, query);
   const deduped = deduplicateChunks(results);
 
   // 8. Print results summary to stderr
