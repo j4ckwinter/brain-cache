@@ -63,6 +63,7 @@ export async function runSearch(
   const strategy: SearchOptions = {
     limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
     distanceThreshold: RETRIEVAL_STRATEGIES[mode].distanceThreshold,
+    keywordBoostWeight: RETRIEVAL_STRATEGIES[mode].keywordBoostWeight,
   };
 
   process.stderr.write(
