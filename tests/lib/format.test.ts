@@ -46,7 +46,7 @@ describe('formatErrorEnvelope', () => {
 });
 
 describe('formatTokenSavings', () => {
-  it('formats typical token savings without padEnd alignment', () => {
+  it('formats typical token savings with plain label: value format (no column alignment)', () => {
     const result = formatTokenSavings({
       tokensSent: 1240,
       estimatedWithout: 18600,
@@ -117,14 +117,14 @@ describe('formatTokenSavings', () => {
     expect(result).not.toContain('~500');
   });
 
-  it('does not use padEnd alignment (no extra spaces between label and value)', () => {
+  it('uses plain label: value format with no extra spaces between label and value', () => {
     const result = formatTokenSavings({
       tokensSent: 1240,
       estimatedWithout: 18600,
       reductionPct: 93,
       filesInContext: 5,
     });
-    // No padEnd means "Tokens sent to Claude: " immediately followed by value
+    // Plain format: "Tokens sent to Claude: " immediately followed by value
     expect(result).toContain('Tokens sent to Claude: 1,240');
     expect(result).toContain('Reduction: 93%');
   });
