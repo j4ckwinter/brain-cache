@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.2
 milestone_name: Retrieval Quality
-status: verifying
-stopped_at: Completed 22-02-PLAN.md
-last_updated: "2026-04-03T12:28:19.102Z"
+status: executing
+stopped_at: Completed 24-01-PLAN.md
+last_updated: "2026-04-03T13:50:12.497Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 18
-  completed_plans: 18
+  completed_phases: 10
+  total_plans: 21
+  completed_plans: 21
   percent: 0
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 22 — isolated-trace-fixes
+**Current focus:** Phase 24 — compression-and-savings-accuracy
 
 ---
 
 ## Current Position
 
-Phase: 22 (isolated-trace-fixes) — EXECUTING
+Phase: 24 (compression-and-savings-accuracy) — EXECUTING
 Plan: 2 of 2
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-03
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ---
 
@@ -46,6 +46,13 @@ Progress: [░░░░░░░░░░] 0%
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 24, Plan 01 — RET-01 + RET-02)
+
+- Per-mode keywordBoostWeight stored in RETRIEVAL_STRATEGIES co-located with limit/distanceThreshold (lookup: 0.40, trace: 0.20, explore: 0.10)
+- Sort score computed on original chunk.similarity BEFORE promotion to avoid re-ranking distortion
+- Name-match promotion triggers on boost > 0 (any match), not a threshold, protecting partial filename matches
+- buildContext.ts and search.ts both pass query as 4th arg to searchChunks on their lookup paths
 
 ### Key Decisions (Phase 22, Plan 01 — callsFound dedup)
 
@@ -84,9 +91,9 @@ Phase 25: ROUTE-01 (documentation only, CLAUDE.md + mcp/index.ts description str
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T12:28:19.097Z
+**Last session:** 2026-04-03T13:50:12.491Z
 
-**Stopped at:** Completed 22-02-PLAN.md
+**Stopped at:** Completed 24-01-PLAN.md
 
 **Next action:** Plan Phase 22 — `/gsd:plan-phase 22`
 

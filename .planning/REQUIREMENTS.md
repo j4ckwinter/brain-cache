@@ -9,14 +9,14 @@ Requirements for Retrieval Quality milestone. Each maps to roadmap phases.
 
 ### Retrieval Accuracy
 
-- [ ] **RET-01**: Keyword boost weight is tunable per intent mode (lookup: 0.40, explore: 0.10, trace: 0.20) so that query-term matches rank proportionally higher in modes where the user names a specific symbol
-- [ ] **RET-02**: Chunks whose file name or symbol name matches a query term have their similarity score promoted above the 0.85 high-relevance threshold, preventing compression of the most relevant results
+- [x] **RET-01**: Keyword boost weight is tunable per intent mode (lookup: 0.40, explore: 0.10, trace: 0.20) so that query-term matches rank proportionally higher in modes where the user names a specific symbol
+- [x] **RET-02**: Chunks whose file name or symbol name matches a query term have their similarity score promoted above the 0.85 high-relevance threshold, preventing compression of the most relevant results
 - [x] **RET-03**: trace_flow resolves the entry point via exact SQL name lookup on the chunks table before falling back to vector search, so verbose queries like "how does chunkFile work" anchor to the correct function
 
 ### Output Quality
 
 - [x] **OUT-01**: trace_flow hop serialization emits each callee exactly once per hop — no duplicated callsFound entries in the output
-- [ ] **OUT-02**: Token savings are only reported when the result is non-empty and relevant — trace_flow with zero hops or wrong-seed results reports no savings instead of a fabricated percentage
+- [x] **OUT-02**: Token savings are only reported when the result is non-empty and relevant — trace_flow with zero hops or wrong-seed results reports no savings instead of a fabricated percentage
 
 ### Search Noise
 
@@ -50,8 +50,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RET-01 | Phase 24 | Pending |
-| RET-02 | Phase 24 | Pending |
+| RET-01 | Phase 24 | Complete |
+| RET-02 | Phase 24 | Complete |
 | RET-03 | Phase 22 | Complete |
 | OUT-01 | Phase 22 | Complete |
 | OUT-02 | Phase 24 | Pending |

@@ -80,7 +80,7 @@
 
 - [x] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop (completed 2026-04-03)
 - [x] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise (completed 2026-04-03)
-- [ ] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings
+- [x] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings (completed 2026-04-03)
 - [ ] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior
 
 ## Phase Details
@@ -235,11 +235,11 @@ Plans:
   3. Calling `trace_flow` on a query that resolves to zero hops reports zero token savings, not a fabricated percentage
   4. Calling `trace_flow` on a query that resolves to the wrong entry point reports zero savings rather than an inflated number based on discarded results
   5. Token savings on successful trace_flow calls are computed from the actual content returned, not a hardcoded constant
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 24-01-PLAN.md — Per-mode keyword boost weights and similarity promotion for name-matched chunks (RET-01, RET-02)
-- [ ] 24-02-PLAN.md — Real token savings computation in runTraceFlow (OUT-02)
+- [x] 24-01-PLAN.md — Per-mode keyword boost weights and similarity promotion for name-matched chunks (RET-01, RET-02)
+- [x] 24-02-PLAN.md — Real token savings computation in runTraceFlow (OUT-02)
 
 ### Phase 25: Tool Routing Documentation
 **Goal**: Claude selects the correct brain-cache tool for all documented query patterns, guided by explicit negative examples in both MCP tool descriptions and CLAUDE.md
@@ -282,7 +282,7 @@ Plans:
 | 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete | 2026-04-03 |
 | 22. Isolated Trace Fixes | v2.2 | 2/2 | Complete   | 2026-04-03 |
 | 23. Search Noise Reduction | v2.2 | 1/1 | Complete    | 2026-04-03 |
-| 24. Compression and Savings Accuracy | v2.2 | 0/2 | Not started | - |
+| 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete   | 2026-04-03 |
 | 25. Tool Routing Documentation | v2.2 | 0/? | Not started | - |
 
 ---
