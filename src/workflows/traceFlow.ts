@@ -4,7 +4,7 @@ import { isOllamaRunning } from '../services/ollama.js';
 import { openDatabase, readIndexState } from '../services/lancedb.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import { searchChunks, deduplicateChunks } from '../services/retriever.js';
-import { traceFlow } from '../services/flowTracer.js';
+import { traceFlow, resolveSymbolToChunkId } from '../services/flowTracer.js';
 import { compressChunk } from '../services/compression.js';
 import { loadUserConfig, resolveStrategy } from '../services/configLoader.js';
 
@@ -29,6 +29,30 @@ export interface TraceFlowResult {
     totalHops: number;
     localTasksPerformed: string[];
   };
+}
+
+/**
+ * Extracts a likely symbol name from a natural-language query.
+ * Prefers camelCase tokens; falls back to the last non-stop-word identifier.
+ * Returns null when no candidate is extractable.
+ */
+function extractSymbolCandidate(query: string): string | null {
+  const tokens = query.match(/\b[a-zA-Z_][a-zA-Z0-9_]{2,}\b/g);
+  if (!tokens) return null;
+
+  const stopWords = new Set([
+    'how', 'does', 'work', 'the', 'what', 'where', 'trace', 'flow',
+    'call', 'path', 'find', 'show', 'into', 'from', 'this', 'that',
+    'with', 'when', 'which', 'about', 'explain', 'describe',
+  ]);
+
+  // Prefer camelCase tokens (contain lowercase letter followed by uppercase)
+  const camel = tokens.filter(t => /[a-z][A-Z]/.test(t));
+  if (camel.length > 0) return camel[camel.length - 1];
+
+  // Fall back to last non-stop-word token
+  const nonStop = tokens.filter(t => !stopWords.has(t.toLowerCase()));
+  return nonStop.length > 0 ? nonStop[nonStop.length - 1] : null;
 }
 
 /**
@@ -77,9 +101,55 @@ export async function runTraceFlow(
   if (opts?.distanceThreshold !== undefined) toolOverride.distanceThreshold = opts.distanceThreshold;
   const strategy = resolveStrategy('trace', userConfig, Object.keys(toolOverride).length > 0 ? toolOverride : undefined);
 
-  // 4. Embed entrypoint query and seed search
+  // 4. RET-03: Attempt exact SQL name lookup before embedding
+  const candidate = extractSymbolCandidate(entrypoint);
+  let seedChunkId: string | null = null;
+
+  if (candidate !== null) {
+    seedChunkId = await resolveSymbolToChunkId(table, candidate, '');
+  }
+
+  if (seedChunkId !== null) {
+    // Exact match found — skip embedding entirely
+    const maxHops = opts?.maxHops ?? 3;
+    const flowHops = await traceFlow(edgesTable, table, seedChunkId, { maxHops });
+
+    const hops = flowHops.map(hop => {
+      const asChunk = {
+        id: hop.chunkId,
+        filePath: hop.filePath,
+        chunkType: 'function' as const,
+        scope: null,
+        name: hop.name,
+        content: hop.content,
+        startLine: hop.startLine,
+        endLine: hop.endLine,
+        similarity: 1,
+      };
+      const compressed = compressChunk(asChunk);
+      return {
+        filePath: hop.filePath,
+        name: hop.name,
+        startLine: hop.startLine,
+        content: compressed.content,
+        callsFound: hop.callsFound,
+        hopDepth: hop.hopDepth,
+      };
+    });
+
+    return {
+      hops,
+      metadata: {
+        seedChunkId,
+        totalHops: hops.length,
+        localTasksPerformed: ['exact_name_lookup', 'bfs_trace', 'compress'],
+      },
+    };
+  }
+
+  // 5. Fallback: Embed entrypoint query and seed search (pre-fix behavior)
   const { embeddings } = await embedBatchWithRetry(indexState.embeddingModel, [entrypoint]);
-  const seedResults = await searchChunks(table, embeddings[0], strategy);
+  const seedResults = await searchChunks(table, embeddings[0], strategy, entrypoint);
   const seeds = deduplicateChunks(seedResults);
 
   if (seeds.length === 0) {
@@ -93,11 +163,11 @@ export async function runTraceFlow(
     };
   }
 
-  // 5. BFS trace from first seed
+  // 6. BFS trace from first seed
   const maxHops = opts?.maxHops ?? 3;
   const flowHops = await traceFlow(edgesTable, table, seeds[0].id, { maxHops });
 
-  // 6. Apply compression and map to output format
+  // 7. Apply compression and map to output format
   const hops = flowHops.map(hop => {
     const asChunk = {
       id: hop.chunkId,
