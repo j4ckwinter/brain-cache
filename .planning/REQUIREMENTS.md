@@ -11,7 +11,7 @@ Requirements for Retrieval Quality milestone. Each maps to roadmap phases.
 
 - [ ] **RET-01**: Keyword boost weight is tunable per intent mode (lookup: 0.40, explore: 0.10, trace: 0.20) so that query-term matches rank proportionally higher in modes where the user names a specific symbol
 - [ ] **RET-02**: Chunks whose file name or symbol name matches a query term have their similarity score promoted above the 0.85 high-relevance threshold, preventing compression of the most relevant results
-- [ ] **RET-03**: trace_flow resolves the entry point via exact SQL name lookup on the chunks table before falling back to vector search, so verbose queries like "how does chunkFile work" anchor to the correct function
+- [x] **RET-03**: trace_flow resolves the entry point via exact SQL name lookup on the chunks table before falling back to vector search, so verbose queries like "how does chunkFile work" anchor to the correct function
 
 ### Output Quality
 
@@ -52,7 +52,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | RET-01 | Phase 24 | Pending |
 | RET-02 | Phase 24 | Pending |
-| RET-03 | Phase 22 | Pending |
+| RET-03 | Phase 22 | Complete |
 | OUT-01 | Phase 22 | Complete |
 | OUT-02 | Phase 24 | Pending |
 | NOISE-01 | Phase 23 | Pending |

@@ -78,7 +78,7 @@
 
 **Milestone Goal:** Fix tool routing, retrieval accuracy, and output quality issues discovered during v2.1 testing — make brain-cache reliably return the right content via the right tool.
 
-- [ ] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop
+- [x] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop (completed 2026-04-03)
 - [ ] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise
 - [ ] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings
 - [ ] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior
@@ -205,11 +205,11 @@ Plans:
   2. Each hop in a `trace_flow` result lists each callee name at most once in its calls list — no duplicate entries regardless of how many edges the BFS traverses
   3. The exact-name SQL lookup runs before any vector search and short-circuits the embedding step when a symbol name match is found
   4. If no exact match exists in the chunks table, trace_flow falls back to vector search and behaves identically to the pre-fix behavior
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 22-01-PLAN.md — Deduplicate callsFound entries in trace_flow hop output (OUT-01)
-- [ ] 22-02-PLAN.md — Add exact-name SQL lookup for trace_flow entry point resolution (RET-03)
+- [x] 22-02-PLAN.md — Add exact-name SQL lookup for trace_flow entry point resolution (RET-03)
 
 ### Phase 23: Search Noise Reduction
 **Goal**: Build tool config files rank below application code in search results unless the user's query explicitly mentions the config tool by name
@@ -271,7 +271,7 @@ Plans:
 | 19. CLAUDE.md Refinements | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 20. Formatter Foundation | v2.1 | 2/2 | Complete | 2026-04-03 |
 | 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete | 2026-04-03 |
-| 22. Isolated Trace Fixes | v2.2 | 1/2 | In Progress|  |
+| 22. Isolated Trace Fixes | v2.2 | 2/2 | Complete   | 2026-04-03 |
 | 23. Search Noise Reduction | v2.2 | 0/? | Not started | - |
 | 24. Compression and Savings Accuracy | v2.2 | 0/? | Not started | - |
 | 25. Tool Routing Documentation | v2.2 | 0/? | Not started | - |
