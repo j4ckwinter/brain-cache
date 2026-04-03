@@ -37,6 +37,8 @@ vi.mock('../../src/services/cohesion.js', () => ({
   groupChunksByFile: vi.fn(),
   enrichWithParentClass: vi.fn(),
   formatGroupedContext: vi.fn(),
+  groupChunksByModule: vi.fn(),
+  formatModuleNarratives: vi.fn(),
 }));
 
 vi.mock('../../src/services/compression.js', () => ({
@@ -62,7 +64,7 @@ import { openDatabase, readIndexState } from '../../src/services/lancedb.js';
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import { searchChunks, deduplicateChunks } from '../../src/services/retriever.js';
 import { assembleContext, countChunkTokens } from '../../src/services/tokenCounter.js';
-import { groupChunksByFile, enrichWithParentClass, formatGroupedContext } from '../../src/services/cohesion.js';
+import { groupChunksByFile, enrichWithParentClass, formatGroupedContext, groupChunksByModule, formatModuleNarratives } from '../../src/services/cohesion.js';
 import { compressChunk } from '../../src/services/compression.js';
 import { loadUserConfig, resolveStrategy } from '../../src/services/configLoader.js';
 import { readFile } from 'node:fs/promises';
@@ -80,6 +82,8 @@ const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockGroupChunksByFile = vi.mocked(groupChunksByFile);
 const mockEnrichWithParentClass = vi.mocked(enrichWithParentClass);
 const mockFormatGroupedContext = vi.mocked(formatGroupedContext);
+const mockGroupChunksByModule = vi.mocked(groupChunksByModule);
+const mockFormatModuleNarratives = vi.mocked(formatModuleNarratives);
 const mockCompressChunk = vi.mocked(compressChunk);
 const mockLoadUserConfig = vi.mocked(loadUserConfig);
 const mockResolveStrategy = vi.mocked(resolveStrategy);
@@ -182,6 +186,10 @@ describe('runExplainCodebase', () => {
       ['/project/src/router.ts', [chunk2]],
     ]));
     mockFormatGroupedContext.mockReturnValue('// ── /project/src/auth.ts ──\ncontent1\n\n---\n\n// ── /project/src/router.ts ──\ncontent2');
+    mockGroupChunksByModule.mockReturnValue(new Map([
+      ['src', dedupedChunks],
+    ]));
+    mockFormatModuleNarratives.mockReturnValue('### module: src\n\n**auth.ts** -- handles authentication\n  imports: router\n\n**router.ts** -- routes requests');
     mockCompressChunk.mockImplementation((chunk) => chunk);
     mockCountChunkTokens.mockReturnValue(500);
     mockReadFile.mockResolvedValue('file content here' as any);
@@ -220,10 +228,31 @@ describe('runExplainCodebase', () => {
     expect(mockResolveStrategy).toHaveBeenCalledWith('explore', {}, undefined);
   });
 
-  it('content is formatted by formatGroupedContext (file-grouped)', async () => {
+  it('content is formatted by formatModuleNarratives (module-grouped)', async () => {
     const result = await runExplainCodebase();
-    expect(mockFormatGroupedContext).toHaveBeenCalled();
-    expect(result.content).toContain('──');
+    expect(mockFormatModuleNarratives).toHaveBeenCalled();
+    expect(result.content).toContain('### module:');
+  });
+
+  it('filters non-exported chunks before assembleContext (D-01)', async () => {
+    const exportedChunk = { ...chunk1, content: 'export function auth() {}' };
+    const internalChunk = { ...chunk2, content: 'function helper() {}' };
+    mockDeduplicateChunks.mockReturnValue([exportedChunk, internalChunk]);
+    await runExplainCodebase();
+    const assembleCall = mockAssembleContext.mock.calls[0];
+    const chunksPassedToAssemble = assembleCall[0] as any[];
+    expect(chunksPassedToAssemble.every((c: any) => c.content.startsWith('export ') || c.chunkType === 'file')).toBe(true);
+  });
+
+  it('uses groupChunksByModule instead of groupChunksByFile', async () => {
+    await runExplainCodebase();
+    expect(mockGroupChunksByModule).toHaveBeenCalled();
+  });
+
+  it('does not call formatGroupedContext (uses formatModuleNarratives instead)', async () => {
+    await runExplainCodebase();
+    expect(mockFormatGroupedContext).not.toHaveBeenCalled();
+    expect(mockFormatModuleNarratives).toHaveBeenCalled();
   });
 
   it('content includes a directory structure preamble', async () => {
@@ -303,7 +332,7 @@ describe('runExplainCodebase', () => {
   it('respects maxTokens option', async () => {
     await runExplainCodebase({ maxTokens: 8192 });
     expect(mockAssembleContext).toHaveBeenCalledWith(
-      dedupedChunks,
+      expect.any(Array),
       { maxTokens: 8192 }
     );
   });

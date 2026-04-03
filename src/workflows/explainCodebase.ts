@@ -7,9 +7,9 @@ import { embedBatchWithRetry } from "../services/embedder.js";
 import { searchChunks, deduplicateChunks } from "../services/retriever.js";
 import { assembleContext, countChunkTokens } from "../services/tokenCounter.js";
 import {
-  groupChunksByFile,
   enrichWithParentClass,
-  formatGroupedContext,
+  groupChunksByModule,
+  formatModuleNarratives,
 } from "../services/cohesion.js";
 import { compressChunk } from "../services/compression.js";
 import { loadUserConfig, resolveStrategy } from "../services/configLoader.js";
@@ -17,7 +17,42 @@ import {
   DEFAULT_TOKEN_BUDGET,
   TOOL_CALL_OVERHEAD_TOKENS,
 } from "../lib/config.js";
-import type { ContextResult } from "../lib/types.js";
+import type { ContextResult, RetrievedChunk } from "../lib/types.js";
+
+/**
+ * Returns true if a chunk represents a public/exported symbol or a file-level chunk.
+ * Used to filter internal helpers before token budget assembly in explain_codebase.
+ *
+ * Detection is runtime-only — no schema field is added (D-03).
+ * File-type chunks are always considered exported (D-02).
+ * For other chunk types, the first non-JSDoc, non-empty, non-manifest line
+ * must start with 'export ' to qualify.
+ */
+export function isExportedChunk(chunk: RetrievedChunk): boolean {
+  if (chunk.chunkType === 'file') return true;
+  const lines = chunk.content.split('\n');
+  let inJsDoc = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('/**')) {
+      inJsDoc = true;
+      if (trimmed.endsWith('*/')) { inJsDoc = false; }
+      continue;
+    }
+    if (inJsDoc) {
+      if (trimmed.endsWith('*/')) inJsDoc = false;
+      continue;
+    }
+    if (
+      trimmed.startsWith('// [compressed]') ||
+      trimmed.startsWith('// Signature:') ||
+      trimmed.startsWith('// [body stripped]')
+    ) continue;
+    if (trimmed.length === 0) continue;
+    return trimmed.startsWith('export ');
+  }
+  return false;
+}
 
 const FALLBACK_QUERY = "module structure and component responsibilities";
 
@@ -188,7 +223,10 @@ export async function runExplainCodebase(
     return aIsTest ? 1 : -1;
   });
 
-  const assembled = assembleContext(sorted, { maxTokens });
+  // 7b. Filter non-exported chunks — internal helpers never compete for budget (D-01, D-02)
+  const exportedOnly = sorted.filter(isExportedChunk);
+
+  const assembled = assembleContext(exportedOnly, { maxTokens });
 
   // 8. Enrich with parent class chunks
   const enriched = await enrichWithParentClass(assembled.chunks, table, {
@@ -202,9 +240,9 @@ export async function runExplainCodebase(
     return tokens > 500 ? compressChunk(c) : c;
   });
 
-  // 10. Group by file and format with cohesion headers
-  const groups = groupChunksByFile(compressed);
-  const codeContent = formatGroupedContext(groups);
+  // 10. Group by module (parent directory) and format as module narratives (D-07, D-08)
+  const moduleGroups = groupChunksByModule(compressed, rootDir);
+  const codeContent = formatModuleNarratives(moduleGroups);
 
   // 11. Build directory tree preamble (prefers all indexed paths; falls back to retrieved paths)
   const treeFilePaths = allFilePaths.length > 0
