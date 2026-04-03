@@ -99,7 +99,7 @@ export async function traceFlow(
       endLine: row.end_line,
       content: row.content,
       hopDepth: depth,
-      callsFound: callEdges.map(e => e.to_symbol),
+      callsFound: [...new Set(callEdges.map(e => e.to_symbol))],
     });
 
     // Do not enqueue children beyond maxHops
