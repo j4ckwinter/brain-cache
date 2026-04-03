@@ -384,12 +384,12 @@ server.registerTool(
     }
     try {
       const result = await runTraceFlow(entrypoint, { maxHops, path });
-      const tokensSent = Math.round(result.hops.reduce((sum, h) => sum + h.content.length, 0) / 4);
+      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
       const savings = formatTokenSavings({
         tokensSent,
-        estimatedWithout: tokensSent * 3,
-        reductionPct: 67,
-        filesInContext: new Set(result.hops.map(h => h.filePath)).size,
+        estimatedWithout: estimatedWithoutBraincache,
+        reductionPct,
+        filesInContext,
       });
       const pipeline = formatPipelineLabel(result.metadata.localTasksPerformed);
       const footer = `---\n${savings}\nPipeline: ${pipeline}`;

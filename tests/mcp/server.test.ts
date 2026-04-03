@@ -379,11 +379,15 @@ describe('MCP tool handlers', () => {
           },
         ],
         metadata: {
-          seedChunkId: 'c1',
+          seedChunkId: 'chunk-1',
           totalHops: 1,
           localTasksPerformed: ['embed_query', 'seed_search', 'bfs_trace', 'compress'],
+          tokensSent: 12,
+          estimatedWithoutBraincache: 900,
+          reductionPct: 99,
+          filesInContext: 1,
         },
-      });
+      } as any);
 
       const { handler } = registeredTools.get('trace_flow')!;
       const result = await handler({ entrypoint: 'testFn', maxHops: 5, path: '/my/project' });

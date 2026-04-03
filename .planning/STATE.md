@@ -1,29 +1,29 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: Retrieval Quality
-status: executing
-stopped_at: Completed 24-01-PLAN.md
-last_updated: "2026-04-03T13:50:12.497Z"
+milestone: v1.0
+milestone_name: milestone
+status: verifying
+stopped_at: Completed 24-02-PLAN.md
+last_updated: "2026-04-03T13:50:04.730Z"
 last_activity: 2026-04-03
 progress:
-  total_phases: 11
-  completed_phases: 10
-  total_plans: 21
-  completed_plans: 21
-  percent: 0
+  total_phases: 5
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 10
+  percent: 100
 ---
 
 # Project State: Brain-Cache
 
-**Last updated:** 2026-04-03
-**Updated by:** roadmapper (v2.2 roadmap created)
+**Last updated:** 2026-04-02
+**Updated by:** roadmapper (v2.0 roadmap created)
 
 ---
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-03)
+See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
 **Current focus:** Phase 24 — compression-and-savings-accuracy
@@ -34,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 
 Phase: 24 (compression-and-savings-accuracy) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
-Progress: [██████████] 100%
+Progress: [██████████] 100% (Phase 17, Plan 01 complete)
 
 ---
 
@@ -47,55 +47,73 @@ Progress: [██████████] 100%
 
 None.
 
-### Key Decisions (Phase 24, Plan 01 — RET-01 + RET-02)
+### Key Decisions (Phase 24, Plan 02 — real token savings in runTraceFlow)
 
-- Per-mode keywordBoostWeight stored in RETRIEVAL_STRATEGIES co-located with limit/distanceThreshold (lookup: 0.40, trace: 0.20, explore: 0.10)
-- Sort score computed on original chunk.similarity BEFORE promotion to avoid re-ranking distortion
-- Name-match promotion triggers on boost > 0 (any match), not a threshold, protecting partial filename matches
-- buildContext.ts and search.ts both pass query as 4th arg to searchChunks on their lookup paths
+- computeHopSavings mirrors buildContext.ts pattern: BODY_STRIPPED_MARKER filter + readFile per unique file + TOOL_CALL_OVERHEAD_TOKENS
+- Token savings are workflow-layer concerns (computed in runTraceFlow), not MCP handler concerns
+- Zero-hop path short-circuits with inline zeros — no helper call needed
+- MCP trace_flow handler uses destructuring then formatTokenSavings — matches buildContext handler pattern
 
-### Key Decisions (Phase 22, Plan 01 — callsFound dedup)
+### Key Decisions (Phase 17, Plan 01 — FlowHop callsFound, compression, configLoader)
 
-- Set spread ([...new Set(callEdges.map(e => e.to_symbol))]) dedups callsFound at the map site; no type changes to FlowHop
-- Dedup is a display concern, not a query concern — edges table source of truth is left unchanged
+- flowTracer always queries edges per hop (even at maxHops depth) for callsFound; only children-enqueue is gated by depth check
+- compressChunk threshold is <= 200 returns unchanged; 201+ triggers structural body stripping
+- resolveStrategy uses spread precedence: { ...base, ...userOverride, ...toolOverride }
+- loadUserConfig reads ~/.brain-cache/config.json per call (no caching), returns {} on any error
 
-### Key Decisions (v2.2 Roadmap)
+### Key Decisions (Phase 16, Plan 01 — three-mode intent classifier)
 
-- Phase 22 ships first: OUT-01 (callsFound dedup) and RET-03 (exact-name SQL lookup) are single-file isolated fixes — lowest risk
-- Phase 23 is independent of Phase 24: NOISE-01 penalty is additive to retriever.ts scoring, no callers change
-- Phase 24 ships RET-01 + RET-02 + OUT-02 together: all three touch traceFlow.ts or buildContext.ts; splitting forces double-edits
-- Phase 25 ships last: ROUTE-01 documentation must reflect behavior actually delivered by Phases 22-24, not intended behavior
-- Name-match protection (RET-02) must raise chunk.similarity score into the existing 0.85 threshold — do NOT add a new bypass code path
-- KEYWORD_BOOST_WEIGHT target is 0.40 as starting point; validate against all five debug session queries before committing
-- Token savings computation moves to workflow layer (traceFlow.ts), not MCP handler — follows buildContext.ts pattern
-- MCP description changes must be tested before CLAUDE.md changes to enable regression attribution
+- TRACE_KEYWORDS use multi-word phrases only (not single token 'trace') to avoid false positives on phrases like 'trace the error'
+- Ambiguity guard: 'trace the architecture' -> explore (not trace) because broad architectural terms win over trace prefix
+- classifyQueryIntent kept as deprecated re-export alias for backward compatibility with external callers
+- DIAGNOSTIC_DISTANCE_THRESHOLD and DIAGNOSTIC_SEARCH_LIMIT removed from config — inlined in RETRIEVAL_STRATEGIES
+
+### Key Decisions (Phase 15, Plan 03 — chunker edge extraction and pipeline wiring)
+
+- Edge extraction positioned before `nodeTypes.has()` guard so call_expression/import_statement nodes run for all AST nodes (not just chunkable ones)
+- `currentChunkId` tracking is approximate — updates after chunk push, top-level call expressions fall back to `filePath:0`
+- `toFile` is `null` at index time for call edges — symbol resolution deferred to query time
+- Import edges use `filePath:0` as `fromChunkId` — imports are file-level constructs
+
+### Key Decisions (Phase 15, Plan 02 — .braincacheignore support)
+
+- opts object pattern for crawlSourceFiles (not positional arg) — keeps signature clean for future optional params
+- loadIgnorePatterns is a standalone service, not merged into crawler — single responsibility, testable in isolation
+
+### Key Decisions (Phase 15 prerequisites — from research)
+
+- LanceDB edges table uses no vector column: `from_chunk_id`, `from_file`, `from_symbol`, `to_symbol`, `to_file`, `edge_type`
+- Chunker return type changes from `CodeChunk[]` to `{ chunks, edges }` — single `walkNodes()` traversal, no double-parse
+- LanceDB write mutex (Promise-chain serialization) must be added before any concurrent writes are possible
+- Cross-encoder reranking DEFERRED to v2.x — Ollama has no native `/api/rerank` endpoint (PR #7219 closed Sept 2025)
+- Structural context compression only (strip bodies, preserve signatures + JSDoc) — no LLM-based summarization
 
 ### Key Decisions (Prior milestones)
 
-- Phase 21: 6 MCP handlers wired to formatters; token savings footer and pipeline labels live
-- Phase 20: 9 pure-function formatters in src/lib/format.ts; no ANSI; dedent 1.7.2
-- Phase 19: 6-tool routing table added to CLAUDE_MD_SECTION and project CLAUDE.md
-- Phase 17: trace_flow and explain_codebase MCP tools registered; buildContext routes by intent
-- Phase 16: Three-mode intent classifier (lookup/trace/explore) with RETRIEVAL_STRATEGIES
-- Phase 15: LanceDB edges table, .braincacheignore, write mutex, chunker returns { chunks, edges }
+- Phase 14: Reverted DEFAULT_DISTANCE_THRESHOLD to 0.3 (comment/value mismatch)
+- Phase 14: Excluded tree-sitter chunker test via vitest.config.ts — ELF header arch issue, not code defect
+- Phase 13: MCP tool descriptions rewritten with directive tone and explicit cross-references
 
 ### Session Notes
 
-v2.2 Retrieval Quality roadmap defined: 4 phases (22-25), 7 requirements, 100% mapped.
-Phase 22: OUT-01 + RET-03 (isolated single-file fixes, flowTracer.ts and traceFlow.ts)
-Phase 23: NOISE-01 (additive score penalty in retriever.ts, independent)
-Phase 24: RET-01 + RET-02 + OUT-02 (cross-cutting, compression.ts + retriever.ts + buildContext.ts + traceFlow.ts + mcp/index.ts)
-Phase 25: ROUTE-01 (documentation only, CLAUDE.md + mcp/index.ts description strings)
+v2.0 MCP Magic roadmap defined: 5 phases (15-19), 10 requirements, all mapped.
+Phase ordering: 15 (data foundation) → 16 (retrieval intelligence) → 17 (MCP tools) → 18 (file watcher) → 19 (CLAUDE.md).
+Phase 18 (file watcher) depends only on Phase 15 (write mutex + edges schema) — independent of retrieval work.
+chokidar v5 is the only new npm dependency for v2.0.
+
+### Quick Tasks Completed
+
+See prior STATE.md entries for v1.x quick tasks (archived).
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T13:50:12.491Z
+**Last session:** 2026-04-03T13:50:04.727Z
 
-**Stopped at:** Completed 24-01-PLAN.md
+**Stopped at:** Completed 24-02-PLAN.md
 
-**Next action:** Plan Phase 22 — `/gsd:plan-phase 22`
+**Next action:** `/gsd:plan-phase 15`
 
 ---
 *State initialized: 2026-03-31*
