@@ -136,6 +136,7 @@ const fakeContextResult = {
     tokensSent: 150,
     estimatedWithoutBraincache: 1000,
     reductionPct: 85,
+    filesInContext: 2,
     localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'token_budget'],
     cloudCallsMade: 0,
   },
@@ -260,7 +261,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns JSON array of chunks on success', async () => {
+    it('returns formatted ranked list with savings and pipeline on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunSearch.mockResolvedValue([fakeChunk('1'), fakeChunk('2')]);
@@ -269,11 +270,15 @@ describe('MCP tool handlers', () => {
       const result = await handler({ query: 'find auth functions', limit: 10 });
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(Array.isArray(parsed)).toBe(true);
-      expect(parsed).toHaveLength(2);
-      expect(parsed[0]).toHaveProperty('similarity');
-      expect(parsed[0].similarity).toBe(0.95);
+      const text = result.content[0].text;
+      expect(text).not.toContain('{');  // no JSON bleed-through
+      expect(text).toContain('Found 2 results');
+      expect(text).toContain('1.');
+      expect(text).toContain('fn_1');
+      expect(text).toContain('0.950');
+      expect(text).toContain('src/test_1.ts:1');
+      expect(text).toContain('Tokens sent to Claude:');
+      expect(text).toContain('Pipeline: embed -> search -> dedup');
     });
 
     it('passes limit and path options to runSearch', async () => {
@@ -312,7 +317,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns JSON ContextResult with metadata on success', async () => {
+    it('returns formatted context with savings and pipeline on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunBuildContext.mockResolvedValue(fakeContextResult);
@@ -321,24 +326,17 @@ describe('MCP tool handlers', () => {
       const result = await handler({ query: 'how does auth work', maxTokens: 2000 });
 
       expect(result.isError).toBeUndefined();
-
-      // Response has single content block with JSON data including tokenSavings
       expect(result.content).toHaveLength(1);
 
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveProperty('content');
-      expect(parsed).toHaveProperty('chunks');
-      expect(parsed).toHaveProperty('metadata');
-      expect(parsed.metadata.tokensSent).toBe(150);
-      expect(parsed.metadata.reductionPct).toBe(85);
-      expect(parsed.metadata.cloudCallsMade).toBe(0);
-
-      // Token savings are included as data in the JSON, not as a separate directive
-      expect(parsed).toHaveProperty('tokenSavings');
-      expect(parsed.tokenSavings).toContain('Tokens sent to Claude:');
-      expect(parsed.tokenSavings).toContain('150');
-      expect(parsed.tokenSavings).toContain('~1,000');
-      expect(parsed.tokenSavings).toContain('85%');
+      const text = result.content[0].text;
+      expect(text).not.toContain('{"content"');  // no JSON bleed-through
+      expect(text).toContain('Context assembled for');
+      expect(text).toContain('assembled context here');
+      expect(text).toContain('Tokens sent to Claude:');
+      expect(text).toContain('150');
+      expect(text).toContain('~1,000');
+      expect(text).toContain('85%');
+      expect(text).toContain('Pipeline: embed_query -> vector_search -> dedup -> token_budget');
     });
   });
 
@@ -366,7 +364,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns hop results on success', async () => {
+    it('returns formatted hops with savings and pipeline on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunTraceFlow.mockResolvedValue({
@@ -377,16 +375,29 @@ describe('MCP tool handlers', () => {
             startLine: 1,
             content: 'function testFn() {}',
             callsFound: ['otherFn'],
+            hopDepth: 0,
           },
         ],
-      } as any);
+        metadata: {
+          seedChunkId: 'c1',
+          totalHops: 1,
+          localTasksPerformed: ['embed_query', 'seed_search', 'bfs_trace', 'compress'],
+        },
+      });
 
       const { handler } = registeredTools.get('trace_flow')!;
       const result = await handler({ entrypoint: 'testFn', maxHops: 5, path: '/my/project' });
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.hops).toHaveLength(1);
+      const text = result.content[0].text;
+      expect(text).not.toContain('{');  // no JSON bleed-through
+      expect(text).toContain('Traced 1 hop');
+      expect(text).toContain('1.');
+      expect(text).toContain('testFn');
+      expect(text).toContain('src/test.ts:1');
+      expect(text).toContain('otherFn');
+      expect(text).toContain('Tokens sent to Claude:');
+      expect(text).toContain('Pipeline: embed_query -> seed_search -> bfs_trace -> compress');
       expect(mockRunTraceFlow).toHaveBeenCalledWith('testFn', { maxHops: 5, path: '/my/project' });
     });
 
@@ -428,7 +439,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns architecture overview on success', async () => {
+    it('returns architecture overview with savings and pipeline on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunExplainCodebase.mockResolvedValue({
@@ -448,9 +459,12 @@ describe('MCP tool handlers', () => {
       const result = await handler({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
 
       expect(result.isError).toBeUndefined();
-      // MCP handler returns plain-text markdown, not JSON
-      expect(result.content[0].text).toContain('# Codebase Architecture Overview');
-      expect(result.content[0].text).toContain('Architecture overview text');
+      const text = result.content[0].text;
+      expect(text).toContain('Architecture overview');
+      expect(text).toContain('Architecture overview text');
+      expect(text).toContain('Tokens sent to Claude:');
+      expect(text).toContain('200');
+      expect(text).toContain('Pipeline: embed_query -> vector_search');
       expect(mockRunExplainCodebase).toHaveBeenCalledWith({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
     });
 
