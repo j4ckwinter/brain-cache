@@ -81,7 +81,7 @@
 - [x] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop (completed 2026-04-03)
 - [x] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise (completed 2026-04-03)
 - [x] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings (completed 2026-04-03)
-- [ ] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior
+- [x] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior (completed 2026-04-03)
 
 ## Phase Details
 
@@ -250,11 +250,11 @@ Plans:
   2. Given "trace how X calls Y" (call path), Claude calls `trace_flow` — not `build_context`
   3. Each MCP tool description contains at least one "Do NOT use this tool when..." negative example that names a specific anti-pattern query
   4. The CLAUDE.md routing table rows reflect the behavior delivered by Phases 22-24, not prior intent
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 25-01-PLAN.md — MCP tool description negative examples and server.test.ts assertions
-- [ ] 25-02-PLAN.md — CLAUDE.md and claude-md-section.ts routing table update with negative examples
+- [x] 25-02-PLAN.md — CLAUDE.md and claude-md-section.ts routing table update with negative examples
 
 ## Progress
 
@@ -284,7 +284,7 @@ Plans:
 | 22. Isolated Trace Fixes | v2.2 | 2/2 | Complete   | 2026-04-03 |
 | 23. Search Noise Reduction | v2.2 | 1/1 | Complete    | 2026-04-03 |
 | 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete    | 2026-04-03 |
-| 25. Tool Routing Documentation | v2.2 | 1/2 | In Progress|  |
+| 25. Tool Routing Documentation | v2.2 | 2/2 | Complete   | 2026-04-03 |
 
 ---
 *Roadmap created: 2026-03-31*
