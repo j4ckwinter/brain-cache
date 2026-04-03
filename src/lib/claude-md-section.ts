@@ -16,6 +16,8 @@ Use brain-cache tools before reading files or using Grep/Glob for codebase quest
 
 Call \`mcp__brain-cache__search_codebase\` to find functions, types, definitions, or implementations by meaning rather than keyword match.
 
+Do NOT use for understanding how code works — use build_context once you have located the symbol.
+
 ### build_context (understand specific behavior)
 
 Call \`mcp__brain-cache__build_context\` with a focused question about how specific code works. It retrieves semantically relevant code, deduplicates results, and fits them to a token budget.
@@ -30,6 +32,8 @@ Call \`mcp__brain-cache__trace_flow\` to trace how a function call propagates th
 
 Use for: "How does X flow to Y?", "Trace how X calls Y across files", "What happens when X is called?", "Call path from X to Y".
 
+Do NOT use for code understanding queries like "how does X work" or "what does X do" — use build_context instead.
+
 Use trace_flow instead of build_context when the question is about call propagation or execution flow across files.
 
 ### explain_codebase (architecture overview)
@@ -37,6 +41,8 @@ Use trace_flow instead of build_context when the question is about call propagat
 Call \`mcp__brain-cache__explain_codebase\` to get a module-grouped architecture overview. No follow-up question needed.
 
 Use for: "Explain the project architecture", "How is this project structured?", "What does this project do?", "Give me an overview of the codebase".
+
+Do NOT use for questions about specific code behavior or how a particular function works — use build_context instead.
 
 Use explain_codebase instead of build_context when the question is about overall structure or getting oriented.
 
