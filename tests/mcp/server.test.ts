@@ -181,7 +181,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns JSON with status, fileCount, and chunkCount on success', async () => {
+    it('returns formatted index result on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunIndex.mockResolvedValue(undefined);
@@ -191,12 +191,11 @@ describe('MCP tool handlers', () => {
       const result = await handler({ path: '/some/project' });
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.status).toBe('ok');
-      // CRITICAL: fileCount must be a number (not null) — validates readIndexState was called correctly
-      expect(typeof parsed.fileCount).toBe('number');
-      expect(parsed.fileCount).toBe(5);
-      expect(parsed.chunkCount).toBe(42);
+      const text = result.content[0].text;
+      expect(text).not.toContain('{');  // no JSON bleed-through
+      expect(text).toContain('Indexed');
+      expect(text).toContain('5 files');
+      expect(text).toContain('42 chunks');
     });
 
     it('returns isError when runIndex throws', async () => {
@@ -472,7 +471,7 @@ describe('MCP tool handlers', () => {
   // ---- doctor ----
 
   describe('doctor', () => {
-    it('returns structured health object even without profile', async () => {
+    it('returns formatted health output even without profile', async () => {
       // doctor does not require profile — unlike other tools
       mockReadProfile.mockResolvedValue(null);
       mockIsOllamaInstalled.mockResolvedValue(true);
@@ -485,18 +484,14 @@ describe('MCP tool handlers', () => {
       const result = await handler({});
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveProperty('ollamaStatus');
-      expect(parsed).toHaveProperty('indexFreshness');
-      expect(parsed).toHaveProperty('modelLoaded');
-      expect(parsed).toHaveProperty('vramAvailable');
-      expect(parsed).toHaveProperty('vramTier');
-      // No profile → modelLoaded is false
-      expect(parsed.modelLoaded).toBe(false);
-      expect(parsed.embeddingModel).toBeNull();
+      const text = result.content[0].text;
+      expect(text).not.toContain('{');  // no JSON bleed-through
+      expect(text).toContain('Ollama:');
+      expect(text).toContain('running');
+      expect(text).toContain('Embedding model: none');  // no profile = null model
     });
 
-    it('returns ollamaStatus "not_installed" when Ollama is missing', async () => {
+    it('returns ollamaStatus not_installed when Ollama is missing', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaInstalled.mockResolvedValue(false);
       mockReadIndexState.mockResolvedValue(null);
@@ -506,12 +501,11 @@ describe('MCP tool handlers', () => {
       const result = await handler({});
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.ollamaStatus).toBe('not_installed');
-      expect(parsed.ollamaVersion).toBeNull();
+      const text = result.content[0].text;
+      expect(text).toContain('Ollama: not_installed');
     });
 
-    it('returns full health object when everything is running', async () => {
+    it('returns formatted full health output when everything is running', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaInstalled.mockResolvedValue(true);
       mockIsOllamaRunning.mockResolvedValue(true);
@@ -523,18 +517,17 @@ describe('MCP tool handlers', () => {
       const result = await handler({ path: '/my/project' });
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.ollamaStatus).toBe('running');
-      expect(parsed.ollamaVersion).toBe('0.6.3');
-      expect(parsed.indexFreshness.indexed).toBe(true);
-      expect(parsed.indexFreshness.fileCount).toBe(5);
-      expect(parsed.indexFreshness.chunkCount).toBe(42);
-      expect(parsed.modelLoaded).toBe(true);
-      expect(parsed.embeddingModel).toBe('nomic-embed-text');
-      expect(parsed.vramTier).toBe('large');
+      const text = result.content[0].text;
+      expect(text).not.toContain('{');
+      expect(text).toContain('Ollama: running (v0.6.3)');
+      expect(text).toContain('indexed');
+      expect(text).toContain('5 files');
+      expect(text).toContain('42 chunks');
+      expect(text).toContain('Embedding model: nomic-embed-text');
+      expect(text).toContain('VRAM: large (16 GiB)');
     });
 
-    it('returns ollamaStatus "not_running" when installed but not running', async () => {
+    it('returns ollamaStatus not_running when installed but not running', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaInstalled.mockResolvedValue(true);
       mockIsOllamaRunning.mockResolvedValue(false);
@@ -546,8 +539,8 @@ describe('MCP tool handlers', () => {
       const result = await handler({});
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.ollamaStatus).toBe('not_running');
+      const text = result.content[0].text;
+      expect(text).toContain('Ollama: not_running');
     });
   });
 });
