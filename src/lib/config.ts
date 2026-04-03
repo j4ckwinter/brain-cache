@@ -39,5 +39,24 @@ export const FILE_HASHES_FILENAME = "file-hashes.json";
 export const TOOL_CALL_OVERHEAD_TOKENS = 300;
 
 // ── Compression ────────────────────────────────────────────────────────────
-/** Token threshold above which chunks are structurally compressed (signatures only). */
-export const COMPRESSION_TOKEN_THRESHOLD = 200;
+/**
+ * Token threshold above which chunks are structurally compressed (signatures only).
+ * Set conservatively high so that typical function bodies (30–120 lines) are kept
+ * intact for high-relevance queries. Only very large chunks (e.g. generated files,
+ * exhaustive switch statements) are compressed unconditionally.
+ */
+export const COMPRESSION_TOKEN_THRESHOLD = 500;
+
+/**
+ * Similarity threshold above which a chunk is considered "high relevance".
+ * High-relevance chunks bypass compression even when they exceed
+ * COMPRESSION_TOKEN_THRESHOLD, up to COMPRESSION_HARD_LIMIT tokens.
+ */
+export const HIGH_RELEVANCE_SIMILARITY_THRESHOLD = 0.85;
+
+/**
+ * Hard token limit: chunks exceeding this are always compressed, regardless
+ * of similarity score. Guards against extremely large chunks consuming the
+ * entire token budget.
+ */
+export const COMPRESSION_HARD_LIMIT = 800;

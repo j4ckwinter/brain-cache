@@ -148,10 +148,31 @@ export async function runBuildContext(
   }
 
   // 9. Estimate tokens without brain-cache
+  //
+  // Baseline represents what Claude would spend without this tool: one grep/search
+  // call to find relevant files, then one full Read per matched file.
+  //
+  // Accuracy constraint: only count files where brain-cache actually saved tokens.
+  // A file whose chunks were ALL compressed (body stripped) would need to be read
+  // by Claude anyway to get the function bodies — counting those files as "savings"
+  // inflates the reduction percentage. Only files with at least one uncompressed
+  // chunk contributed genuine savings.
+  const BODY_STRIPPED_MARKER = '// [body stripped]';
+  const filesWithUncompressedContent = new Set(
+    finalChunks
+      .filter(c => !c.content.includes(BODY_STRIPPED_MARKER))
+      .map(c => c.filePath)
+  );
+
   const uniqueFiles = [...new Set(finalChunks.map((c) => c.filePath))];
   const numFiles = uniqueFiles.length;
   let fileContentTokens = 0;
   for (const filePath of uniqueFiles) {
+    if (!filesWithUncompressedContent.has(filePath)) {
+      // All chunks from this file were compressed — Claude would read this file
+      // anyway, so don't count it as a saved read.
+      continue;
+    }
     try {
       const fileContent = await readFile(filePath, 'utf-8');
       fileContentTokens += countChunkTokens(fileContent);
