@@ -159,13 +159,15 @@ describe('traceFlow', () => {
     expect(result.map(h => h.chunkId)).toEqual(['chunk-a', 'chunk-b']);
   });
 
-  it('stops at maxHops=1, returning only [seed, A], not B', async () => {
+  it('stops at maxHops=1, returning only [seed, A], not B (B not enqueued)', async () => {
     const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
     const aRow = makeChunkRow({ id: 'chunk-a', name: 'funcA', file_path: 'src/b.ts' });
 
     mockQueryEdgesFrom
-      .mockResolvedValueOnce([makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcA', from_file: 'src/a.ts' })]);
-    // chunk-a's edges should NOT be fetched since depth >= maxHops
+      // seed edges → funcA (enqueued since depth 0 < maxHops 1)
+      .mockResolvedValueOnce([makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcA', from_file: 'src/a.ts' })])
+      // chunk-a edges at depth 1 (= maxHops): queried for callsFound, but not enqueued
+      .mockResolvedValueOnce([makeEdgeRow({ from_chunk_id: 'chunk-a', to_symbol: 'funcB', from_file: 'src/b.ts' })]);
 
     const chunksTable = makeSequentialTable([
       [seedRow], // lookup seed
@@ -178,19 +180,25 @@ describe('traceFlow', () => {
     expect(result).toHaveLength(2);
     expect(result[0].chunkId).toBe('seed');
     expect(result[1].chunkId).toBe('chunk-a');
-    // queryEdgesFrom should only be called once (for seed), not for chunk-a
-    expect(mockQueryEdgesFrom).toHaveBeenCalledTimes(1);
+    // queryEdgesFrom called for both seed and chunk-a (edges always queried for callsFound)
+    expect(mockQueryEdgesFrom).toHaveBeenCalledTimes(2);
+    // chunk-a callsFound has funcB (edges queried but not enqueued)
+    expect(result[1].callsFound).toEqual(['funcB']);
   });
 
   it('returns only [seed] when maxHops=0', async () => {
     const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
     const chunksTable = makeSequentialTable([[seedRow]]);
+    // seed at depth=0 = maxHops=0: edges queried for callsFound, but no children enqueued
+    mockQueryEdgesFrom.mockResolvedValueOnce([]);
 
     const result = await traceFlow({} as Table, chunksTable, 'seed', { maxHops: 0 });
 
     expect(result).toHaveLength(1);
     expect(result[0].chunkId).toBe('seed');
-    expect(mockQueryEdgesFrom).not.toHaveBeenCalled();
+    expect(result[0].callsFound).toEqual([]);
+    // queryEdgesFrom IS called once (for seed) to populate callsFound
+    expect(mockQueryEdgesFrom).toHaveBeenCalledTimes(1);
   });
 
   it('skips edges where toSymbol resolves to no chunk (dead end)', async () => {
@@ -242,6 +250,83 @@ describe('traceFlow', () => {
     expect(result).toHaveLength(2);
     expect(result.map(h => h.chunkId)).toContain('seed');
     expect(result.map(h => h.chunkId)).toContain('chunk-called');
+  });
+});
+
+describe('traceFlow — callsFound', () => {
+  it('hop 0 has callsFound populated with toSymbol names from call edges', async () => {
+    const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
+
+    mockQueryEdgesFrom.mockResolvedValueOnce([
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcA', from_file: 'src/a.ts' }),
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcB', from_file: 'src/a.ts' }),
+    ]);
+
+    // chunksTable: seed found, then funcA + funcB symbol resolution returns nothing (dead ends)
+    const chunksTable = makeSequentialTable([
+      [seedRow], // lookup seed
+      [],        // resolve funcA → not found
+      [],        // resolve funcB → not found
+    ]);
+
+    const result = await traceFlow({} as Table, chunksTable, 'seed');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].callsFound).toEqual(['funcA', 'funcB']);
+  });
+
+  it('hop has callsFound as empty array when chunk has no outgoing call edges', async () => {
+    const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
+    const chunksTable = makeSequentialTable([[seedRow]]);
+    mockQueryEdgesFrom.mockResolvedValue([]);
+
+    const result = await traceFlow({} as Table, chunksTable, 'seed');
+
+    expect(result).toHaveLength(1);
+    expect(result[0].callsFound).toEqual([]);
+  });
+
+  it('callsFound only includes call edges, not import edges', async () => {
+    const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
+
+    mockQueryEdgesFrom.mockResolvedValueOnce([
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'importedMod', from_file: 'src/a.ts', edge_type: 'import' }),
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'calledFunc', from_file: 'src/a.ts', edge_type: 'call' }),
+    ]);
+
+    const chunksTable = makeSequentialTable([
+      [seedRow], // lookup seed
+      [],        // resolve calledFunc → not found (dead end)
+    ]);
+
+    const result = await traceFlow({} as Table, chunksTable, 'seed');
+
+    expect(result[0].callsFound).toEqual(['calledFunc']);
+  });
+
+  it('hops at maxHops depth still have callsFound populated', async () => {
+    const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
+    const aRow = makeChunkRow({ id: 'chunk-a', name: 'funcA', file_path: 'src/b.ts' });
+
+    mockQueryEdgesFrom
+      // seed edges
+      .mockResolvedValueOnce([makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcA', from_file: 'src/a.ts' })])
+      // chunk-a edges (at maxHops=1, depth 1 = maxHops, so edges are queried but children not enqueued)
+      .mockResolvedValueOnce([makeEdgeRow({ from_chunk_id: 'chunk-a', to_symbol: 'funcB', from_file: 'src/b.ts' })]);
+
+    const chunksTable = makeSequentialTable([
+      [seedRow], // lookup seed
+      [aRow],    // resolve funcA
+      [aRow],    // lookup chunk-a
+    ]);
+
+    const result = await traceFlow({} as Table, chunksTable, 'seed', { maxHops: 1 });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].callsFound).toEqual(['funcA']);
+    expect(result[1].callsFound).toEqual(['funcB']);
+    // queryEdgesFrom called for both seed and chunk-a
+    expect(mockQueryEdgesFrom).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -86,6 +86,11 @@ export async function traceFlow(
     }
 
     const row = chunkRows[0];
+
+    // Always query edges for content hops — needed to populate callsFound
+    const edges = await queryEdgesFrom(edgesTable, chunkId);
+    const callEdges = edges.filter(e => e.edge_type === 'call');
+
     hops.push({
       chunkId,
       filePath: row.file_path,
@@ -94,16 +99,13 @@ export async function traceFlow(
       endLine: row.end_line,
       content: row.content,
       hopDepth: depth,
+      callsFound: callEdges.map(e => e.to_symbol),
     });
 
     // Do not enqueue children beyond maxHops
     if (depth >= maxHops) {
       continue;
     }
-
-    // Get outgoing edges from this chunk, filter to call edges only
-    const edges = await queryEdgesFrom(edgesTable, chunkId);
-    const callEdges = edges.filter(e => e.edge_type === 'call');
 
     for (const edge of callEdges) {
       const nextChunkId = await resolveSymbolToChunkId(chunksTable, edge.to_symbol, edge.from_file);

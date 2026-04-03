@@ -37,3 +37,7 @@ export const FILE_HASHES_FILENAME = "file-hashes.json";
 // ── Token estimation ──────────────────────────────────────────────────────
 /** Estimated token overhead per tool call (Grep/Glob/Read prompt + response framing) */
 export const TOOL_CALL_OVERHEAD_TOKENS = 300;
+
+// ── Compression ────────────────────────────────────────────────────────────
+/** Token threshold above which chunks are structurally compressed (signatures only). */
+export const COMPRESSION_TOKEN_THRESHOLD = 200;

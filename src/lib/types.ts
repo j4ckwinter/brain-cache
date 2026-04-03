@@ -57,6 +57,7 @@ export interface FlowHop {
   endLine: number;
   content: string;
   hopDepth: number;
+  callsFound: string[];
 }
 
 export interface RetrievedChunk {
@@ -98,14 +99,4 @@ export interface CallEdge {
 export interface ChunkResult {
   chunks: CodeChunk[];
   edges: CallEdge[];
-}
-
-export interface FlowHop {
-  chunkId: string;
-  filePath: string;
-  name: string | null;
-  startLine: number;
-  endLine: number;
-  content: string;
-  hopDepth: number;
 }
