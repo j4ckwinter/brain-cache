@@ -74,7 +74,7 @@
 
 </details>
 
-### 🚧 v2.2 Retrieval Quality (In Progress)
+### v2.2 Retrieval Quality (In Progress)
 
 **Milestone Goal:** Fix tool routing, retrieval accuracy, and output quality issues discovered during v2.1 testing — make brain-cache reliably return the right content via the right tool.
 
@@ -250,10 +250,11 @@ Plans:
   2. Given "trace how X calls Y" (call path), Claude calls `trace_flow` — not `build_context`
   3. Each MCP tool description contains at least one "Do NOT use this tool when..." negative example that names a specific anti-pattern query
   4. The CLAUDE.md routing table rows reflect the behavior delivered by Phases 22-24, not prior intent
-**Plans:** 1 plan
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 25-01-PLAN.md — MCP tool description negative examples and CLAUDE.md routing table update
+- [x] 25-01-PLAN.md — MCP tool description negative examples and server.test.ts assertions
+- [ ] 25-02-PLAN.md — CLAUDE.md and claude-md-section.ts routing table update with negative examples
 
 ## Progress
 
@@ -282,9 +283,9 @@ Plans:
 | 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete | 2026-04-03 |
 | 22. Isolated Trace Fixes | v2.2 | 2/2 | Complete   | 2026-04-03 |
 | 23. Search Noise Reduction | v2.2 | 1/1 | Complete    | 2026-04-03 |
-| 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete   | 2026-04-03 |
-| 25. Tool Routing Documentation | v2.2 | 0/? | Not started | - |
+| 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete    | 2026-04-03 |
+| 25. Tool Routing Documentation | v2.2 | 1/2 | In Progress|  |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 24 planned (2 plans, Wave 1 parallel)*
+*Last updated: 2026-04-03 — Phase 25 planned (2 plans, 2 waves sequential)*

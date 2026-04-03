@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: verifying
-stopped_at: Completed 24-02-PLAN.md
-last_updated: "2026-04-03T13:50:04.730Z"
+milestone: v2.2
+milestone_name: Retrieval Quality
+status: executing
+stopped_at: Completed 25-01-PLAN.md
+last_updated: "2026-04-03T15:04:21.445Z"
 last_activity: 2026-04-03
 progress:
-  total_phases: 5
-  completed_phases: 2
-  total_plans: 7
-  completed_plans: 10
+  total_phases: 11
+  completed_phases: 10
+  total_plans: 23
+  completed_plans: 22
   percent: 100
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 24 — compression-and-savings-accuracy
+**Current focus:** Phase 25 — tool-routing-documentation
 
 ---
 
 ## Current Position
 
-Phase: 24 (compression-and-savings-accuracy) — EXECUTING
+Phase: 25 (tool-routing-documentation) — EXECUTING
 Plan: 2 of 2
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-03
 
-Progress: [██████████] 100% (Phase 17, Plan 01 complete)
+Progress: [██████████] 96% (22 of 23 plans complete)
 
 ---
 
@@ -46,6 +46,13 @@ Progress: [██████████] 100% (Phase 17, Plan 01 complete)
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 25, Plan 01 — MCP tool routing negative guards)
+
+- Negative guards use "Do NOT use this tool when..." pattern — matches CLAUDE.md routing table directive tone
+- build_context loses "Prefer this tool" framing — replaced with neutral "Use this tool" to prevent over-selection vs trace_flow
+- build_context gets 2 negative guards (trace_flow and explain_codebase); each other tool gets 1
+- Test assertions lock description wording via registeredTools.get(name).schema.description
 
 ### Key Decisions (Phase 24, Plan 02 — real token savings in runTraceFlow)
 
@@ -109,9 +116,9 @@ See prior STATE.md entries for v1.x quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T13:50:04.727Z
+**Last session:** 2026-04-03T15:04:21.439Z
 
-**Stopped at:** Completed 24-02-PLAN.md
+**Stopped at:** Completed 25-01-PLAN.md
 
 **Next action:** `/gsd:plan-phase 15`
 

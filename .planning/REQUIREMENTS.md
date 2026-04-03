@@ -24,7 +24,7 @@ Requirements for Retrieval Quality milestone. Each maps to roadmap phases.
 
 ### Tool Routing
 
-- [ ] **ROUTE-01**: MCP tool descriptions include explicit negative examples ("Do NOT use this tool when...") and CLAUDE.md routing table is refined so Claude selects build_context for code understanding queries instead of defaulting to trace_flow
+- [x] **ROUTE-01**: MCP tool descriptions include explicit negative examples ("Do NOT use this tool when...") and CLAUDE.md routing table is refined so Claude selects build_context for code understanding queries instead of defaulting to trace_flow
 
 ## Future Requirements
 
@@ -56,7 +56,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | OUT-01 | Phase 22 | Complete |
 | OUT-02 | Phase 24 | Complete |
 | NOISE-01 | Phase 23 | Complete |
-| ROUTE-01 | Phase 25 | Pending |
+| ROUTE-01 | Phase 25 | Complete |
 
 **Coverage:**
 - v2.2 requirements: 7 total
