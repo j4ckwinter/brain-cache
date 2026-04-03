@@ -486,6 +486,34 @@ describe('MCP tool handlers', () => {
     });
   });
 
+  // ---- tool description negative examples ----
+
+  describe('tool description negative examples', () => {
+    it('build_context description contains negative example referencing trace_flow', () => {
+      const desc = registeredTools.get('build_context')!.schema.description as string;
+      expect(desc).toContain('Do NOT use this tool');
+      expect(desc).toContain('trace_flow');
+    });
+
+    it('trace_flow description contains negative example referencing build_context', () => {
+      const desc = registeredTools.get('trace_flow')!.schema.description as string;
+      expect(desc).toContain('Do NOT use this tool');
+      expect(desc).toContain('build_context');
+    });
+
+    it('search_codebase description contains negative example referencing build_context', () => {
+      const desc = registeredTools.get('search_codebase')!.schema.description as string;
+      expect(desc).toContain('Do NOT use this tool');
+      expect(desc).toContain('build_context');
+    });
+
+    it('explain_codebase description contains negative example referencing build_context', () => {
+      const desc = registeredTools.get('explain_codebase')!.schema.description as string;
+      expect(desc).toContain('Do NOT use this tool');
+      expect(desc).toContain('build_context');
+    });
+  });
+
   // ---- doctor ----
 
   describe('doctor', () => {
