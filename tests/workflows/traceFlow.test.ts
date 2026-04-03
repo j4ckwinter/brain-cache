@@ -30,6 +30,7 @@ vi.mock('../../src/services/retriever.js', () => ({
 
 vi.mock('../../src/services/flowTracer.js', () => ({
   traceFlow: vi.fn(),
+  resolveSymbolToChunkId: vi.fn(),
 }));
 
 vi.mock('../../src/services/compression.js', () => ({
@@ -46,7 +47,7 @@ import { isOllamaRunning } from '../../src/services/ollama.js';
 import { openDatabase, readIndexState } from '../../src/services/lancedb.js';
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import { searchChunks, deduplicateChunks } from '../../src/services/retriever.js';
-import { traceFlow } from '../../src/services/flowTracer.js';
+import { traceFlow, resolveSymbolToChunkId } from '../../src/services/flowTracer.js';
 import { compressChunk } from '../../src/services/compression.js';
 import { loadUserConfig, resolveStrategy } from '../../src/services/configLoader.js';
 
@@ -58,6 +59,7 @@ const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
 const mockTraceFlow = vi.mocked(traceFlow);
+const mockResolveSymbolToChunkId = vi.mocked(resolveSymbolToChunkId);
 const mockCompressChunk = vi.mocked(compressChunk);
 const mockLoadUserConfig = vi.mocked(loadUserConfig);
 const mockResolveStrategy = vi.mocked(resolveStrategy);
@@ -148,6 +150,7 @@ describe('runTraceFlow', () => {
     mockLoadUserConfig.mockResolvedValue({});
     mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.5 });
     mockCompressChunk.mockImplementation((chunk) => chunk);
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
 
     const mod = await import('../../src/workflows/traceFlow.js');
     runTraceFlow = mod.runTraceFlow;
@@ -268,5 +271,50 @@ describe('runTraceFlow', () => {
   it('throws when edges table is missing', async () => {
     mockDb.tableNames.mockResolvedValue(['chunks']);
     await expect(runTraceFlow('test')).rejects.toThrow('No edges table found');
+  });
+
+  it('resolves entry point via exact SQL name lookup when camelCase symbol found in query (RET-03)', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue('seed-chunk-1');
+    const result = await runTraceFlow('how does chunkFile work');
+    expect(mockResolveSymbolToChunkId).toHaveBeenCalledWith(mockTable, 'chunkFile', '');
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    expect(mockTraceFlow).toHaveBeenCalledWith(
+      mockEdgesTable,
+      mockTable,
+      'seed-chunk-1',
+      expect.objectContaining({ maxHops: 3 })
+    );
+    expect(result.hops.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to vector search when exact name lookup returns null (RET-03)', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+    const result = await runTraceFlow('how does chunkFile work');
+    expect(mockResolveSymbolToChunkId).toHaveBeenCalled();
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+    expect(mockSearchChunks).toHaveBeenCalled();
+    expect(result.hops.length).toBeGreaterThan(0);
+  });
+
+  it('localTasksPerformed includes exact_name_lookup when exact path taken (RET-03)', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue('seed-chunk-1');
+    const result = await runTraceFlow('how does chunkFile work');
+    expect(result.metadata.localTasksPerformed).toContain('exact_name_lookup');
+    expect(result.metadata.localTasksPerformed).not.toContain('embed_query');
+  });
+
+  it('localTasksPerformed does NOT include exact_name_lookup on fallback path (RET-03)', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+    const result = await runTraceFlow('how does chunkFile work');
+    expect(result.metadata.localTasksPerformed).not.toContain('exact_name_lookup');
+    expect(result.metadata.localTasksPerformed).toContain('embed_query');
+  });
+
+  it('skips exact lookup when query has no extractable symbol candidate (RET-03)', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+    const result = await runTraceFlow('how does the flow work');
+    expect(mockResolveSymbolToChunkId).not.toHaveBeenCalled();
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+    expect(result.hops.length).toBeGreaterThan(0);
   });
 });
