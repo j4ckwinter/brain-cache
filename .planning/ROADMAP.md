@@ -89,7 +89,7 @@
 
 - [x] **Phase 26: Search Precision** - Exact-match and filename-aware retrieval boosting in search_codebase (completed 2026-04-03)
 - [x] **Phase 27: Compression Protection** - Protect primary results from body compression, drop noise before trimming production code (completed 2026-04-03)
-- [ ] **Phase 28: Trace Output Quality** - Noise filtering, confidence warnings, and CLI entrypoint preference in trace_flow
+- [x] **Phase 28: Trace Output Quality** - Noise filtering, confidence warnings, and CLI entrypoint preference in trace_flow (completed 2026-04-03)
 - [ ] **Phase 29: Explain Codebase Depth** - Behavioral summaries for key modules in explain_codebase
 
 ## Phase Details
@@ -306,7 +306,7 @@ Plans:
   2. Hop lists for any traced function exclude native Array/Promise/String methods (`map`, `filter`, `includes`, `resolve`, `push`, `has`) — only project-owned symbols appear as callees (debug.md: runBuildContext workflow trace scenario)
   3. Querying `trace_flow("nonexistentFunction")` with a top-match similarity below 0.5 produces a visible warning line — e.g. `No confident match for "nonexistentFunction" — tracing nearest match: resetState (watch.ts:13, similarity: 0.31)` — rather than a structurally identical-looking trace (debug.md: nonexistent symbol query scenario)
   4. Querying `trace_flow("index_repo CLI command to LanceDB storage")` resolves to a symbol in `src/cli/` or a file containing `program.command(...)` as the seed, not a mid-stack service function (debug.md: CLI-to-LanceDB indexing trace scenario)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 28-01-PLAN.md — TDD: post-BFS test file hop exclusion and stdlib callsFound filtering
@@ -355,7 +355,7 @@ Plans:
 | 25. Tool Routing Documentation | v2.2 | 2/2 | Complete    | 2026-04-03 |
 | 26. Search Precision | v2.3 | 1/1 | Complete    | 2026-04-03 |
 | 27. Compression Protection | v2.3 | 1/1 | Complete    | 2026-04-03 |
-| 28. Trace Output Quality | v2.3 | 1/2 | In Progress|  |
+| 28. Trace Output Quality | v2.3 | 1/2 | Complete    | 2026-04-03 |
 | 29. Explain Codebase Depth | v2.3 | 0/? | Not started | - |
 
 ---

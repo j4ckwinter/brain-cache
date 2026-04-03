@@ -1,8 +1,8 @@
 # Architecture Research
 
-**Domain:** brain-cache v2.2 — retrieval quality improvements integration
+**Domain:** Claude Code status line integration for a local MCP tool suite
 **Researched:** 2026-04-03
-**Confidence:** HIGH — all findings from direct source inspection of existing codebase
+**Confidence:** HIGH — official Claude Code statusLine docs confirmed at code.claude.com/docs/en/statusline; existing codebase read directly
 
 ---
 
@@ -10,460 +10,421 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     MCP Transport Layer                           │
-│   src/mcp/index.ts — 6 registered tools, stdio JSON-RPC          │
-│   formatToolResponse, formatErrorEnvelope (lib/format.ts)         │
-├────────┬──────────────┬──────────────────┬───────────────────────┤
-│        │              │                  │                        │
-│ index  │ search_      │ build_context    │  trace_flow            │
-│ _repo  │ codebase     │                  │  explain_codebase      │
-│        │              │                  │  doctor                │
-├────────┴──────────────┴──────────────────┴───────────────────────┤
-│                      Workflow Layer                               │
-│  src/workflows/                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
-│  │  search.ts   │  │buildContext  │  │   traceFlow.ts        │   │
-│  │              │  │   .ts        │  │                       │   │
-│  └──────────────┘  └──────────────┘  └───────────────────────┘   │
-│  ┌──────────────┐  ┌──────────────┐                              │
-│  │  index.ts    │  │explainCode   │                              │
-│  │              │  │   base.ts    │                              │
-│  └──────────────┘  └──────────────┘                              │
-├──────────────────────────────────────────────────────────────────┤
-│                      Service Layer                                │
-│  src/services/                                                    │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  │
-│  │retriever.ts│  │compression │  │flowTracer  │  │cohesion.ts │  │
-│  │            │  │    .ts     │  │    .ts     │  │            │  │
-│  └────────────┘  └────────────┘  └────────────┘  └────────────┘  │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
-│  │tokenCounter│  │configLoader│  │  lancedb   │                  │
-│  │    .ts     │  │    .ts     │  │    .ts     │                  │
-│  └────────────┘  └────────────┘  └────────────┘                  │
-├──────────────────────────────────────────────────────────────────┤
-│                       Lib Layer                                   │
-│  src/lib/                                                         │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐                  │
-│  │  config.ts │  │  types.ts  │  │  format.ts │                  │
-│  └────────────┘  └────────────┘  └────────────┘                  │
-├──────────────────────────────────────────────────────────────────┤
-│                      Data Layer                                   │
-│  LanceDB: chunks table, edges table, index_state.json            │
-│  Ollama: local embeddings via HTTP                               │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Modified by v2.2? |
-|-----------|----------------|------------------|
-| `src/mcp/index.ts` | Registers 6 tools, formats responses, handles protocol | Yes — tool descriptions, trace_flow savings |
-| `src/workflows/buildContext.ts` | Orchestrates lookup/trace/explore pipeline, token savings | Yes — passes query tokens to compressChunk |
-| `src/workflows/traceFlow.ts` | Embeds entrypoint, BFS seed search, maps hops to output | Yes — entry point resolution, savings metadata |
-| `src/workflows/search.ts` | Embeds query, runs searchChunks, returns ranked chunks | No direct change |
-| `src/services/retriever.ts` | classifyRetrievalMode, searchChunks, keyword boost reranking | Yes — build-config file noise penalty |
-| `src/services/compression.ts` | compressChunk — relevance-gated body stripping | Yes — optional query tokens parameter |
-| `src/services/flowTracer.ts` | BFS traversal of edges table, resolveSymbolToChunkId | Yes — deduplicate callsFound |
-| `src/lib/format.ts` | Pure formatter functions for all 6 tools | Possibly — if format is source of trace duplication |
-| `src/lib/config.ts` | Constants: thresholds, budgets, timeouts | Possibly — new penalty constant |
-| `CLAUDE.md` | Routes Claude to correct tool per query type | Yes — sharper routing table |
-
----
-
-## The 6 Improvements: Integration Map
-
-### Improvement 1: Tool Routing
-
-**Problem:** Test session — Claude called `trace_flow` for "how does buildContext assemble and compress chunks" (code-understanding, not call-path). Claude also used `search_codebase` (locator) for "what config values does brain-cache use" instead of `build_context`.
-
-**Root cause:** MCP descriptions and CLAUDE.md routing table do not sufficiently disambiguate `trace_flow` (call propagation) from `build_context` (code understanding). Positive signals for trace_flow ("trace how a function call propagates") exist, but no negative signals ("do NOT use for questions about internal logic").
-
-**Files that change:**
-- `CLAUDE.md` — sharpen routing table: add explicit trigger phrases for `build_context` and explicit "not this" guidance for `trace_flow`
-- `src/mcp/index.ts` — `trace_flow` description: add negative signal for code-understanding queries
-
-**Integration scope:** Isolated — pure documentation. No TypeScript changes, no data flow changes, no service dependencies.
-
----
-
-### Improvement 2: Query-Aware Relevance Boosting
-
-**Problem:** Test session — "how does buildContext assemble chunks" caused buildContext.ts to fall below the 0.85 similarity threshold and get compressed, hiding the most relevant file. The embedding did not align the filename/function name with the query despite the query containing the function name literally.
-
-**Root cause:** `compressChunk` (compression.ts) only looks at `chunk.similarity` — it has no knowledge of whether the chunk's name or filename appears in the query. A chunk named `buildContext` in a query containing "buildContext" should be treated as high-relevance regardless of its vector similarity score.
-
-**Files that change:**
-- `src/services/compression.ts` — add optional `queryTokens?: string[]` parameter to `compressChunk`. If queryTokens are provided and any token matches the chunk's filename base or function name, skip compression (treat as high-relevance). The existing rule 2 (similarity >= 0.85) is unchanged; this is an additional bypass.
-- `src/workflows/buildContext.ts` — in the lookup-mode path, extract query tokens before compression and pass them to each `compressChunk` call:
-  ```typescript
-  const queryTokens = extractQueryTokens(query); // reuse from retriever.ts
-  const compressed = enriched.map(c => compressChunk(c, queryTokens));
-  ```
-- `src/services/retriever.ts` — export `extractQueryTokens` (currently private). It already exists and does the right thing (split on whitespace/punctuation, filter short tokens, lowercase).
-- `src/workflows/traceFlow.ts` — `compressChunk` calls here pass `similarity: 1`, so compression is always bypassed by rule 2 anyway. When the signature changes to accept optional `queryTokens`, these callers can pass `undefined` or nothing — no behavioral change needed.
-
-**Integration scope:** Moderate. compressChunk signature changes, two callers affected (buildContext + traceFlow), one export added (retriever.ts). Backward-compatible because queryTokens is optional.
-
-**Data flow change:**
-```
-Before: compressChunk(chunk)
-After:  compressChunk(chunk, queryTokens?)
-
-In buildContext.ts lookup path:
-  queryTokens = extractQueryTokens(query)
-  compressed = enriched.map(c => compressChunk(c, queryTokens))
+│                     Claude Code (host process)                    │
+│  ┌────────────────────┐         ┌──────────────────────────────┐ │
+│  │   MCP stdio server │         │  statusLine runner (host UI)  │ │
+│  │   src/mcp/index.ts │         │  runs ~/.brain-cache/         │ │
+│  └────────┬───────────┘         │  statusline.sh after each    │ │
+│           │ tool results        │  assistant message            │ │
+│           │                     └──────────────┬───────────────┘ │
+└───────────┼─────────────────────────────────── │ ───────────────┘
+            │                                     │
+            ▼                                     ▼
+┌───────────────────────┐           ┌─────────────────────────────┐
+│  workflow layer       │           │  Session stats file          │
+│  runBuildContext      │──writes──▶│  ~/.brain-cache/             │
+│  runTraceFlow         │           │  session-stats.json          │
+│  runExplainCodebase   │           └──────────────┬──────────────┘
+│  runSearch (passive)  │                          │ reads
+└───────────────────────┘                          ▼
+                                   ┌─────────────────────────────┐
+                                   │  statusline.sh              │
+                                   │  reads session-stats.json   │
+                                   │  prints: brain-cache ↓38%  │
+                                   │          12.4k saved        │
+                                   └─────────────────────────────┘
 ```
 
 ---
 
-### Improvement 3: Trace Entry Point Resolution
+## How the Claude Code Status Line Works
 
-**Problem:** Test 4 — `trace_flow` called with verbose entrypoint "chunkFile function in the indexing pipeline" returned `retriever.ts` results instead of `chunker.ts:chunkFile`. Test 5 — same query as bare "chunkFile" resolved correctly.
+**Configuration** (HIGH confidence — official docs, code.claude.com/docs/en/statusline, April 2026):
 
-**Root cause:** `runTraceFlow` embeds the full entrypoint string and uses vector similarity to find the seed chunk. For verbose queries, the embedding drifts from the function name. `flowTracer.ts` already has `resolveSymbolToChunkId` which does exact-name lookup — but it is only called during BFS, not for the initial seed.
-
-**Files that change:**
-- `src/workflows/traceFlow.ts` — add a pre-step before vector search: extract candidate symbol names from the entrypoint (bare words >= 3 chars, preferring camelCase/PascalCase tokens), call `resolveSymbolToChunkId` for each, and if any match, use the first matching chunk as seed. Only fall back to vector search if no exact name match is found.
-
-  ```typescript
-  // Pseudo-code for new pre-step
-  const candidateNames = extractCandidateNames(entrypoint); // e.g. ["chunkFile"]
-  for (const name of candidateNames) {
-    const seedId = await resolveSymbolToChunkId(table, name, '');
-    if (seedId) {
-      // use this seed, skip vector search
-    }
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "~/.brain-cache/statusline.sh"
   }
-  // else: existing vector search path
-  ```
-
-- `src/services/flowTracer.ts` — `resolveSymbolToChunkId` is already exported. No change needed.
-
-**Integration scope:** Contained to `traceFlow.ts`. The `resolveSymbolToChunkId` service already exists and is exported. No other workflows affected.
-
-**Data flow change:**
-```
-Before: embed(entrypoint) -> vector search -> seeds[0] -> BFS
-After:  extractCandidateNames(entrypoint)
-          -> resolveSymbolToChunkId for each candidate
-          -> if found: use as seed (bypass vector search)
-          -> if not found: embed(entrypoint) -> vector search -> seeds[0] -> BFS
+}
 ```
 
----
+This goes into `~/.claude/settings.json` (user scope — applies to all projects for that user).
 
-### Improvement 4: Reduced Search Noise
+**Execution model:**
+- Claude Code runs the script and pipes a JSON object to stdin after each assistant message.
+- The script reads stdin, outputs text to stdout; that text appears as the status line.
+- Updates debounced at 300ms. If a new update triggers while the script is running, the in-flight execution is cancelled.
+- The script is a new process on every invocation — no shared state between calls.
+- Scripts that exit with non-zero code or produce no output cause the status line to go blank.
+- The status line is disabled when `disableAllHooks: true` is set in settings.
 
-**Problem:** Test 3 — `vitest.config.ts` and `tsup.config.ts` ranked 3rd and 5th for query "configuration values config settings". Build tool config files matched "config" semantically but are not application config.
+**The session JSON from Claude Code does NOT contain brain-cache stats.** It contains Claude's own context window data, cost, model info, and session metadata. Brain-cache stats must come from a separate file that the MCP handlers write.
 
-**Root cause:** `searchChunks` in `retriever.ts` applies a keyword boost (10% weight) when query tokens appear in file paths. The word "config" in the query matches `*.config.ts` filenames, boosting build-tool config files above application config files.
-
-**Files that change:**
-- `src/services/retriever.ts` — in the reranking step of `searchChunks`, apply a build-config penalty to known config-shaped filenames. Use pattern matching (filename ends in `.config.ts` or `.config.js`) rather than an explicit deny list, to avoid rot. The penalty uses a small negative coefficient so the file still appears if it is the only result or if the user queries specifically for it.
-
-  ```typescript
-  const BUILD_CONFIG_PENALTY_WEIGHT = 0.05;
-
-  function computeBuildConfigPenalty(chunk: RetrievedChunk): number {
-    const base = chunk.filePath.split('/').pop()?.toLowerCase() ?? '';
-    if (/\.(config|rc)\.(ts|js|cjs|mjs)$/.test(base)) return 1;
-    return 0;
-  }
-
-  // In reranking:
-  score = similarity * 0.90
-        + keywordBoost * 0.10
-        - computeBuildConfigPenalty(chunk) * BUILD_CONFIG_PENALTY_WEIGHT;
-  ```
-
-**Integration scope:** Isolated to `retriever.ts`. The change is additive to existing reranking. No callers change signature. No tests need updating beyond adding a case for config-file penalty.
+**Key architectural implication:** The statusline script is the reader of a file that MCP handlers write. File-based IPC is the only viable mechanism — the script is a short-lived process with no connection to the MCP server process.
 
 ---
 
-### Improvement 5: Trace Serialization Duplicate Fix
+## Integration Architecture: New vs Modified Components
 
-**Problem:** Test 5 — "Hop 1 call list was noisy. The chunkFile hop listed its callees twice (the full list appears duplicated)."
+### New Components
 
-**Root cause to verify:** In `flowTracer.ts`, `callsFound: callEdges.map(e => e.to_symbol)` — if `queryEdgesFrom` returns duplicate edge rows (same `from_chunk_id` + `to_symbol` pair), the list is duplicated. This is the most likely source. Alternatively, `formatTraceFlow` in `format.ts` could be rendering the calls twice (less likely — formatter just joins the array).
+#### 1. `src/services/sessionStats.ts` — Stats accumulation service
 
-**Files that change:**
-- `src/services/flowTracer.ts` — deduplicate `to_symbol` values before building `callsFound`:
-  ```typescript
-  callsFound: [...new Set(callEdges.map(e => e.to_symbol))],
-  ```
-  This is the primary fix. The set deduplication is a one-line change.
-- `src/lib/format.ts` — check `formatTraceFlow` for any double-render of `callsFound`. Currently: `hop.callsFound.join(', ')`. If flowTracer dedup fixes the issue, no change needed here.
+**Purpose:** Read/write the session stats file at `~/.brain-cache/session-stats.json`. Owns the file format, TTL-based session boundary detection, and atomic writes.
 
-**Integration scope:** Isolated to `flowTracer.ts`. One-line fix. No callers change.
+**Responsibility boundary:** This is a service (not a workflow) because it has no orchestration — it is a pure data store abstraction. It sits alongside `configLoader.ts` and `capability.ts` in the services layer.
 
----
+**Interface:**
+```typescript
+export interface SessionStats {
+  startedAt: string;           // ISO 8601
+  lastUpdatedAt: string;       // ISO 8601
+  totalTokensSaved: number;
+  totalTokensSent: number;
+  totalCallCount: number;
+  reductionPctLatest: number;  // pct from most recent call
+}
 
-### Improvement 6: Honest Token Savings for trace_flow
-
-**Problem:** Test 4 — `trace_flow` reported 67% token savings on a result that resolved the wrong entry point (irrelevant output). The `reductionPct: 67` in the trace_flow MCP handler is hardcoded, not computed.
-
-**Files that change:**
-- `src/workflows/traceFlow.ts` — add savings computation to `runTraceFlow`. After building hops, read the full file content for each unique file in the hop set (only files where no hop chunk has compressed content), sum tokens, add tool-call overhead. Store as `estimatedWithoutBraincache` in `TraceFlowResult.metadata`.
-
-  ```typescript
-  // TraceFlowResult.metadata extension:
-  interface TraceFlowMetadata {
-    seedChunkId: string | null;
-    totalHops: number;
-    localTasksPerformed: string[];
-    tokensSent: number;              // NEW
-    estimatedWithoutBraincache: number; // NEW
-    reductionPct: number;            // NEW
-  }
-  ```
-
-- `src/mcp/index.ts` — replace `reductionPct: 67` hardcode with values from `result.metadata`:
-  ```typescript
-  const savings = formatTokenSavings({
-    tokensSent: result.metadata.tokensSent,
-    estimatedWithout: result.metadata.estimatedWithoutBraincache,
-    reductionPct: result.metadata.reductionPct,
-    filesInContext: new Set(result.hops.map(h => h.filePath)).size,
-  });
-  ```
-
-**Integration scope:** Moderate. `TraceFlowResult.metadata` type in `lib/types.ts` or inline in `traceFlow.ts` must be extended. Both `traceFlow.ts` and `mcp/index.ts` change. No other workflows affected.
-
-**Note:** `search_codebase` MCP handler also uses a fabricated estimate (`tokensSent * 3`). This is lower priority — `search_codebase` is a locator tool where exact savings are less meaningful. Address in a follow-up if needed.
-
----
-
-## Build Order
-
-The improvements split into three independent groups plus one documentation group.
-
-### Group A: Isolated Single-File Fixes
-
-These have no dependencies on each other or on Group B/C. Ship first — lowest risk.
-
-1. **Improvement 5** (trace serialization dedup) — one-line fix in `flowTracer.ts`
-2. **Improvement 3** (entry point resolution) — contained to `traceFlow.ts`, uses already-exported `resolveSymbolToChunkId`
-
-### Group B: Retrieval Scoring
-
-3. **Improvement 4** (search noise penalty) — additive change to `retriever.ts`, no callers change
-
-### Group C: Compression + Savings (ship together)
-
-These two touch the same files (`traceFlow.ts`, `buildContext.ts`). Ship in a single plan to avoid double-editing.
-
-4. **Improvement 2** (query-aware compression) — changes `compressChunk` signature, updates two callers, exports `extractQueryTokens`
-5. **Improvement 6** (honest trace savings) — extends `TraceFlowResult.metadata`, updates MCP handler
-
-### Group D: Documentation
-
-6. **Improvement 1** (CLAUDE.md + MCP descriptions) — pure documentation, no code risk. Ship last so descriptions reflect the actual behavior delivered in A, B, C.
-
-### Recommended Phase Sequence
-
-```
-Phase 22-A: Group A (improvements 5 + 3) — isolated fixes
-Phase 22-B: Group B (improvement 4)      — scoring change
-Phase 22-C: Group C (improvements 2 + 6) — compression + savings
-Phase 22-D: Group D (improvement 1)      — documentation
+export async function readSessionStats(): Promise<SessionStats | null>
+export async function accumulateStats(delta: {
+  tokensSaved: number;
+  tokensSent: number;
+  reductionPct: number;
+}): Promise<void>
 ```
 
-Alternatively, Group A and B can be merged into one phase since they are all isolated.
+**File location:** `~/.brain-cache/session-stats.json` — alongside `profile.json` and `config.json`, consistent with the existing global config pattern in `src/lib/config.ts`.
 
----
+**Session TTL:** The MCP handlers receive no session ID from Claude Code (the MCP protocol carries no such metadata). TTL-based reset is the correct approach: if `lastUpdatedAt` is more than N hours old (e.g., 4 hours), `accumulateStats` resets counters before accumulating the new delta. This handles session boundaries without any session ID coordination.
 
-## Integration Classification
+**Atomic write:** Write to `session-stats.json.tmp` then `fs.rename()` to final path. POSIX `rename` is atomic. Prevents the statusline script from reading a partial file.
 
-| Improvement | Isolated or Cross-Cutting | Files Modified | Test Files Likely Affected |
-|-------------|--------------------------|----------------|---------------------------|
-| 1 — Tool routing | Isolated (docs only) | `CLAUDE.md`, `src/mcp/index.ts` (description strings) | None |
-| 2 — Relevance boosting | Cross-cutting | `src/services/compression.ts`, `src/workflows/buildContext.ts`, `src/workflows/traceFlow.ts`, `src/services/retriever.ts` (export) | `tests/services/compression.test.ts`, `tests/workflows/buildContext.test.ts` |
-| 3 — Entry point resolution | Isolated | `src/workflows/traceFlow.ts` | `tests/workflows/traceFlow.test.ts` (if exists) |
-| 4 — Search noise | Isolated | `src/services/retriever.ts` | `tests/services/retriever.test.ts` |
-| 5 — Trace serialization | Isolated | `src/services/flowTracer.ts` | `tests/services/flowTracer.test.ts` (if exists) |
-| 6 — Token savings | Cross-cutting | `src/workflows/traceFlow.ts`, `src/mcp/index.ts` | `tests/workflows/traceFlow.test.ts` |
+#### 2. `~/.brain-cache/statusline.sh` — Status line shell script
+
+**Purpose:** Read `~/.brain-cache/session-stats.json` and print formatted status line output to stdout.
+
+**Not a TypeScript file in src/.** It is a shell script (or Node.js script) that Claude Code invokes directly. Shell is simplest: no Node.js startup overhead, no build step, no dist path to manage.
+
+**Output format:**
+- When calls exist: `brain-cache  ↓38%  12.4k saved`
+- When no calls yet (missing file, zero calls): `brain-cache  idle`
+- On parse error: `brain-cache  idle` — never fail silently (blank = confusing)
+
+**Location:** `~/.brain-cache/statusline.sh` — global config directory, not per-project. Installed by `brain-cache init`.
+
+**Token display:** `totalTokensSaved / 1000` formatted as `12.4k`. Use `reductionPctLatest` for the percentage (most recent call's reduction, not a session average — simpler and more actionable for the user).
+
+#### 3. `src/workflows/statusLine.ts` — Script template and install logic
+
+**Purpose:** Generate the `statusline.sh` script content, write it to `~/.brain-cache/statusline.sh`, make it executable, and return the `settings.json` fragment for `runInit` to apply.
+
+**Why a workflow, not a service:** The install logic is orchestration — it coordinates writing the script, setting permissions, and computing the settings fragment. This mirrors how `runInit` already contains orchestration logic for `.mcp.json` and `CLAUDE.md`.
+
+**Interface:**
+```typescript
+export async function installStatusLineScript(): Promise<{
+  scriptPath: string;
+  settingsFragment: { statusLine: { type: string; command: string } };
+}>
+```
+
+The `settingsFragment` returns `{ statusLine: { type: "command", command: "~/.brain-cache/statusline.sh" } }`.
+
+The script template is a string constant in this file — no external file needed at build time.
+
+### Modified Components
+
+#### 4. `src/mcp/index.ts` — Stats accumulation after each retrieval tool call
+
+**What changes:** After each successful response from `runBuildContext`, `runTraceFlow`, `runExplainCodebase`, and `runSearch`, call `accumulateStats` from the sessionStats service.
+
+**Where exactly:** In each MCP handler, after the workflow completes and the response object is constructed, before `return`. The token savings numbers come from the workflow result metadata that is already available at this point.
+
+**Why the MCP handler layer, not the workflow layer:**
+- The CLI also calls the same workflows (`brain-cache context`, `brain-cache ask`). CLI invocations should not accumulate MCP session stats.
+- Workflows are orchestration and must stay decoupled from persistence side effects.
+- The MCP handler already has all needed fields (`tokensSent`, `estimatedWithoutBraincache`, `reductionPct`) from the workflow result.
+
+**Pattern:**
+```typescript
+// After successful result in build_context handler:
+await accumulateStats({
+  tokensSaved: result.metadata.estimatedWithoutBraincache - result.metadata.tokensSent,
+  tokensSent: result.metadata.tokensSent,
+  reductionPct: result.metadata.reductionPct,
+}).catch(() => { /* non-fatal — stats failure must not fail the tool call */ });
+```
+
+The `.catch(() => {})` is required: stats persistence failure must never cause a tool call to fail.
+
+**search_codebase handler:** Include for completeness. Its savings estimate uses `tokensSent * 3` (approximate), but accumulated values will be in the same ballpark as the other tools.
+
+#### 5. `src/workflows/init.ts` — Status line installation
+
+**What changes:** Add Step 12 at the end of `runInit` that calls `installStatusLineScript()` and then merges the returned `settingsFragment` into `~/.claude/settings.json`.
+
+**Pattern for `~/.claude/settings.json` mutation:**
+```typescript
+const settingsPath = join(homedir(), '.claude', 'settings.json');
+// Read existing file if present, parse, deep merge settingsFragment, write back
+```
+
+Same pattern as the existing `.mcp.json` mutation (read → parse → merge → write).
+
+**Idempotency guard:** Check if `statusLine.command` is already set to the correct path before writing. If already correct, print "skipping" and move on — same approach as the `.mcp.json` check at lines 103-106.
+
+**Permissions:** After writing the script file, call `fs.chmod(scriptPath, 0o755)` to make it executable.
+
+#### 6. `src/lib/config.ts` — New path constants
+
+**What changes:** Add:
+```typescript
+export const SESSION_STATS_PATH = join(GLOBAL_CONFIG_DIR, 'session-stats.json');
+export const STATUS_LINE_SCRIPT_PATH = join(GLOBAL_CONFIG_DIR, 'statusline.sh');
+export const SESSION_STATS_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+```
 
 ---
 
 ## Data Flow
 
-### Retrieval Pipeline (build_context, lookup mode) — with v2.2 changes annotated
+### Per-Tool-Call Stats Accumulation
 
 ```
-Claude calls build_context(query)
-    |
-    v
-mcp/index.ts -> runBuildContext(query)
-    |
-    v
-classifyRetrievalMode(query)          [retriever.ts]
-    |
-    v
-embedBatchWithRetry(query)            [embedder.ts -> Ollama]
-    |
-    v
-searchChunks(table, vector, opts, query)  [retriever.ts]
-  -> LanceDB vector search
-  -> filter by distanceThreshold
-  -> keyword boost reranking
-  -> [NEW] build-config file penalty     (improvement 4)
-    |
-    v
-deduplicateChunks()                   [retriever.ts]
-    |
-    v
-assembleContext()                     [tokenCounter.ts]
-    |
-    v
-enrichWithParentClass()               [cohesion.ts]
-    |
-    v
-queryTokens = extractQueryTokens(query) [retriever.ts — newly exported]
-enriched.map(c => compressChunk(c, queryTokens))  [compression.ts]
-  [NEW] bypass compression if chunk name/file in queryTokens (improvement 2)
-    |
-    v
-groupChunksByFile + formatGroupedContext  [cohesion.ts]
-    |
-    v
-compute token savings baseline        [buildContext.ts:152-199, unchanged]
-    |
-    v
-ContextResult -> MCP response
+MCP handler (build_context / trace_flow / explain_codebase / search_codebase)
+    │
+    ├─ calls workflow (runBuildContext / runTraceFlow / runExplainCodebase / runSearch)
+    │       │
+    │       └─ returns result.metadata: { tokensSent, estimatedWithoutBraincache, reductionPct }
+    │
+    ├─ formats response (existing logic, unchanged)
+    │
+    └─ fire-and-forget: accumulateStats(delta)
+            │
+            ├─ reads ~/.brain-cache/session-stats.json
+            ├─ if lastUpdatedAt > TTL: reset counters
+            ├─ adds delta to totals
+            └─ atomically writes ~/.brain-cache/session-stats.json
 ```
 
-### Trace Flow Pipeline — with v2.2 changes annotated
+### Status Line Render (triggered by Claude Code after each response)
 
 ```
-Claude calls trace_flow(entrypoint)
-    |
-    v
-mcp/index.ts -> runTraceFlow(entrypoint)
-    |
-    v
-[NEW] extractCandidateNames(entrypoint)    (improvement 3)
-  -> resolveSymbolToChunkId for each name  [flowTracer.ts — already exported]
-  -> if found: use as seedId directly
-  -> if not: embed + vector search (existing path)
-    |
-    v
-traceFlow(edgesTable, chunksTable, seedId)  [flowTracer.ts]
-  -> BFS over call edges
-  -> queryEdgesFrom per hop
-  -> [NEW] deduplicate to_symbol per hop  (improvement 5)
-  -> resolveSymbolToChunkId for each callee
-    |
-    v
-hops.map(compressChunk)     [compression.ts, similarity=1 -> always pass-through]
-    |
-    v
-[NEW] compute tokensSent + estimatedWithoutBraincache  (improvement 6)
-  -> read full file content for uncompressed-file hops
-  -> sum tokens + tool-call overhead
-    |
-    v
-TraceFlowResult (metadata includes tokensSent, estimatedWithoutBraincache, reductionPct)
-    |
-    v
-mcp/index.ts: reads savings from result.metadata (no more hardcoded 67%)
-    |
-    v
-formatTraceFlow + formatTokenSavings -> MCP response
+Claude Code (host process)
+    │
+    └─ forks ~/.brain-cache/statusline.sh
+            │
+            ├─ receives Claude's session JSON on stdin (not used)
+            │
+            ├─ reads ~/.brain-cache/session-stats.json
+            │
+            └─ prints to stdout:
+                  "brain-cache  ↓38%  12.4k saved"    (if totalCallCount > 0)
+                  "brain-cache  idle"                   (if missing / no calls)
 ```
+
+### Init Flow
+
+```
+runInit (src/workflows/init.ts)
+    │
+    ├─ Step 1-10 (existing: hardware, Ollama, model, profile, .mcp.json, CLAUDE.md)
+    │
+    └─ Step 12 (NEW): installStatusLineScript()
+            │
+            ├─ write script content to ~/.brain-cache/statusline.sh
+            ├─ chmod +x ~/.brain-cache/statusline.sh
+            └─ merge { statusLine: ... } into ~/.claude/settings.json
+```
+
+---
+
+## Component Boundaries
+
+| Component | Responsibility | Layer | Communicates With |
+|-----------|---------------|-------|-------------------|
+| `src/services/sessionStats.ts` | Read/write `~/.brain-cache/session-stats.json`, TTL reset | service | Called by MCP handlers (fire-and-forget) |
+| `src/workflows/statusLine.ts` | Generate script content, write to disk, return settings fragment | workflow | Called by `runInit` |
+| `src/mcp/index.ts` (modified) | Accumulate stats after each retrieval tool response | mcp handler | Calls `sessionStats` service |
+| `src/workflows/init.ts` (modified) | Install status line script into `~/.claude/settings.json` | workflow | Calls `statusLine` workflow |
+| `src/lib/config.ts` (modified) | Path and TTL constants for new features | lib | Imported by `sessionStats` service and `statusLine` workflow |
+| `~/.brain-cache/statusline.sh` | Read stats file, render status line text | installed artifact (shell script) | Reads `session-stats.json` at runtime |
+| `~/.brain-cache/session-stats.json` | Persisted session stats (file-based IPC) | runtime artifact | Written by MCP handlers, read by statusline.sh |
+| `~/.claude/settings.json` | User-scoped Claude Code settings declaring statusLine command | installed artifact (JSON) | Written by `runInit`, read by Claude Code |
+
+---
+
+## Recommended File Structure (new additions only)
+
+```
+src/
+├── services/
+│   └── sessionStats.ts       # NEW — read/write ~/.brain-cache/session-stats.json
+├── workflows/
+│   └── statusLine.ts         # NEW — script template + ~/.claude/settings.json integration
+└── mcp/
+    └── index.ts              # MODIFIED — accumulateStats() after each retrieval tool
+
+~/.brain-cache/               # existing global config dir
+├── profile.json              # existing
+├── config.json               # existing (optional user config)
+└── session-stats.json        # NEW runtime artifact — written by MCP, read by statusline.sh
+
+~/.brain-cache/statusline.sh  # NEW installed artifact — shell script, chmod +x
+
+~/.claude/
+└── settings.json             # MODIFIED — statusLine entry added by brain-cache init
+```
+
+The script lives at `~/.brain-cache/statusline.sh`, not `~/.claude/statusline.sh`. Brain-cache owns its config directory; `~/.claude/` is Claude Code's territory and should not be used for brain-cache artifacts beyond settings.json modifications.
 
 ---
 
 ## Architectural Patterns
 
-### Pattern 1: Optional Parameter Extension (compressChunk)
+### Pattern 1: Non-fatal fire-and-forget side effect
 
-**What:** Extend `compressChunk(chunk)` to `compressChunk(chunk, queryTokens?)` with the query tokens being optional. When absent, behavior is identical to current. When present, an additional bypass rule fires.
+**What:** Stats accumulation is called after the main operation, with `.catch(() => {})`. It never propagates errors.
 
-**When to use:** When a service function needs context from the caller (the original query) but that context is not always available.
+**When to use:** Any side effect that should not degrade the primary tool response.
 
-**Trade-offs:** Maintains backward compatibility with all existing callers. The traceFlow.ts caller passes `undefined` implicitly — no behavior change there since those chunks have similarity=1 anyway.
+**Why here:** The MCP tool contract is to return a response to Claude. Stats persistence is secondary infrastructure. If the disk is full or the stats file is locked, the tool call must still succeed.
 
-### Pattern 2: Pre-Resolution Before Vector Search (traceFlow)
+### Pattern 2: File-based IPC for cross-process data
 
-**What:** Before running expensive vector search + BFS, attempt exact-name resolution using the LanceDB WHERE query. If a chunk with that name exists, bypass embedding entirely.
+**What:** The MCP server (long-lived Node.js process, possibly running in a Docker container or remote environment) writes a JSON file. The statusline script (short-lived shell process, spawned by Claude Code's host) reads it.
 
-**When to use:** When the caller (Claude) may have already identified the symbol name as part of their query, and exact-name lookup is more reliable than embedding for short function names.
+**When to use:** When two processes cannot share memory and the data is infrequently written.
 
-**Trade-offs:** Adds one fast DB query per candidate name. Eliminates embedding latency and reduces seed-search errors for verbose entrypoint queries.
+**Why this over alternatives:**
+- Unix socket: too much complexity for stats that change once per tool call.
+- Environment variable: cannot be set on the statusline.sh process by the MCP server.
+- SQLite: no new dependency warranted for a single stats record.
+- Posting to a localhost HTTP server: adds a long-running server process, overkill.
 
-### Pattern 3: Savings Computation in Workflow, Not MCP Handler
+**Atomic write:** Write to `session-stats.json.tmp` then `fs.rename()` to prevent partial reads.
 
-**What:** `runTraceFlow` computes `estimatedWithoutBraincache` and returns it in metadata. MCP handler reads it directly.
+### Pattern 3: TTL-based session identity
 
-**When to use:** Any tool that needs accurate token savings reporting. Already established by `buildContext.ts` (lines 152-199); `traceFlow.ts` follows the same pattern.
+**What:** A "session" is defined as activity within a rolling TTL window (default 4 hours). When `accumulateStats` is called and `lastUpdatedAt` is more than TTL old, counters reset before the delta is added.
 
-**Trade-offs:** Adds file I/O to the workflow return path. Justified because savings reporting is a core feature promise of brain-cache.
+**When to use:** When the component writing stats (MCP server) has no visibility into session start/stop events from the host (Claude Code).
+
+**Why not use session_id from Claude Code:** The `session_id` field is present in the JSON that Claude Code sends to the statusline script's stdin. However, the MCP server has no way to receive that value — it communicates only via JSON-RPC stdio with the tool caller (Claude itself). There is no channel for the statusline script to pass `session_id` to the MCP server. TTL is simpler and sufficient.
+
+### Pattern 4: Workflow produces the installer, runInit orchestrates
+
+**What:** `statusLine.ts` is a workflow that knows how to produce the shell script and the settings fragment. `runInit` calls it, same as it calls other install helpers. `runInit` is the single place that orchestrates all first-run installation steps.
+
+**When to use:** When a new feature requires both a file artifact and a config change during `init`. Adding the logic to `runInit` directly would make it too large; a dedicated workflow keeps responsibilities separated.
 
 ---
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: New File for Each Improvement
+### Anti-Pattern 1: Accumulating stats in the workflow layer
 
-**What people do:** Create `src/services/queryAwareCompression.ts`, `src/services/noiseFilter.ts` etc.
-**Why it's wrong:** brain-cache has an explicit "no over-abstraction" constraint. All 6 improvements are in-place modifications to existing functions, not new abstractions.
-**Do this instead:** Modify the existing function. `compressChunk` gets an optional parameter. `searchChunks` gets an additional scoring term. No new modules.
+**What people do:** Add `accumulateStats()` to `runBuildContext`, `runTraceFlow`, `runExplainCodebase`.
 
-### Anti-Pattern 2: Making queryTokens Required in compressChunk
+**Why it's wrong:** Workflows are shared between CLI and MCP. The CLI (`brain-cache context`, `brain-cache ask`) calls the same workflows but should not write MCP session stats. Stats accumulation is an MCP-specific side effect.
 
-**What people do:** `compressChunk(chunk: RetrievedChunk, queryTokens: string[])` — required parameter.
-**Why it's wrong:** `traceFlow.ts` compresses hops with `similarity: 1` (always pass-through), so passing query tokens there adds noise with no effect. Callers that don't have a query (e.g. future tooling) would need to pass `[]`.
-**Do this instead:** `compressChunk(chunk: RetrievedChunk, queryTokens?: string[])` — optional.
+**Do this instead:** Accumulate in the MCP handler layer only. The MCP server is the only process where these stats are meaningful.
 
-### Anti-Pattern 3: Hardcoding Build-Config File Names in Deny List
+### Anti-Pattern 2: Polling or computing in the statusline script
 
-**What people do:** `const DENY_LIST = ['vitest.config.ts', 'tsup.config.ts', 'vite.config.ts', ...]`
-**Why it's wrong:** The list rots. Users may have custom config files with those names for legitimate application reasons.
-**Do this instead:** Pattern-match on filename shape: `*.config.ts`, `*.config.js`, `*.rc.ts`. The user can still retrieve these files by querying specifically for them — the penalty is soft, not a hard filter.
+**What people do:** Have the statusline script call `brain-cache status`, read LanceDB, or re-compute savings on each invocation.
 
-### Anti-Pattern 4: Computing Savings in the MCP Handler
+**Why it's wrong:** The script runs after every Claude message, potentially multiple times per minute. LanceDB and Ollama calls have cold-start overhead. The script would be slow enough to trigger cancellations (the in-flight script is cancelled when a new update arrives).
 
-**What people do:** Move the file-read savings loop into the `trace_flow` MCP handler in `mcp/index.ts`.
-**Why it's wrong:** MCP handlers should call workflows and format results. File I/O belongs in workflows. `buildContext.ts` already established the correct pattern (savings computed inside `runBuildContext`).
-**Do this instead:** Compute `estimatedWithoutBraincache` inside `runTraceFlow`, return it in `TraceFlowResult.metadata`.
+**Do this instead:** The MCP server writes pre-computed stats to a flat JSON file. The statusline script reads only that file — cat + jq, no computation, no external processes.
+
+### Anti-Pattern 3: Installing the script to `~/.claude/`
+
+**What people do:** Put the script at `~/.claude/statusline.sh` to mirror Claude Code's own examples.
+
+**Why it's wrong:** `~/.claude/` is Claude Code's user config directory. Brain-cache does not own it. Future Claude Code updates may add their own `statusline.sh` default or conflict with arbitrary files placed there.
+
+**Do this instead:** Install at `~/.brain-cache/statusline.sh`. The `settings.json` `command` path simply points there. Brain-cache already owns `~/.brain-cache/`.
+
+### Anti-Pattern 4: Awaiting stats accumulation before returning the tool response
+
+**What people do:** `await accumulateStats(delta)` before `return response` so stats are guaranteed written.
+
+**Why it's wrong:** Adds latency to every tool call. Turns a non-critical side effect into a blocking operation.
+
+**Do this instead:** Fire-and-forget with `.catch`. The status line runs after the response is delivered — by then the file write will have completed.
+
+### Anti-Pattern 5: Storing the session stats TTL in `~/.brain-cache/config.json` (user config)
+
+**What people do:** Let users configure the TTL via `config.json`, treating it like other retrieval settings.
+
+**Why it's wrong:** The TTL is an implementation detail of the stats service, not a user-tunable parameter. Adding it to user config creates surface area without value.
+
+**Do this instead:** Hardcode the TTL as a constant in `src/lib/config.ts`. If it needs to change, it is a code change.
 
 ---
 
-## Integration Points
+## Build Order
 
-### Internal Boundaries
+The four active requirements have a clear dependency chain:
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `mcp/index.ts` → `workflows/*` | Direct function call, typed return | Workflows throw on error; MCP handler catches |
-| `workflows/buildContext.ts` → `services/compression.ts` | `compressChunk(chunk, queryTokens?)` | Signature change is backward-compatible |
-| `workflows/traceFlow.ts` → `services/flowTracer.ts` | `traceFlow()` and `resolveSymbolToChunkId()` | `resolveSymbolToChunkId` already exported — usable for pre-seed resolution |
-| `workflows/traceFlow.ts` → `services/compression.ts` | `compressChunk(chunk)` — similarity=1 always pass-through | Optional queryTokens not needed here |
-| `services/retriever.ts` → LanceDB | Async query via `table.query()` | Config penalty is post-fetch scoring — no LanceDB API change |
-| `services/flowTracer.ts` → `services/lancedb.ts` | `queryEdgesFrom()` | Dedup fix is in-memory after queryEdgesFrom returns |
+```
+Phase A: src/services/sessionStats.ts
+    │     (new file, depends only on config.ts constants)
+    │
+    ├── Phase B: MCP handler instrumentation  (STAT-01)
+    │     (depends on sessionStats service)
+    │     Testable: run brain-cache tools via MCP, verify session-stats.json created/updated
+    │
+    └── Phase C: statusLine workflow + runInit integration  (STAT-02, STAT-03)
+          (depends on sessionStats for path constants)
+          (depends on Phase B for an actual stats file to read during end-to-end test)
+          Testable: run brain-cache init, verify ~/.brain-cache/statusline.sh exists
+                    and ~/.claude/settings.json contains statusLine entry
+          Testable: verify statusline.sh outputs expected format given a test stats file
 
-### Key Behavioral Invariants to Preserve
+Phase D: TTL/session reset logic  (STAT-04)
+    (depends on Phase B — needs live stats accumulation to test expiry correctly)
+    Can be implemented as part of Phase A but tested after Phase B
+```
 
-1. `compressChunk` with `similarity >= 0.85` still never compresses (rule 2 is unchanged). The query-name bypass is additive.
-2. Keyword boost weight in `searchChunks` stays at 10%. The config penalty uses a separate 5% coefficient.
-3. `trace_flow` savings must never default to 0% as a "safe" fallback — that falsely signals the tool is not saving anything. Compute real values or report N/A.
-4. `resolveSymbolToChunkId` in `flowTracer.ts` must not change its existing signature — `traceFlow.ts` is the only caller of the pre-seed path, and BFS uses it internally.
+**Recommended phase grouping:**
+
+- **Phase 1 (foundation):** `sessionStats.ts` service (STAT-01 infra) + `src/lib/config.ts` constants
+- **Phase 2 (accumulation):** MCP handler instrumentation (STAT-01 behavior) + TTL reset in service (STAT-04)
+- **Phase 3 (rendering + install):** `statusLine.ts` workflow + `runInit` integration + shell script template (STAT-02, STAT-03)
+
+Phases 1 and 2 can be combined; Phase 3 depends on the stats file being written by Phase 2 for meaningful integration testing.
+
+---
+
+## Integration Points Summary
+
+| Integration Point | New or Modified | Build Order |
+|-------------------|-----------------|-------------|
+| `src/lib/config.ts` | MODIFIED — add 3 constants | Phase 1 |
+| `src/services/sessionStats.ts` | NEW | Phase 1 |
+| `src/mcp/index.ts` — build_context handler | MODIFIED | Phase 2 |
+| `src/mcp/index.ts` — trace_flow handler | MODIFIED | Phase 2 |
+| `src/mcp/index.ts` — explain_codebase handler | MODIFIED | Phase 2 |
+| `src/mcp/index.ts` — search_codebase handler | MODIFIED | Phase 2 |
+| `src/workflows/statusLine.ts` | NEW | Phase 3 |
+| `src/workflows/init.ts` | MODIFIED — Step 12 | Phase 3 |
+| `~/.brain-cache/session-stats.json` | NEW runtime artifact | written at Phase 2 runtime |
+| `~/.brain-cache/statusline.sh` | NEW installed artifact | installed at Phase 3 runtime |
+| `~/.claude/settings.json` | MODIFIED installed artifact | mutated at Phase 3 runtime |
 
 ---
 
 ## Sources
 
-- Direct inspection: `src/services/retriever.ts` — `searchChunks`, `extractQueryTokens`, `computeKeywordBoost`
-- Direct inspection: `src/services/compression.ts` — `compressChunk`, rule 1/2/3/4 decision tree
-- Direct inspection: `src/workflows/buildContext.ts` — full pipeline, savings computation at lines 152-199
-- Direct inspection: `src/workflows/traceFlow.ts` — entry point embedding, BFS delegation, hardcoded savings
-- Direct inspection: `src/services/flowTracer.ts` — `traceFlow` BFS loop, `callsFound` construction, `resolveSymbolToChunkId`
-- Direct inspection: `src/lib/format.ts` — `formatTraceFlow`, `formatTokenSavings`
-- Direct inspection: `src/mcp/index.ts` — all 6 tool handlers, hardcoded `reductionPct: 67` in trace_flow handler
-- `.planning/debug/claude-debugging-itself-v2.md` — 5 live test sessions with Claude's self-analysis identifying exact failure modes
-- `.planning/PROJECT.md` — v2.2 milestone target feature list
-- CONFIDENCE: HIGH — all findings from direct code inspection, not inference
+- [Claude Code statusLine documentation](https://code.claude.com/docs/en/statusline) — HIGH confidence, official docs. Confirmed April 2026: `~/.claude/settings.json` key is `statusLine`, `type: "command"`, script receives JSON on stdin, updates after each assistant message, debounced 300ms, cancelled if new update arrives while running.
+- [Claude Code settings documentation](https://code.claude.com/docs/en/settings) — HIGH confidence. Confirms `disableAllHooks: true` also disables statusLine. `statusLine` appears in settings table with `{"type": "command", "command": "~/.claude/statusline.sh"}` as example.
+- Direct codebase reads: `src/mcp/index.ts`, `src/workflows/init.ts`, `src/lib/config.ts`, `src/lib/types.ts`, `src/services/configLoader.ts`, `src/workflows/buildContext.ts` — HIGH confidence, current state.
 
 ---
-*Architecture research for: brain-cache v2.2 retrieval quality improvements*
+
+*Architecture research for: brain-cache v2.4 status line integration*
 *Researched: 2026-04-03*

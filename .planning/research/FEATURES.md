@@ -1,29 +1,56 @@
 # Feature Research
 
-**Domain:** Retrieval quality improvements for brain-cache v2.2 — fixing tool routing, retrieval accuracy, and output quality
+**Domain:** Claude Code status line — cumulative MCP tool token savings display for brain-cache v2.4
 **Researched:** 2026-04-03
-**Confidence:** HIGH (primary evidence from direct codebase reads and documented test session failures; supplemented by RAG ecosystem research)
+**Confidence:** HIGH (official Claude Code docs fetched directly; brain-cache codebase token savings patterns read directly)
 
 ---
 
 ## Context: Scope of This Research
 
-This research covers the **v2.2 Retrieval Quality** milestone only. v2.1 shipped a polished presentation layer. v2.2 fixes the underlying accuracy and routing problems that surfaced during testing sessions.
+This research covers the **v2.4 Status Line** milestone only. It is a subsequent milestone layered on top of an already-shipped MCP tool suite. The status line is not a new tool — it is a visibility layer that surfaces token savings already computed per-tool-call.
 
-**Five improvement areas from the milestone, each tied to a documented test failure:**
+**Four requirements from the milestone (STAT-01 through STAT-04):**
 
-1. **Query-term boosting** — query containing "buildContext" should rank buildContext.ts above the 0.85 threshold so it is not compressed (Test 1)
-2. **Preventing compression of high-relevance results** — when a file matching the query is compressed, Claude must do follow-up reads, negating savings (Test 1)
-3. **Reducing noise from build tool config files** — vitest.config.ts and tsup.config.ts ranked 3rd and 5th for "config values" query (Test 3)
-4. **Tool selection guidance for AI agents** — Claude used trace_flow for an intra-file logic question and search_codebase for a "how does X work" question (Tests 3, 4)
-5. **Honest token savings metrics** — trace_flow claimed 67% savings on a result that was abandoned as wrong (Test 4); search_codebase claimed savings on a result that required 3 follow-up reads (Test 3)
+1. **STAT-01** — Session-level token savings accumulation in MCP retrieval handlers
+2. **STAT-02** — Status line script rendering cumulative savings for Claude Code
+3. **STAT-03** — `brain-cache init` installs and configures the status line into Claude Code settings
+4. **STAT-04** — Session stats reset on new session or TTL-based expiry
 
-**What already exists (not in scope for v2.2):**
-- Vector similarity search with distance threshold filtering
-- 10% keyword boost blend in `searchChunks` for filename/name reranking (already in `retriever.ts`)
-- 0.85 similarity gate protecting high-relevance chunks from compression (already in `compression.ts`)
-- `.braincacheignore` custom exclusion patterns (already in v2.0)
-- CLAUDE.md routing table with tool-to-query-type mappings (already in v2.0)
+**What already exists (not in scope for v2.4):**
+- Token savings computed per tool call in 4 retrieval handlers: `search_codebase`, `build_context`, `trace_flow`, `explain_codebase` — all in `src/mcp/index.ts`
+- `tokensSent`, `estimatedWithout`, `reductionPct`, `filesInContext` fields are already populated per call
+- `brain-cache init` command exists in `src/workflows/init.ts` — the installer
+- MCP server runs as a stdio process — it has no persistent HTTP listener
+
+---
+
+## How Claude Code Status Lines Work
+
+**Mechanism (HIGH confidence — official docs):**
+
+- Claude Code pipes a JSON blob to a shell script via stdin after every assistant message, permission-mode change, or vim-mode toggle
+- Updates are debounced at 300ms; in-flight executions are cancelled when a new update arrives
+- The script reads stdin, extracts fields, and writes text to stdout — Claude Code displays that text at the bottom of the terminal
+- Script is configured in `~/.claude/settings.json` (user-level) or `.claude/settings.json` (project-level) under the `statusLine` key
+- Status line is disabled when `disableAllHooks: true` is set — it is treated like a hook
+- The status line does NOT consume API tokens — it runs locally
+
+**JSON passed to the script — relevant fields (HIGH confidence — official docs):**
+
+| Field | Description |
+|-------|-------------|
+| `session_id` | Unique session identifier — changes when a new Claude Code session starts |
+| `transcript_path` | Path to conversation transcript file — changes on `/clear` |
+| `context_window.total_input_tokens` | Cumulative input tokens for the session |
+| `cost.total_cost_usd` | Total session cost in USD |
+| `workspace.current_dir` | Current working directory — useful for project scoping |
+| `workspace.project_dir` | Directory where Claude Code was launched |
+| `model.display_name` | Model name (e.g. "Opus") |
+
+**What is NOT in the JSON:** brain-cache tool call history. The JSON is Claude Code session data only. Brain-cache stats must be written to a local file by the MCP handlers and read by the status line script.
+
+**Update timing:** The script runs after each assistant message — not after each tool call. Brain-cache tools may be called multiple times per message. The status line reflects the accumulated state as of when the script runs.
 
 ---
 
@@ -31,217 +58,130 @@ This research covers the **v2.2 Retrieval Quality** milestone only. v2.1 shipped
 
 ### Table Stakes (Users Expect These)
 
-Features that must work correctly for brain-cache to be trustworthy. Missing or broken = users stop trusting tool output and fall back to manual file reads.
+Features that must exist for the status line to be useful. Missing any of these makes the feature feel broken or incomplete.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Identifier-aware retrieval boosting** | When a query contains a specific symbol name or filename ("buildContext", "compression.ts"), the file/function by that exact name must rank at or near the top — not below generic semantic matches | MEDIUM | The 10% keyword boost weight in `retriever.ts` is already implemented but undersized; a 40% weight is the standard starting point for hybrid search. Tied to Test 1 failure: buildContext.ts fell below 0.85 despite the query literally containing "buildContext" |
-| **Non-compression guarantee for high-relevance matches** | A chunk with similarity >= 0.85 already bypasses compression (rule 2 in `compression.ts`). The gap: the query-term boost currently only affects *ranking order*, not the stored similarity score — so a well-ranked chunk can still be compressed if its raw embedding similarity is below 0.85 | MEDIUM | The fix is to carry the blended reranking score through to the `similarity` field on `RetrievedChunk` so compression decisions see the boosted score, not just the raw cosine distance. Tied to Test 1: buildContext.ts body was stripped despite being the most relevant file |
-| **Build tool config file exclusion from application queries** | vitest.config.ts, tsup.config.ts, package.json, .eslintrc, and similar build/infra configs match many generic programming terms ("config", "options", "setup") but are almost never the answer to application-logic questions | LOW | Implement a built-in exclusion list for well-known non-application file patterns (*.config.ts, *.config.js, vitest.config.*, tsup.config.*, eslint.config.*) that applies during post-search filtering. Tied to Test 3: vitest.config.ts ranked 3rd for "config values" |
-| **Correct tool classification in CLAUDE.md and tool descriptions** | Claude chose trace_flow for "walk me through logic in chunkFile" (an intra-file logic question) and search_codebase for "what config values does brain-cache use" (a "how does it work" question). Tool descriptions must carry explicit negative examples showing when NOT to use each tool | LOW | No code changes — pure description and CLAUDE.md text update. Tied to Tests 3 and 4: wrong tool selection on 2 of 4 tests observed |
-| **Zero token savings claimed for discarded/wrong results** | trace_flow reported "67% savings" on a result that was completely discarded as wrong (Test 4). Claiming savings on irrelevant output is misleading — it trains users to distrust the savings metric entirely | LOW | Guard: if hops array is empty, or if the result was abandoned without being used, report 0% savings. More precisely: only report savings after a result is confirmed non-empty. Tied to Test 4: 67% claimed on empty/wrong trace |
+| **Cumulative savings display: tokens saved + reduction %** | The core value proposition. "brain-cache  ↓38%  12.4k saved" is the stated target format from PROJECT.md. If the number isn't visible, the feature doesn't exist. | MEDIUM | Requires STAT-01 (stats accumulation) to exist before STAT-02 (script) can read anything. The `reductionPct` and `tokensSent`/`estimatedWithout` fields are already computed — this is about persisting and summing them. |
+| **Idle state when no tool calls have occurred** | Before any brain-cache tool is called in a session, the stats file either doesn't exist or contains zeros. The script must output something meaningful (e.g. `brain-cache  idle`) rather than blank, error, or stale numbers. | LOW | Guard: if stats file missing or all-zero, print idle label. Graceful degradation is table stakes for a status line — a blank status line is confusing. |
+| **Session boundary reset** | Stats from a previous session must not bleed into the current session's display. A user who closes Claude Code and reopens it should see fresh stats. | MEDIUM | The `session_id` field in the status line JSON is the authoritative session identifier. The stats file should store the last seen `session_id`. When the script reads a different `session_id` from the JSON, the stats are stale — either zero them out or the accumulation side should detect the new session. TTL-based expiry is the simplest alternative if session_id detection is unavailable to the MCP process. |
+| **Init-time installation into settings.json** | Developers expect `brain-cache init` to handle all setup. Having to manually edit `~/.claude/settings.json` after init is a known friction point. The init command should add the `statusLine` config entry automatically. | LOW | The target config entry is simple: `{ "statusLine": { "type": "command", "command": "node <path-to-script>" } }`. Existing `init.ts` already handles `.mcp.json` injection — same pattern applies here. |
+| **No blank output on error** | If the stats file is malformed, inaccessible, or the script crashes, Claude Code shows a blank status line or an ugly error. The script must have a try/catch that falls back to the idle label. | LOW | Standard scripting hygiene. Without this, a JSON parse error in the stats file would silently break the status line with no indication of why. |
 
 ### Differentiators (Competitive Advantage)
 
-These exceed bare correctness — they make brain-cache noticeably more accurate and trustworthy than a naive vector search.
+Features that make the status line noticeably more useful than a basic "tokens saved" counter.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Score passthrough from reranking to compression** | Today the blended score (vector + keyword boost) is used only for ranking order, then discarded — compression uses only the original cosine similarity. Carrying the blended score through means that a chunk which is highly relevant to the query (high keyword match + decent vector score) is protected from compression, even if its raw cosine distance is slightly below the 0.85 threshold | MEDIUM | Requires `searchChunks` to return a `rerankedScore` alongside `similarity`, and compression to use whichever is higher. This is the correct fix for Test 1 and closes the gap between "ranked first" and "protected from compression" |
-| **Configurable application-file-only mode** | A toggle (default: on) that filters search results to application source files only, excluding known infrastructure patterns. Makes the tool reliable for the primary use case (understanding application logic) without removing the ability to search build configs when explicitly needed | LOW | One filter function applied post-search. User can disable per-query or via config.json. This is more targeted than `.braincacheignore` (which removes files from indexing entirely) — these files stay indexed but are demoted in application-logic queries |
-| **Negative example routing in CLAUDE.md and tool descriptions** | Current descriptions say what each tool IS for. Adding explicit "Do NOT use this tool when..." statements reduces ambiguous tool calls where the description-match looks plausible but the tool is wrong | LOW | Pattern used by GitHub Copilot Workspace, atlas-mcp-server, and other multi-tool MCP servers — negative examples improve LLM tool selection more than positive examples alone |
-| **Trace entry point exact-match preference** | When the trace_flow entrypoint query exactly matches a function name in the index (case-insensitive), use that as the seed without vector search — bypassing embedding similarity entirely. Resolves Test 4 (trace_flow seeded on retriever code when given "chunkFile function") and Test 1 (trace_flow seeded on assembleContext when given "buildContext workflow") | MEDIUM | Requires a pre-search name lookup: `chunksTable.query().where("name = '...'")` before falling back to vector search. Builds on `resolveSymbolToChunkId` already in `flowTracer.ts` |
-| **Honest savings only on uncompressed, non-empty results** | Token savings should be reported only when brain-cache actually saved tokens the user would otherwise have spent — not on compressed files Claude will re-read, not on empty results, not on discarded traces | LOW | Extend the existing savings baseline logic in `buildContext.ts` (which already excludes files with compressed chunks) to also gate on result non-emptiness and to set savings to 0 when the result was produced by a wrong-seed trace |
+| **Tool call count alongside savings** | "brain-cache  ↓38%  12.4k saved  (4 calls)" gives context for the savings number — a 38% reduction on 4 tool calls is very different from 38% on 40 calls. Low implementation cost, high interpretability gain. | LOW | Increment a `callCount` field in the stats file on each tool call. Display as a parenthetical or secondary metric. |
+| **Per-project stats isolation** | Brain-cache is used across multiple projects simultaneously. Stats from a `~/projects/api` session should not aggregate with stats from a `~/projects/frontend` session. The stats file path should include the project directory hash or the workspace path to prevent cross-contamination. | MEDIUM | Use `workspace.project_dir` from the status line JSON (or `path` arg from MCP tool call) to partition stats files. E.g. `.brain-cache/<project-hash>/session-stats.json`. Alternatively, scope by `session_id` alone (since each session is implicitly one project). |
+| **Compact format that survives narrow terminals** | The status line competes with Claude Code's built-in notifications (MCP errors, token warnings, rate limits) on the same row. A long label gets truncated. Target: under 40 characters for the core metrics, with optional extended format for wide terminals. | LOW | Follow the format in PROJECT.md: `brain-cache  ↓38%  12.4k saved`. Keep label, reduction %, and absolute count. Drop secondary metrics (cost, call count) if needed for brevity. |
+| **Human-readable token abbreviation** | "12400 tokens saved" is harder to scan than "12.4k saved". Abbreviate to one decimal + unit suffix. | LOW | Standard formatting: < 1000 = exact, >= 1000 = `X.Xk`, >= 1000000 = `X.Xm`. Pure formatting, no logic change. |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| **Cross-encoder reranking (second model call)** | Industry RAG systems use a cross-encoder as a second pass to dramatically improve precision (BM25 + dense + rerank combo hits 87% recall vs 71% for dense alone) | Requires a second Ollama model load, adds 200-800ms latency per query, and violates the "no unnecessary complexity" constraint. The existing 10% keyword boost already partially addresses this for code search — the marginal gain from a cross-encoder doesn't justify the operational overhead for a local developer tool | Increase the keyword boost weight to 40% (hybrid weighting standard) and carry blended scores through to compression. This captures most of the precision gain with zero latency overhead |
-| **BM25 sparse index alongside LanceDB** | Hybrid BM25 + vector search is the SOTA approach for text retrieval | Requires a second index maintained in sync with LanceDB, adds dependency complexity, and is likely overkill for codebase-size corpora (typically 10K-100K chunks). LanceDB's FTS (full-text search) capabilities would be the right path if BM25 is ever needed | Rely on LanceDB's built-in full-text search or the existing token-level boost for keyword precision; don't add a second database |
-| **Dynamic exclusion lists from config** | Users want to tune which files are excluded | Adds surface area for misconfiguration; the built-in list should handle 90%+ of cases. The existing `.braincacheignore` already handles project-specific exclusions at index time | Add well-known patterns to the built-in exclusion list; use `.braincacheignore` for project-specific cases |
-| **LLM-based intent classification for tool routing** | LLM classification would be more accurate than keyword bigrams | Adds a Claude API round-trip (300-500ms) to every tool call, defeating the "reduce Claude token usage" core value. The current keyword classifier is fast, local, and the routing bugs are in the tool *descriptions*, not the intent classifier | Fix the CLAUDE.md routing table and tool descriptions; the intent classifier is not the root cause |
-| **Per-query savings toggle (show/hide)** | Users who trust the tool don't want savings noise | Adds a parameter to every tool call signature. The real fix is accurate savings numbers — accurate metrics are not annoying, inflated ones are | Fix the calculation so savings are only claimed when earned; don't add a toggle |
-
----
-
-## Feature Definitions (Concrete Behaviours)
-
-### 1. Identifier-aware boosting — what "larger keyword weight" means
-
-The existing blend in `searchChunks` is:
-
-```
-score = similarity * 0.90 + keywordBoost * 0.10
-```
-
-The failure mode: a query like "how does buildContext assemble chunks" produces `keywordBoost = 1.0` for `buildContext.ts` (exact name match) but the blended score is only `0.88 * 0.90 + 1.0 * 0.10 = 0.89`, which might not change the rank order enough. More critically, the `similarity` field on the returned `RetrievedChunk` is still the raw cosine similarity (0.82), not the blended score — so compression sees 0.82 (below 0.85) and strips the body.
-
-**Fix:** Increase `KEYWORD_BOOST_WEIGHT` from 0.10 to 0.40. Update `searchChunks` to set `chunk.similarity = blendedScore` (not raw cosine similarity) so compression and downstream consumers see the query-aware score. This closes the Test 1 failure in one change.
-
-Expected observable behavior: "How does buildContext work?" returns buildContext.ts with body intact, not a compressed manifest.
-
-### 2. Build tool config exclusion — what the filter looks like
-
-A post-search filter applied in `searchChunks` (or as a caller-side filter in each workflow) before returning results:
-
-```
-INFRASTRUCTURE_FILE_PATTERNS = [
-  /vitest\.config\.[tj]s$/,
-  /tsup\.config\.[tj]s$/,
-  /eslint\.config\.[tj]s$/,
-  /.eslintrc(\.(js|ts|json|yml|yaml))?$/,
-  /prettier\.config\.[tj]s$/,
-  /babel\.config\.[tj]s$/,
-  /jest\.config\.[tj]s$/,
-  /webpack\.config\.[tj]s$/,
-  /rollup\.config\.[tj]s$/,
-  /vite\.config\.[tj]s$/,
-]
-```
-
-Applied only when the query does NOT explicitly mention the infrastructure tool name (e.g. a query containing "vitest" should still return vitest.config.ts). Detection: if any pattern token from `extractQueryTokens` appears in the infrastructure file name, pass it through.
-
-Expected observable behavior: "What config values does brain-cache use?" returns config.ts, configLoader.ts, types.ts — not vitest.config.ts or tsup.config.ts.
-
-### 3. Tool routing — what the CLAUDE.md update looks like
-
-Current CLAUDE.md routing table has positive examples. The update adds:
-
-- `build_context` section: "Do NOT use trace_flow to understand how a single function works internally — trace_flow traces call paths ACROSS files, not logic WITHIN a function."
-- `trace_flow` section: "Do NOT use trace_flow for queries about how something works, what it does, or explaining logic. Use build_context for those."
-- `search_codebase` section: "Do NOT use search_codebase for 'how does X work' questions — it returns file locations, not explanations. Use build_context for understanding questions."
-- `build_context` section: add "Use for: 'How does X work?', 'Explain the logic in Y', 'What does this function do?'" to reinforce the positive case.
-
-The tool description strings in `mcp/index.ts` should mirror these negatives for tool discovery (MCP servers without CLAUDE.md).
-
-Expected observable behavior: "Walk me through the logic in chunkFile" → Claude calls build_context, not trace_flow.
-
-### 4. Honest token savings — what "zero for empty/wrong results" means
-
-Current flow: `buildContext.ts` computes savings after assembly, regardless of whether the assembled result is useful. `traceFlow.ts` doesn't compute savings at all (the MCP handler estimates them separately using a crude `tokensSent * 3` multiplier).
-
-**Fix 1 (trace_flow):** If `result.hops.length === 0`, report `tokensSent: 0`, `estimatedWithout: 0`, `reductionPct: 0`. Never claim savings on an empty trace.
-
-**Fix 2 (search_codebase handler):** Replace the `tokensSent * 3` rough multiplier with a calculation that accounts for the fact that search results are file locators, not complete file reads. The savings from search_codebase are minimal (Claude will read the files anyway) — report the actual tokens sent in the result, with estimatedWithout reflecting one tool call overhead only, not full file reads.
-
-**Fix 3 (build_context trace path):** When trace mode returns an empty hops array and falls back, report savings as 0 for the trace step rather than claiming the fallback savings retroactively.
-
-Expected observable behavior: trace_flow on a wrong-seed query shows "0% reduction" in the footer, not "67% reduction".
-
-### 5. trace_flow duplicate call list — the serialization bug
-
-Test 5 noted: "Hop 1 call list was noisy. The chunkFile hop listed its callees twice (the full list appears duplicated)."
-
-Looking at `traceFlow.ts` line 101-122: the `hops` output includes `callsFound: hop.callsFound` from `flowTracer.ts`. The `flowTracer.ts` line 102 builds `callsFound: callEdges.map(e => e.to_symbol)`. This produces the correct list once. The duplication is in the MCP formatter (`formatTraceFlow` in `src/lib/format.ts`), not in the data — the formatter likely renders `callsFound` twice during template assembly.
-
-Expected observable behavior: each hop shows its calls list exactly once.
+| **Real-time update after every tool call** | Users want to see the counter tick up immediately after each brain-cache call | The status line script runs after assistant messages, not after tool calls. There is no mechanism to trigger a status line update mid-message. Attempting a workaround (e.g. a background polling loop) would add complexity and conflict with the 300ms debounce. | Accept message-level granularity. Stats accumulate across tool calls in a message; the display updates after the assistant responds. This is how all Claude Code status line integrations work. |
+| **Savings breakdown by tool** | "build_context saved 8k, trace_flow saved 4k" | Adds visual noise to a narrow status line. Most sessions use 1-2 tools repeatedly; a breakdown adds complexity for minimal insight. | Surface aggregate only. If per-tool breakdown is needed, expose it in `brain-cache status` CLI command (already exists in v1.0). |
+| **Session cost delta attributable to brain-cache** | "brain-cache saved you $0.03 this session" | Cost savings require knowing what Claude would have spent without brain-cache, which is speculative. The token reduction % is objective; cost savings involves model pricing assumptions and context window fill-rate estimates. | Show token reduction % which is model-agnostic. Avoid cost attribution that could be misleading or incorrect across model tiers. |
+| **Cross-session cumulative totals** | "Total: 2.1M tokens saved across all sessions" | Cross-session stats require persistent storage beyond a single session file, versioning, and a background aggregation mechanism. Out of scope for a status line. The status line is per-session by definition in Claude Code. | Expose lifetime stats in the `brain-cache status` CLI command if ever needed; keep the status line session-scoped. |
+| **Animated or blinking updates** | Make the counter feel "live" | ANSI animations in status lines cause rendering glitches in Claude Code — the official docs warn that complex escape sequences "can occasionally cause garbled output if they overlap with other UI updates." | Static output only. Plain text with at most a directional indicator (`↓`). No ANSI blink or progress animations. |
+| **jq dependency for the stats script** | jq makes parsing simple for bash scripts | The official Claude Code status line examples use jq, but requiring `jq` to be installed adds a setup step. Brain-cache targets Node.js — write the status line script in Node.js (which is already required for brain-cache) to avoid the jq dependency entirely. | Node.js script that uses `JSON.parse` directly. Already used by brain-cache — no new runtime dependency. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Score passthrough from reranking to compression]
-    └──requires──> [Keyword boost weight increase]
-    └──enables──>  [Non-compression of identifier-matched chunks]
+[STAT-01: Session stats accumulation in MCP handlers]
+    └──required-by──> [STAT-02: Status line script]
+    └──required-by──> [STAT-04: Session reset logic]
 
-[Build tool config exclusion filter]
-    └──independent──> (no upstream dependencies)
-    └──should NOT remove from index──> .braincacheignore handles index exclusion; this is query-time filtering only
+[STAT-02: Status line script]
+    └──requires──> [STAT-01: Stats file exists with correct schema]
+    └──required-by──> [STAT-03: init installs the script path]
 
-[Tool routing CLAUDE.md update]
-    └──independent──> (pure text change, no code dependencies)
-    └──parallel-with──> [Tool description update in mcp/index.ts]
+[STAT-03: brain-cache init installs status line config]
+    └──requires──> [STAT-02: Script file path is known/stable]
+    └──independent-of──> [STAT-04: TTL reset can ship before or after]
 
-[Honest token savings]
-    └──requires──> [Non-empty trace result guard]
-    └──modifies──> [buildContext.ts savings baseline logic]
-    └──modifies──> [mcp/index.ts search handler savings estimate]
-
-[trace_flow duplicate call list fix]
-    └──independent──> (bug in format.ts renderer, not in flowTracer.ts or traceFlow.ts)
+[STAT-04: Session boundary reset]
+    └──requires-or-provides──> session_id from status line JSON OR TTL timestamp in stats file
+    └──can-be-embedded-in──> [STAT-01: accumulator checks session_id before writing]
 ```
 
 ### Dependency Notes
 
-- **Score passthrough requires boost weight change first:** Carrying the blended score to `similarity` only makes sense if the blend weight is meaningful. At 10% weight, the blended score barely differs from raw cosine. Increase to 40% first, then passthrough is worthwhile.
-- **Build tool exclusion is purely additive:** No existing feature depends on infrastructure files appearing in results. Safe to ship independently.
-- **CLAUDE.md and tool descriptions are independent of code changes:** These can ship in the same PR as any other fix, or alone. Routing accuracy depends on neither code fix nor vice versa.
-- **Savings fix is layered:** The empty-trace guard is a 2-line change. The search_codebase multiplier fix is a separate concern. Both are low-risk and can ship together.
-- **Duplicate call list bug is in `format.ts`:** Does not affect retrieval logic. Safe to fix in isolation.
+- **STAT-01 must ship before STAT-02:** The script cannot display stats that do not exist. STAT-01 (writing to a stats file after each tool call) is the data producer; STAT-02 is the consumer. They can be developed in parallel but STAT-01 must be complete for the end-to-end flow to work.
+- **STAT-03 is independently shippable but requires STAT-02's script path to be known:** The init installer needs to point at a specific script file. If the script path changes, init must be updated. Finalize the script output path before wiring init.
+- **STAT-04 session detection has two implementation paths:** (a) The MCP handler (STAT-01 side) embeds the `session_id` into the stats file and resets counters when `session_id` changes; (b) the status line script (STAT-02 side) detects the ID change from the JSON and signals a reset by deleting or zeroing the stats file. Path (a) is cleaner — the MCP process owns the stats file and is the authoritative writer. However, the MCP process does not receive the `session_id` directly from Claude Code; it would need to read it from the transcript path or via a convention. Path (b) is simpler: the script resets the stats file when it detects a new `session_id`. A TTL fallback (e.g. reset stats older than 4 hours) handles edge cases where Claude Code crashes without a clean session end.
+- **Existing token savings computation is the correct upstream source:** The `tokensSent`, `estimatedWithout`, and `reductionPct` fields are already computed correctly in `src/mcp/index.ts` in `buildSearchResponse`, `buildContextResponse`, and the `trace_flow` and `explain_codebase` handlers. STAT-01 adds a side-effect: after computing these values, also append them to the stats file. No changes needed to the savings computation logic.
 
 ---
 
-## MVP Definition for v2.2
+## MVP Definition for v2.4
 
-### Launch With (v2.2 core — all required for milestone)
+### Launch With (v2.4 core — all four STAT requirements)
 
-- [ ] **Keyword boost weight: 0.10 → 0.40** — primary fix for Test 1 (buildContext.ts compressed despite query match); one constant change in `retriever.ts`
-- [ ] **Score passthrough to similarity field** — carry blended score to `chunk.similarity` in `searchChunks` so compression rule 2 fires correctly; one-line change in `retriever.ts`
-- [ ] **Build tool config exclusion filter** — post-search filter for vitest.config.ts / tsup.config.ts / eslint.config.ts etc. applied to non-infrastructure queries; fixes Test 3 noise
-- [ ] **CLAUDE.md routing table update** — add negative examples ("Do NOT use trace_flow for..."); fixes Tests 3 and 4 tool selection
-- [ ] **Tool description updates in mcp/index.ts** — mirror the negative examples in the MCP tool descriptions for Claude Code's tool selection
-- [ ] **trace_flow empty-result savings guard** — report 0% savings when hops array is empty; fixes Test 4 fraudulent 67% claim
-- [ ] **trace_flow duplicate call list fix** — find and fix the double-render in `formatTraceFlow` in `format.ts`; fixes Test 5 output noise
-- [ ] **trace_flow exact-match seed resolution** — try `name = 'X'` lookup before vector search for entrypoint; fixes Test 4 wrong-seed trace
+- [ ] **STAT-01: Stats file accumulation** — After each of the 4 retrieval tool calls, append `{ tokensSent, estimatedWithout, reductionPct, filesInContext, toolName, timestamp }` to a project-scoped JSON stats file at `.brain-cache/session-stats.json`. Include a `sessionId` field (sourced from a local UUID generated at MCP startup, or from environment if Claude Code exposes it). Sum `tokensSent` and `estimatedWithout` across calls to compute cumulative reduction %.
+- [ ] **STAT-02: Status line Node.js script** — Script reads `.brain-cache/session-stats.json`, computes cumulative `reductionPct = 1 - totalTokensSent / totalEstimatedWithout`, formats as `brain-cache  ↓{pct}%  {totalSaved} saved`. Falls back to `brain-cache  idle` when file missing, empty, or all-zero. Falls back to `brain-cache  error` on parse failure.
+- [ ] **STAT-03: init installs status line config** — `brain-cache init` writes the `statusLine` entry to `~/.claude/settings.json` (merging with existing config, not overwriting). Points to the brain-cache status line script in the package's `bin/` or `dist/` directory.
+- [ ] **STAT-04: Session boundary reset** — Status line script reads `session_id` from Claude Code JSON stdin. If `session_id` in stats file differs from the current JSON `session_id`, the stats are from a previous session — display idle or reset. TTL fallback: if stats file `timestamp` is older than 4 hours, treat as expired.
 
-### Add After Validation (v2.2.x)
+### Add After Validation (v2.4.x)
 
-- [ ] **search_codebase savings estimate correction** — replace crude `tokensSent * 3` multiplier with a calculation based on actual search results; low priority, less misleading than trace_flow's 67% on wrong results
-- [ ] **Infrastructure file filter per-query bypass** — if query tokens include an infrastructure tool name, pass those files through; needed to avoid over-filtering when user explicitly asks about build config
+- [ ] **Tool call count in display** — Add `callCount` increment to STAT-01, surface as `(N calls)` in STAT-02 output. Trigger: user feedback that the count adds useful context to the % number.
+- [ ] **Per-project stats isolation** — Scope the stats file path using `workspace.project_dir` hash from the status line JSON. Trigger: user reports stats bleeding across projects in multi-project workflows.
 
-### Future Consideration (v2.3+)
+### Future Consideration (v2.5+)
 
-- [ ] **LanceDB FTS hybrid search** — if keyword boost at 40% is insufficient for precision, add a full-text search pass through LanceDB's native FTS; adds latency but no new dependency
-- [ ] **Cross-encoder reranking** — only if the blended score approach proves insufficient at scale; adds second Ollama model requirement
+- [ ] **Lifetime stats in `brain-cache status` CLI** — Aggregate stats across sessions for cumulative reporting. Requires a separate append-only log file and a separate CLI command.
+- [ ] **Stats export / webhook** — Push savings stats to an external dashboard. Out of scope for a local developer tool; revisit only if enterprise use cases emerge.
 
 ---
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority | Test Failure |
-|---------|------------|---------------------|----------|--------------|
-| Keyword boost weight 0.10 → 0.40 | HIGH | LOW (1 constant) | P1 | Test 1 |
-| Score passthrough to similarity | HIGH | LOW (1 field assignment) | P1 | Test 1 |
-| Build tool config exclusion | HIGH | LOW (filter function + pattern list) | P1 | Test 3 |
-| CLAUDE.md routing table update | HIGH | LOW (text edit) | P1 | Tests 3, 4 |
-| MCP tool description negative examples | HIGH | LOW (text edit) | P1 | Tests 3, 4 |
-| trace_flow empty-result savings guard | MEDIUM | LOW (2-line guard) | P1 | Test 4 |
-| trace_flow duplicate call list fix | MEDIUM | LOW (bug in format.ts) | P1 | Test 5 |
-| trace_flow exact-match seed resolution | HIGH | MEDIUM (pre-search name lookup) | P1 | Tests 1, 4 |
-| search_codebase savings estimate correction | LOW | MEDIUM (recalculate baseline) | P2 | Test 3 (indirect) |
-| Infrastructure filter per-query bypass | LOW | LOW | P2 | — |
-| LanceDB FTS hybrid search | LOW | HIGH | P3 | — |
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Stats file accumulation (STAT-01) | HIGH — prerequisite for all else | LOW (append to file after existing computation) | P1 |
+| Status line script (STAT-02) | HIGH — the visible output | LOW (Node.js script, JSON.parse, string format) | P1 |
+| Init installs config (STAT-03) | MEDIUM — reduces setup friction | LOW (merge into existing init workflow) | P1 |
+| Session reset / TTL expiry (STAT-04) | MEDIUM — prevents stale data confusion | LOW (session_id comparison + TTL check) | P1 |
+| Tool call count in display | LOW | LOW | P2 |
+| Per-project stats isolation | MEDIUM | MEDIUM | P2 |
+| Lifetime stats in CLI | LOW | MEDIUM | P3 |
 
 ---
 
-## Comparison: Existing vs Required Behavior Per Test
+## Formatting Conventions from Official Docs
 
-| Test | Query | Expected Tool | Actual Tool Used | Root Cause | Fix |
-|------|-------|--------------|-----------------|------------|-----|
-| Test 1 | "how does buildContext assemble chunks" | build_context | trace_flow (wrong seed) + build_context (compressed result) | trace_flow seeded on assembleContext not buildContext; similarity 0.82 < 0.85 triggered compression on the most relevant file | Exact-match seed lookup + score passthrough |
-| Test 2 | "explain compression.test.ts" | Read (direct) | Read (correct) | N/A — direct read was appropriate | No change needed |
-| Test 3 | "what config values does brain-cache use" | build_context | search_codebase (wrong tool); vitest.config.ts ranked 3rd | search_codebase used for understanding question; infrastructure files polluted results | CLAUDE.md routing update + build tool exclusion filter |
-| Test 4 | "how does indexing pipeline chunk files" (verbose query) | search_codebase → build_context | trace_flow (wrong seed → retriever.ts) | Long, verbose entrypoint query — semantic embedding anchored to retriever.ts instead of chunker.ts | Exact-match seed lookup; shorten entrypoint extraction |
-| Test 5 | Same query with shorter entrypoint "chunkFile" | trace_flow (correct seed) | trace_flow (correct, but noisy output) | Correct seed found; duplicate callsFound in output | Fix formatTraceFlow double-render |
+The following are confirmed behaviors from the official Claude Code status line documentation (HIGH confidence):
+
+- **Script receives JSON via stdin** — `input=$(cat)` pattern or `process.stdin` in Node.js
+- **Script writes to stdout** — one line per `echo` / `console.log` statement; multiple lines are displayed as multiple rows
+- **ANSI color codes are supported** — `\033[32m` green, `\033[33m` yellow, `\033[31m` red, `\033[0m` reset
+- **Script runs in a new process per update** — no persistent state inside the script process; all state must be in a file
+- **Cache slow operations** — the docs explicitly recommend caching expensive operations to a file with a freshness check (5-second TTL example); brain-cache's stats file IS the cache
+- **Updates are debounced at 300ms** — rapid changes batch together; no need to worry about multiple writes per second
+- **In-flight script is cancelled on new update** — keep the script fast (< 50ms); reading one JSON file and formatting a string is well within this budget
+- **`session_id` field is available** — confirmed present in the full JSON schema from official docs
+- **`transcript_path` changes on `/clear`** — can be used as a secondary session boundary signal
+- **No jq needed if using Node.js** — `JSON.parse` handles the stdin JSON directly
 
 ---
 
 ## Sources
 
-- `/workspace/.planning/debug/claude-debugging-itself-v2.md` — 5 test sessions documenting actual failures, wrong tool calls, wrong seeds, inflated savings claims, and output noise (HIGH confidence — direct test results)
-- `/workspace/src/services/retriever.ts` — `searchChunks`, `computeKeywordBoost`, `extractQueryTokens`, existing 10% blend weight (HIGH confidence — direct codebase read)
-- `/workspace/src/services/compression.ts` — `compressChunk`, rules 1-4, 0.85 threshold (HIGH confidence — direct codebase read)
-- `/workspace/src/workflows/buildContext.ts` — savings baseline calculation, `filesWithAnyCompressedChunk` exclusion logic (HIGH confidence — direct codebase read)
-- `/workspace/src/workflows/traceFlow.ts` — `runTraceFlow`, empty hops path, `localTasksPerformed` (HIGH confidence — direct codebase read)
-- `/workspace/src/services/flowTracer.ts` — `traceFlow`, `resolveSymbolToChunkId`, BFS implementation (HIGH confidence — direct codebase read)
-- `/workspace/src/mcp/index.ts` — tool descriptions, `buildSearchResponse` savings estimate, tool registration (HIGH confidence — direct codebase read)
-- [Optimizing RAG with Hybrid Search & Reranking — Superlinked VectorHub](https://superlinked.com/vectorhub/articles/optimizing-rag-with-hybrid-search-reranking) — BM25 + dense + rerank hitting 87% recall; 40% keyword weight as starting point for hybrid blends (MEDIUM confidence — industry research)
-- [Advanced RAG: Hybrid Search and Re-ranking — dasroot.net](https://dasroot.net/posts/2025/12/advanced-rag-techniques-hybrid-search/) — standard hybrid weighting patterns, reranking cost tradeoffs (MEDIUM confidence — technical blog, consistent with industry pattern)
-- [RAG Evaluation — Meilisearch](https://www.meilisearch.com/blog/rag-evaluation) — honest metrics as "the difference between a system that only looks impressive in demos and one that consistently delivers value" (MEDIUM confidence — vendor blog, reinforces honest-metrics finding)
+- [Claude Code status line official docs](https://code.claude.com/docs/en/statusline) — Full JSON schema, configuration format, update timing, caching recommendations (HIGH confidence — official docs fetched directly)
+- `/workspace/src/mcp/index.ts` — `buildSearchResponse`, `buildContextResponse`, trace_flow and explain_codebase handlers; existing `tokensSent`, `estimatedWithout`, `reductionPct` computation (HIGH confidence — direct codebase read)
+- `/workspace/.planning/PROJECT.md` — STAT-01 through STAT-04 requirements, target display format `brain-cache  ↓38%  12.4k saved` (HIGH confidence — project source of truth)
+- `/workspace/src/workflows/init.ts` — Existing init workflow that STAT-03 will extend (HIGH confidence — direct codebase read)
+- [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) — Hook lifecycle events, trust model, disableAllHooks interaction (HIGH confidence — official docs)
 
 ---
 
-*Feature research for: brain-cache v2.2 Retrieval Quality milestone*
+*Feature research for: brain-cache v2.4 Status Line milestone*
 *Researched: 2026-04-03*

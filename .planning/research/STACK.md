@@ -1,289 +1,196 @@
 # Stack Research
 
-**Domain:** Retrieval quality improvements — query-aware boosting, noise filtering, trace entry point resolution, lightweight reranking
+**Domain:** Claude Code status line integration for local session stats display
 **Researched:** 2026-04-03
-**Confidence:** HIGH (all techniques verified against current LanceDB docs and live codebase)
+**Confidence:** HIGH (Claude Code docs verified via official source; npm versions confirmed via registry)
 
 ---
 
 ## Scope
 
-This is a **delta research document** for the v2.2 Retrieval Quality milestone. The base stack
-(Node.js 22, TypeScript, LanceDB 0.27.1, Ollama, nomic-embed-text) is validated and unchanged.
-This document covers only the *additions and technique changes* needed for:
+This is a **delta research document** for the v2.4 Status Line milestone. The base stack
+(Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, chokidar v5,
+tree-sitter, pino, zod v4, dedent) is validated and unchanged. This document covers ONLY
+what is new for:
 
-1. Query-aware relevance boosting (keyword/filename match reranking)
-2. Noise filtering for build tool config files
-3. Trace entry point resolution for verbose queries
-4. Lightweight reranking without a second model
+1. Session stats accumulation after each MCP tool call (STAT-01)
+2. Status line script rendering cumulative savings (STAT-02)
+3. `brain-cache init` status line installation (STAT-03)
+4. Session stats reset on new session or TTL expiry (STAT-04)
 
 ---
 
 ## Recommended Stack
 
-### Core Technologies (Existing — No Changes)
-
-| Technology | Version | Purpose | Status |
-|------------|---------|---------|--------|
-| `@lancedb/lancedb` | 0.27.1 | Vector storage + SQL metadata filtering | Already installed |
-| `ollama` | 0.6.3 | Local embeddings | Already installed |
-| TypeScript | 5.x | Type-safe retrieval logic | Already installed |
-
 ### New Dependencies
 
-**None.** All four improvement areas are implementable with the existing stack. The techniques
-below use pure TypeScript logic layered on top of what is already installed.
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `write-file-atomic` | 7.0.1 | Atomic JSON writes for session stats file and `~/.claude/settings.json` | MCP handlers run per-tool-call; concurrent calls from the same session could cause partial writes and corrupt the stats JSON. `write-file-atomic` uses the POSIX temp-file-then-rename pattern: writes to a randomly named temp file in the same directory as the target, then calls `rename()`. `rename()` is atomic on Linux/macOS POSIX filesystems — readers either see the old file or the new file, never a partial write. Handles SIGINT/SIGTERM cleanup of temp files. Serializes concurrent writes to the same path. Maintained by the npm org; 1,600+ downstream projects; ships its own TypeScript declarations (no `@types/` package needed). Supports Node.js `^20.17.0 || >=22.9.0` — compatible with the project's Node 22 LTS requirement. |
 
-| Technique | Implementation Approach | File |
-|-----------|------------------------|------|
-| Keyword boost reranking | Existing function, weight adjustment only | `src/services/retriever.ts` |
-| Config file noise filtering | New patterns in `ALWAYS_EXCLUDE_GLOBS` + post-filter regex | `src/services/crawler.ts` + `src/services/retriever.ts` |
-| Query symbol extraction | Regex-based camelCase/PascalCase token extraction | `src/services/retriever.ts` or `src/workflows/traceFlow.ts` |
-| RRF (Reciprocal Rank Fusion) | Pure TS formula `1 / (rank + k)` | `src/services/retriever.ts` |
+### Supporting Libraries
 
----
+No other new libraries required. All other capabilities are met by the existing stack:
 
-## Implementation Details
-
-### 1. Query-Aware Relevance Boosting
-
-**Current state:** `computeKeywordBoost()` and `extractQueryTokens()` already exist in
-`src/services/retriever.ts`. The blend is `similarity * 0.9 + boost * 0.1`. The implementation
-is correct. The weight (10%) is too conservative for lookup queries where the query subject
-directly names a file or function.
-
-**Recommended change — mode-aware boost weight:**
-
-The boost weight should scale with retrieval mode. In `lookup` mode the user is asking about a
-specific symbol, so a filename match is a strong signal. In `explore` mode the user is asking
-about a domain concept, so filename matches are coincidental.
-
-```typescript
-// In searchChunks(), after mode is threaded through (or as a new opts field):
-const KEYWORD_BOOST_WEIGHT = mode === 'lookup' ? 0.20 : 0.10;
-
-// Current blend (works correctly, just adjust the weight constant):
-return chunks
-  .map(chunk => ({
-    chunk,
-    score: chunk.similarity * (1 - KEYWORD_BOOST_WEIGHT)
-      + computeKeywordBoost(chunk, queryTokens) * KEYWORD_BOOST_WEIGHT,
-  }))
-  .sort((a, b) => b.score - a.score)
-  .map(({ chunk }) => chunk);
-```
-
-The boost is already proportional (`matchCount / tokenCount`). No algorithmic change needed —
-just make the weight a parameter rather than a constant. Thread `mode` into `searchChunks()` via
-`opts` (add `mode?: QueryIntent` to `SearchOptions`).
-
-**No new dependency. Confidence: HIGH.**
+| Need | Existing Solution |
+|------|------------------|
+| JSON parsing in status line script | Node.js built-in `JSON.parse` |
+| File reads in status line script | Node.js built-in `fs.readFileSync` |
+| `~/.claude/settings.json` manipulation | `write-file-atomic` (same new dep) |
+| Token savings values | Existing `ContextMetadata.tokensSent` and `ContextMetadata.estimatedWithoutBraincache` |
+| ANSI output in status line | Node.js built-in string escape codes |
+| Session expiry logic | Native `Date.now()` comparison |
 
 ---
 
-### 2. Config File Noise Filtering
+## Session Stats File Format
 
-**Problem:** `package.json`, `tsconfig.json`, `vite.config.ts`, `jest.config.ts`, and similar
-build tool configs match generic terms ("build", "test", "scripts", "config") and appear in
-results with misleadingly high cosine similarity scores. They contain no source logic.
+The MCP handlers write a JSON stats file to a well-known path after each tool call.
+The status line script reads from that path on each invocation.
 
-**Current state:** `ALWAYS_EXCLUDE_GLOBS` in `src/services/crawler.ts` already excludes
-`node_modules/`, `dist/`, `.git/`. Config files are not excluded and get indexed.
+**Path:** `~/.brain-cache/session-stats.json`
 
-**Two-layer approach:**
-
-**Layer 1 — Index-time exclusion in `ALWAYS_EXCLUDE_GLOBS` (primary fix):**
-
+**Schema:**
 ```typescript
-// src/services/crawler.ts — add to ALWAYS_EXCLUDE_GLOBS:
-export const ALWAYS_EXCLUDE_GLOBS: string[] = [
-  // ... existing entries ...
-  '**/tsconfig*.json',
-  '**/jest.config.*',
-  '**/vitest.config.*',
-  '**/vite.config.*',
-  '**/eslint.config.*',
-  '**/.eslintrc*',
-  '**/.prettierrc*',
-  '**/prettier.config.*',
-  '**/babel.config.*',
-  '**/webpack.config.*',
-  '**/rollup.config.*',
-  '**/esbuild.config.*',
-  '**/.editorconfig',
-  '**/commitlint.config.*',
-];
-```
-
-Index-time exclusion is zero query-time cost and prevents embedding overhead waste.
-
-**Layer 2 — Query-time post-filter in `searchChunks()` (fallback for already-indexed repos):**
-
-```typescript
-// Pure function, no new deps:
-const CONFIG_NOISE_PATTERNS = [
-  /tsconfig[^/]*\.json$/,
-  /jest\.config\.[^/]+$/,
-  /vitest\.config\.[^/]+$/,
-  /vite\.config\.[^/]+$/,
-  /eslint\.config\.[^/]+$/,
-  /\.eslintrc[^/]*$/,
-  /prettier\.config\.[^/]+$/,
-  /webpack\.config\.[^/]+$/,
-];
-
-function filterConfigNoise(chunks: RetrievedChunk[]): RetrievedChunk[] {
-  return chunks.filter(c =>
-    !CONFIG_NOISE_PATTERNS.some(p => p.test(c.filePath))
-  );
+interface SessionStats {
+  version: 1;
+  sessionId: string;        // From Claude Code status line stdin's session_id field
+  updatedAt: string;        // ISO 8601 — used for TTL-based session expiry (4-hour window)
+  tokensSaved: number;      // Cumulative: sum of (estimatedWithout - tokensSent) across calls
+  tokensSent: number;       // Cumulative: sum of actual tokens sent to Claude
+  estimatedWithout: number; // Cumulative: sum of estimated tokens without brain-cache
+  toolCallCount: number;    // Number of MCP retrieval tool calls this session
+  reductionPct: number;     // Math.round((tokensSaved / estimatedWithout) * 100)
 }
 ```
 
-Apply `filterConfigNoise()` in `searchChunks()` before the keyword boost sort. Both layers
-should be shipped together — Layer 1 prevents future indexing, Layer 2 fixes existing indexes.
+**Design decisions:**
+- `version: 1` allows schema migration without breaking old readers
+- `updatedAt` ISO string enables TTL check: reset stats if older than 4 hours (covers a full work session without requiring Claude Code hooks to signal session end)
+- All numerics are integers — no float precision risk in JSON serialization
+- `sessionId` from the Claude Code status line stdin JSON (`session_id` field) enables the status line script to detect session changes and display `idle` for a new session before any tool calls accumulate
 
-**No new dependency. Confidence: HIGH.**
+**Why `~/.brain-cache/` not `/tmp/`:**
+- `/tmp/` is wiped on reboot; the stats file should survive short restarts
+- Same directory as `profile.json` — no new directory creation required
+- Multiple users on the same machine would not conflict
+- The file is small (<300 bytes) and has no disk-space concern
 
 ---
 
-### 3. Trace Entry Point Resolution for Verbose Queries
+## Status Line Script Design
 
-**Problem:** `runTraceFlow()` receives queries like "how does the compression workflow get
-triggered" and embeds the entire sentence. The vector seed search finds chunks vaguely related
-to "triggered" or "workflow" instead of `compressChunk`. The BFS then traces from the wrong
-entry point, producing an unrelated hop chain.
+**Language:** Node.js (`.js` file at `~/.claude/brain-cache-statusline.js`)
 
-**Root cause:** `resolveSymbolToChunkId()` in `flowTracer.ts` does exact SQL name lookup — it is
-never called for symbol extraction from the query at all. It only runs during BFS edge resolution,
-not for the initial entrypoint.
+**Why Node.js over shell+jq:**
+- Brain-cache already requires Node.js as a hard dependency — no new dependency for the user
+- Node.js `fs.readFileSync` + `JSON.parse` handles the stats file without any external tools
+- `jq` is not universally installed; depending on it creates a hidden install requirement
+- Node.js optional chaining and null-coalescing handle missing/null JSON fields more clearly than shell conditional chains
+- The official Claude Code status line documentation shows Node.js as a first-class supported script language with a provided example that reads stdin and processes JSON
+- The status line script runs in the same Node.js environment already on the machine
 
-**Current flow:**
-1. `runTraceFlow(entrypoint)` embeds the full verbose string via Ollama
-2. `searchChunks()` returns the nearest vectors — probabilistic match, may be wrong
-3. BFS traces from that seed, potentially from the wrong entry point
-
-**Recommended fix — symbol extraction before embedding:**
-
-Extract the most likely symbol name from the query using a camelCase/PascalCase regex. If the
-extracted candidate resolves to an exact chunk (via existing `resolveSymbolToChunkId()`), skip
-the embedding round-trip entirely.
-
-```typescript
-/**
- * Extracts a candidate symbol name from a verbose trace query.
- * Returns null when no camelCase, PascalCase, or snake_case symbol is found.
- *
- * Examples:
- *   "how does compressChunk work"      → "compressChunk"
- *   "trace the flow of runBuildContext" → "runBuildContext"
- *   "what calls embedBatchWithRetry"   → "embedBatchWithRetry"
- *   "explain the architecture"         → null (no symbol token)
- */
-export function extractSymbolCandidate(query: string): string | null {
-  // Matches: camelCase (runSearch), PascalCase (BuildContext), or
-  // snake_case with underscore (embed_batch). Requires length >= 4
-  // to avoid short tokens like "the", "run", "add".
-  const candidates = [...query.matchAll(
-    /\b([a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*|[A-Z][a-zA-Z][a-zA-Z0-9]*|[a-z][a-z0-9]+_[a-z][a-z0-9_]+)\b/g
-  )].map(m => m[1]).filter(c => c.length >= 4);
-
-  if (candidates.length === 0) return null;
-  // Return longest candidate — more specific is more likely to be the target symbol
-  return candidates.sort((a, b) => b.length - a.length)[0];
-}
+**Output format:**
+```
+brain-cache  ↓38%  12.4k saved
+```
+When no tool calls have accumulated yet for this session:
+```
+brain-cache  idle
 ```
 
-**Integration in `runTraceFlow()`:**
+**ANSI color:** Permitted for status line output. Unlike MCP tool output (which is consumed
+by Claude and must be plain text to avoid token inflation), status line output renders in the
+terminal directly. Use green for the savings percentage, dim for `idle`.
 
-```typescript
-// Before embedding: attempt direct symbol resolution
-const symbolCandidate = extractSymbolCandidate(entrypoint);
-if (symbolCandidate) {
-  const directId = await resolveSymbolToChunkId(table, symbolCandidate, '');
-  if (directId !== null) {
-    // Exact match found — skip embedding, use this chunk as seed
-    // (set seedResults to a synthetic one-element array)
+**Settings entry installed by `brain-cache init`:**
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "node ~/.claude/brain-cache-statusline.js"
   }
 }
-// Fall through to vector search if no direct match
 ```
 
-`resolveSymbolToChunkId()` already exists, is fast (SQL equality query, no Ollama), and
-handles multi-file disambiguation (prefers same-file match). This is purely additive — the
-existing vector path remains as the fallback.
-
-**No new dependency. Confidence: HIGH.**
+**Script location rationale (`~/.claude/` not `~/.brain-cache/`):**
+- Claude Code's `/statusline` command places generated scripts in `~/.claude/` by convention
+- Users expect Claude Code scripts in `~/.claude/`
+- `~/.brain-cache/` is the data directory; `~/.claude/` is the scripts/tools directory
+- Aligns with where `settings.json` lives (`~/.claude/settings.json`)
 
 ---
 
-### 4. Lightweight Reranking Without a Second Model
+## `~/.claude/settings.json` Manipulation in `brain-cache init`
 
-**Current state:** Single-pass reranking: `score = similarity * 0.9 + keywordBoost * 0.1`.
-This handles the existing single-pass vector search. For v2.2, this is sufficient.
+`brain-cache init` must merge the `statusLine` field into `~/.claude/settings.json` without
+overwriting other user settings (e.g. `theme`, `vim`, `model`).
 
-**Reciprocal Rank Fusion (RRF) — for dual-pass retrieval (future use):**
+**Approach:**
+1. Read `~/.claude/settings.json` with `fs.readFileSync` (treat ENOENT as empty `{}`)
+2. Parse JSON; merge `statusLine` field only — all other fields preserved
+3. Write back with `write-file-atomic` (same new dependency, same atomic guarantee)
+4. Idempotency check: skip write if `statusLine.command` already contains `brain-cache-statusline`
 
-RRF is the standard merge algorithm for combining two separately ranked result lists. It requires
-no model, no external service, and no new dependencies. LanceDB's own built-in `RRFReranker`
-uses this same formula. The algorithm: `score = sum(1 / (rank + k))` across all ranked lists,
-where `k = 60` (standard constant from Cormack et al.).
+**Existing precedent:** The current `init.ts` uses `writeFileSync` for `.mcp.json`. For
+`settings.json`, `write-file-atomic` is the correct choice because `~/.claude/settings.json`
+is a shared global file that other processes (e.g. Claude Code itself, other tools) may write
+concurrently. The `.mcp.json` is project-local and less likely to have concurrent writers, but
+`settings.json` merits the stronger guarantee.
 
+---
+
+## Integration With Existing Token Savings Computation
+
+The existing `ContextMetadata` type in `src/lib/types.ts` already provides:
 ```typescript
-const RRF_K = 60;
-
-/**
- * Merges multiple ranked result lists using Reciprocal Rank Fusion.
- * Each list is an ordered array of chunk IDs (index 0 = highest rank).
- * Returns chunk IDs ordered by descending merged score.
- */
-export function reciprocalRankFusion(rankedLists: string[][]): string[] {
-  const scores = new Map<string, number>();
-  for (const list of rankedLists) {
-    list.forEach((id, index) => {
-      const rank = index + 1; // 1-based rank
-      scores.set(id, (scores.get(id) ?? 0) + 1 / (rank + RRF_K));
-    });
-  }
-  return [...scores.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([id]) => id);
+interface ContextMetadata {
+  tokensSent: number;
+  estimatedWithoutBraincache: number;
+  reductionPct: number;
+  filesInContext: number;
+  localTasksPerformed: string[];
+  cloudCallsMade: number;
 }
 ```
 
-**When to apply RRF vs. the existing blend:**
+The MCP handlers in `src/mcp/index.ts` compute savings in `buildSearchResponse` and
+`buildContextResponse`. `traceFlow` and `explainCodebase` produce equivalent data.
 
-- **Existing blend** (`similarity * w + boost * (1-w)`) — correct for the current single vector-pass.
-  Sufficient for all v2.2 goals.
-- **RRF** — correct when running *two separate retrieval passes* (e.g. vector search + a
-  filename-filtered pass) and merging their result lists. Not needed for v2.2 but implementable
-  trivially when that path is added.
+**The v2.4 work is purely additive to these existing handlers:**
+1. After computing savings (which already happens), read `~/.brain-cache/session-stats.json`
+2. Accumulate: add `(estimatedWithout - tokensSent)` to `tokensSaved`, increment `toolCallCount`
+3. Write back atomically with `write-file-atomic`
+4. The status line script reads this file independently on each status bar update
 
-**No new dependency. Confidence: HIGH.**
+**No new savings computation logic needed.** The accumulation formula:
+```typescript
+const callSavings = metadata.estimatedWithoutBraincache - metadata.tokensSent;
+stats.tokensSaved += callSavings;
+stats.tokensSent  += metadata.tokensSent;
+stats.estimatedWithout += metadata.estimatedWithoutBraincache;
+stats.toolCallCount += 1;
+stats.reductionPct = stats.estimatedWithout > 0
+  ? Math.round((stats.tokensSaved / stats.estimatedWithout) * 100)
+  : 0;
+```
+
+**Display formatting in status line script:**
+```typescript
+const savedK = (stats.tokensSaved / 1000).toFixed(1) + 'k';
+// e.g. "brain-cache  ↓38%  12.4k saved"
+```
 
 ---
 
-### 5. LanceDB FTS Index — Assessment
+## Installation
 
-LanceDB 0.27.1 exposes `table.createIndex(column, { config: Index.fts() })` and
-`table.search(query, 'fts')` in the TypeScript client. The `rerankers` namespace is exported.
-The built-in `RRFReranker` is documented and works without external models.
+```bash
+# New runtime dependency only
+npm install write-file-atomic@7.0.1
 
-**Known issue:** GitHub issue #1557 reports `lancedb.Index.fts is not a function` in some
-configurations. The workaround (passing `'fts'` as the search type string directly rather than
-using `Index.fts()`) is stable. The core FTS query path works.
-
-**Recommendation for v2.2: Do NOT add FTS indexing.** Reasons:
-
-1. Requires schema migration — adds a new index to the `chunks` table, forcing all users to
-   re-index their repos.
-2. The noise problem is better solved by excluding config files at index time than by adding a
-   BM25 retrieval dimension to merge.
-3. The existing keyword boost already handles filename/name token matching without a full BM25
-   index and without query-time FTS overhead.
-4. FTS is best paired with RRF and dual-pass hybrid retrieval — that is a coherent v2.3 feature
-   if post-v2.2 testing shows the boost approach is still insufficient.
-
-**Defer FTS to v2.3+.** Confidence: HIGH.
+# No @types/ package needed — write-file-atomic 7.x ships bundled TypeScript declarations
+```
 
 ---
 
@@ -291,43 +198,48 @@ using `Index.fts()`) is stable. The core FTS query path works.
 
 | Recommended | Alternative | Why Not |
 |-------------|-------------|---------|
-| Regex symbol extraction | `compromise` NLP library | Adds ~1MB dependency; camelCase regex captures 95%+ of TypeScript function/class names without POS tagging. No NLP needed for code symbol extraction. |
-| Regex symbol extraction | `keyword-extractor` npm | Removes stopwords only — does not identify camelCase tokens as symbol candidates. Opposite of what is needed. |
-| `ALWAYS_EXCLUDE_GLOBS` expansion | LanceDB `where()` SQL filter per query | Index-time exclusion prevents wasted embed cost. Query-time filter is the right *fallback* for existing indexes, not a replacement. |
-| Pure-TS RRF formula | `@lancedb/lancedb` `RRFReranker.create()` | LanceDB's RRFReranker is designed for hybrid (FTS + vector) merging — requires an active FTS index. Not applicable to the current single-pass vector path. |
-| Mode-aware boost weight | Cross-encoder reranker | Cross-encoders require a second model inference call per query. Explicitly out of scope per PROJECT.md ("Reranking with second LLM — Out of Scope"). |
-| Mode-aware boost weight | Increase `limit` then re-filter | Higher limits raise token cost in context assembly. Targeted boost is more precise and does not inflate the candidate set. |
-| Direct symbol resolution (SQL) | Re-embed a shorter extracted query | Double Ollama round-trip for marginal gain. SQL exact-match lookup is instantaneous and already implemented. |
+| `write-file-atomic` 7.0.1 | Manual `fs.writeFile` + `fs.rename` with temp path | Correctly handling temp file cleanup on SIGINT/SIGTERM, and serializing concurrent writes, is non-trivial to implement correctly. `write-file-atomic` covers both and is the established standard (used by npm itself). |
+| `write-file-atomic` 7.0.1 | `fast-write-atomic` (mcollina) | Less battle-tested (~50 dependents vs 1,600+); `write-file-atomic` is the npm-org-maintained canonical version |
+| `write-file-atomic` 7.0.1 | `graceful-fs` | `graceful-fs` retries on EMFILE errors — it does not provide write atomicity. Different problem. |
+| Node.js script | Shell + jq | `jq` not universally installed; Node.js already required by brain-cache; shell error handling is fragile for JSON edge cases |
+| `~/.brain-cache/session-stats.json` | `/tmp/brain-cache-stats.json` | `/tmp/` wiped on reboot; no user isolation in shared environments; inconsistent with existing `~/.brain-cache/` data convention |
+| TTL-based expiry (4h) | `session_id` file-naming (one file per session) | File-per-session creates unbounded file accumulation without cleanup logic; TTL + `sessionId` field in a single file achieves the same reset detection with simpler management |
+| TTL-based expiry (4h) | Hook-based session start signal | Claude Code hooks for session lifecycle are not documented in the status line API; TTL is the documented-safe approach for external session tracking |
 
-## What NOT to Use
+---
+
+## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| Cross-encoder models (ms-marco, etc.) | Second inference call per query; adds 200–800ms latency; explicitly out of scope in PROJECT.md | Mode-aware keyword boost blend |
-| LangChain / LlamaIndex retrieval wrappers | Out of scope per PROJECT.md; obscures direct LanceDB query API | Direct LanceDB query API |
-| `compromise`, `wink-nlp`, `natural` | NLP overhead not warranted for extracting camelCase symbols from code queries | Regex `/[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*/` |
-| LanceDB FTS index (v2.2) | Forces re-index migration; not needed when boost covers v2.2 scope | Index-time config exclusion + keyword boost |
-| Separate re-embedding with extracted query | Double Ollama latency | Symbol extraction → direct SQL lookup via `resolveSymbolToChunkId()` |
+| SQLite for session stats | Massively over-engineered for a single 200-byte JSON file; adds a native addon dependency | `write-file-atomic` + JSON |
+| Redis / any network store | Violates "no external servers" constraint | Local file |
+| `chokidar` watch on stats file | Status line script already re-executes on each assistant message via Claude Code's built-in trigger; no reactive watching needed | Direct `readFileSync` in each script invocation |
+| `@anthropic-ai/tokenizer` | Token savings are already computed in MCP workflow handlers — no re-counting needed | Read `ContextMetadata.tokensSent` and `ContextMetadata.estimatedWithoutBraincache` directly |
+| A background aggregation daemon | Adds operational complexity and a new process to manage; MCP handlers are already the right accumulation point | Accumulate in-process in each MCP handler, flush atomically after each call |
+| `chalk` or `kleur` for ANSI | Unnecessary dep for 2-3 escape codes; chalk v5+ has CJS compatibility issues | Raw ANSI escape codes: `\x1b[32m` (green), `\x1b[2m` (dim), `\x1b[0m` (reset) |
+
+---
 
 ## Version Compatibility
 
-| Package | Current Version | Notes |
-|---------|----------------|-------|
-| `@lancedb/lancedb` | 0.27.1 | FTS API exists and is deferred. Existing `query().where()` SQL filter API unchanged. |
-| All other packages | (unchanged) | No new packages required for v2.2. |
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `write-file-atomic@7.0.1` | Node.js `^20.17.0 \|\| >=22.9.0` | Project uses Node 22 LTS — fully compatible |
+| `write-file-atomic@7.0.1` | TypeScript 5.x | Ships bundled `.d.ts` declarations — no `@types/write-file-atomic` needed |
+
+---
 
 ## Sources
 
-- [LanceDB Full-Text Search docs](https://docs.lancedb.com/search/full-text-search) — `createIndex(col, { config: Index.fts() })` and `table.search(q, 'fts')` TypeScript API verified — HIGH
-- [LanceDB Hybrid Search docs](https://docs.lancedb.com/search/hybrid-search) — `RRFReranker.create()` confirmed as built-in no-external-model reranker; `.rerank(reranker)` chain API — HIGH
-- [LanceDB FTS issue #1557](https://github.com/lancedb/lancedb/issues/1557) — `Index.fts is not a function` bug with string workaround; issue open as of Nov 2024 — MEDIUM
-- [RRF Reranker — LanceDB docs](https://docs.lancedb.com/integrations/reranking/rrf) — RRF formula `1/(rank + k)`, k=60 confirmed as LanceDB default — HIGH
-- [Advanced RAG: RRF in Hybrid Search (Feb 2026)](https://glaforge.dev/posts/2026/02/10/advanced-rag-understanding-reciprocal-rank-fusion-in-hybrid-search/) — RRF algorithm behavior and k=60 constant confirmed — MEDIUM
-- `/workspace/src/services/retriever.ts` — Existing `computeKeywordBoost`, `extractQueryTokens`, `KEYWORD_BOOST_WEIGHT = 0.10` reviewed directly — HIGH
-- `/workspace/src/services/flowTracer.ts` — `resolveSymbolToChunkId` SQL exact-match lookup reviewed; not called during initial seed resolution — HIGH
-- `/workspace/src/services/crawler.ts` — `ALWAYS_EXCLUDE_GLOBS` reviewed; config file patterns absent — HIGH
-- `/workspace/.planning/PROJECT.md` — v2.2 goals, out-of-scope constraints (no second LLM for reranking) — HIGH
+- [Claude Code status line docs](https://code.claude.com/docs/en/statusline) — Configuration format (`~/.claude/settings.json` `statusLine` field), stdin JSON schema (`session_id` field confirmed), Node.js script examples, update trigger behavior (after each assistant message), `command` field runs in shell. HIGH confidence — official Anthropic docs, fetched directly.
+- [npm registry: write-file-atomic](https://registry.npmjs.org/write-file-atomic/latest) — v7.0.1 confirmed as current latest. HIGH confidence — direct registry query.
+- [write-file-atomic GitHub](https://github.com/npm/write-file-atomic) — Temp-file-rename atomicity pattern, concurrent write serialization, npm org maintenance. HIGH confidence.
+- `/workspace/src/lib/types.ts` — `ContextMetadata` interface with `tokensSent`, `estimatedWithoutBraincache`, `reductionPct` fields. Direct read.
+- `/workspace/src/mcp/index.ts` — `buildSearchResponse`, `buildContextResponse` savings computation pattern. Direct read.
+- `/workspace/src/workflows/init.ts` — Existing init pattern for `.mcp.json` manipulation (idempotency check, `writeFileSync` usage). Direct read.
+- `/workspace/.planning/PROJECT.md` — v2.4 goals (STAT-01 through STAT-04), existing validated stack. Direct read.
 
 ---
-*Stack research for: brain-cache v2.2 Retrieval Quality milestone*
+*Stack research for: brain-cache v2.4 Status Line — Claude Code status line integration*
 *Researched: 2026-04-03*
