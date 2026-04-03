@@ -54,7 +54,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RET-02 | Phase 24 | Complete |
 | RET-03 | Phase 22 | Complete |
 | OUT-01 | Phase 22 | Complete |
-| OUT-02 | Phase 24 | Pending |
+| OUT-02 | Phase 24 | Complete |
 | NOISE-01 | Phase 23 | Complete |
 | ROUTE-01 | Phase 25 | Pending |
 
