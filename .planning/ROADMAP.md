@@ -90,7 +90,7 @@
 - [x] **Phase 26: Search Precision** - Exact-match and filename-aware retrieval boosting in search_codebase (completed 2026-04-03)
 - [x] **Phase 27: Compression Protection** - Protect primary results from body compression, drop noise before trimming production code (completed 2026-04-03)
 - [x] **Phase 28: Trace Output Quality** - Noise filtering, confidence warnings, and CLI entrypoint preference in trace_flow (completed 2026-04-03)
-- [ ] **Phase 29: Explain Codebase Depth** - Behavioral summaries for key modules in explain_codebase
+- [x] **Phase 29: Explain Codebase Depth** - Behavioral summaries for key modules in explain_codebase (completed 2026-04-03)
 
 ## Phase Details
 
@@ -321,11 +321,11 @@ Plans:
   2. The output prioritizes chunks containing module-level exports and cross-cutting wiring (e.g. how services are composed in workflows) over internal helpers or rendering utilities — `logger.ts` does not lead the overview
   3. For modules where compression was applied, the output includes a one-sentence summary of what the module does so the architecture overview is meaningful without requiring a follow-up `build_context` call
   4. `explain_codebase` does not include internal helper functions (e.g. `childLogger` in `logger.ts`, layout renderers in `explainCodebase.ts`) as representative module-level content
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 29-01-PLAN.md — TDD: isExportedChunk, extractBehavioralSummary, groupChunksByModule, extractWiringAnnotations, formatModuleNarratives
-- [ ] 29-02-PLAN.md — Wire helpers into runExplainCodebase pipeline (export filter, module narratives)
+- [x] 29-02-PLAN.md — Wire helpers into runExplainCodebase pipeline (export filter, module narratives)
 
 ## Progress
 
@@ -359,7 +359,7 @@ Plans:
 | 26. Search Precision | v2.3 | 1/1 | Complete    | 2026-04-03 |
 | 27. Compression Protection | v2.3 | 1/1 | Complete    | 2026-04-03 |
 | 28. Trace Output Quality | v2.3 | 1/2 | Complete    | 2026-04-03 |
-| 29. Explain Codebase Depth | v2.3 | 1/2 | In Progress|  |
+| 29. Explain Codebase Depth | v2.3 | 2/2 | Complete   | 2026-04-03 |
 
 ---
 *Roadmap created: 2026-03-31*
