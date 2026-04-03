@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { CLAUDE_MD_SECTION } from '../../src/lib/claude-md-section.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('CLAUDE_MD_SECTION template', () => {
   it('contains search_codebase', () => {
@@ -32,5 +37,25 @@ describe('CLAUDE_MD_SECTION template', () => {
 
   it('contains cross-reference directing trace queries away from build_context', () => {
     expect(CLAUDE_MD_SECTION).toContain('instead of build_context');
+  });
+
+  it('contains "Do NOT use" negative routing examples', () => {
+    // At least one negative example per query-routing tool section
+    const doNotUseMatches = CLAUDE_MD_SECTION.match(/Do NOT use/g);
+    expect(doNotUseMatches).not.toBeNull();
+    expect(doNotUseMatches!.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('CLAUDE_MD_SECTION content matches CLAUDE.md Brain-Cache MCP Tools section', () => {
+    const claudeMd = readFileSync(resolve(__dirname, '../../CLAUDE.md'), 'utf-8');
+    // Extract the Brain-Cache MCP Tools section from CLAUDE.md
+    const sectionStart = claudeMd.indexOf('## Brain-Cache MCP Tools');
+    expect(sectionStart).toBeGreaterThan(-1);
+    // Find the next ## heading after the section start (or end of file)
+    const afterStart = claudeMd.indexOf('\n## ', sectionStart + 1);
+    const sectionEnd = afterStart === -1 ? claudeMd.length : afterStart;
+    const claudeMdSection = claudeMd.slice(sectionStart, sectionEnd).trim();
+    const templateSection = CLAUDE_MD_SECTION.trim();
+    expect(templateSection).toBe(claudeMdSection);
   });
 });

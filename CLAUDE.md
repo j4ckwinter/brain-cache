@@ -165,8 +165,9 @@ Call `mcp__brain-cache__doctor` when any brain-cache tool fails or returns unexp
 
 Call `mcp__brain-cache__index_repo` only when the user explicitly asks to reindex, or after major code changes. Do not call proactively.
 
-<!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
+
+<!-- GSD:workflow-start source:GSD defaults -->
 
 Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
 
