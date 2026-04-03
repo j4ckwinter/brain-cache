@@ -1,176 +1,333 @@
 # Stack Research
 
-**Domain:** MCP Tool Output Presentation Layer (brain-cache v2.1 Presentation Magic)
+**Domain:** Retrieval quality improvements — query-aware boosting, noise filtering, trace entry point resolution, lightweight reranking
 **Researched:** 2026-04-03
-**Confidence:** HIGH
+**Confidence:** HIGH (all techniques verified against current LanceDB docs and live codebase)
 
 ---
 
 ## Scope
 
-This document covers only stack additions and changes needed for v2.1. It does not re-research the validated base stack (Node.js 22, TypeScript, Commander, Ollama, LanceDB, MCP SDK, pino, zod v4, tree-sitter, chokidar). Those are locked.
+This is a **delta research document** for the v2.2 Retrieval Quality milestone. The base stack
+(Node.js 22, TypeScript, LanceDB 0.27.1, Ollama, nomic-embed-text) is validated and unchanged.
+This document covers only the *additions and technique changes* needed for:
 
-**Current state of MCP tool output:** All 6 tools return raw `JSON.stringify()` strings wrapped in `{ type: "text", text: "..." }` MCP content blocks. There is one existing formatting utility (`src/lib/format.ts` → `formatTokenSavings`) using manual string padding. There is no shared presentation abstraction.
-
-**Goal:** Unified, markdown-formatted, scannable output from all 6 tools. Consistent structure, tool-specific identity, cohesion with Claude's response style.
-
----
-
-## Key Architectural Constraint
-
-MCP tool responses travel over stdio as JSON-RPC. The `text` field is a plain string — no special rendering occurs between the MCP server and Claude. Claude receives the text content and renders it inline in its response.
-
-**This means:**
-- Markdown in the `text` field is rendered by Claude natively — headings, code fences, bold, lists all work
-- ANSI color codes are NOT appropriate — they appear as raw escape sequences in Claude's context
-- The output format should be markdown designed for LLM consumption, not terminal display
-- Token efficiency matters — every byte in the response is context Claude must process
+1. Query-aware relevance boosting (keyword/filename match reranking)
+2. Noise filtering for build tool config files
+3. Trace entry point resolution for verbose queries
+4. Lightweight reranking without a second model
 
 ---
 
-## Recommended Stack Additions
+## Recommended Stack
 
-### Core Technologies
+### Core Technologies (Existing — No Changes)
 
-No new framework-level dependencies are needed. The presentation layer is a pure string-construction module.
+| Technology | Version | Purpose | Status |
+|------------|---------|---------|--------|
+| `@lancedb/lancedb` | 0.27.1 | Vector storage + SQL metadata filtering | Already installed |
+| `ollama` | 0.6.3 | Local embeddings | Already installed |
+| TypeScript | 5.x | Type-safe retrieval logic | Already installed |
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| `dedent` | 1.7.2 | Strip indentation from template literal strings | The single most useful utility for building multi-line markdown strings in TypeScript without fighting indentation. Tagged template literal API (`dedent\`...\``) — works seamlessly with ESM. 28KB unpacked, zero dependencies, dual ESM/CJS exports with TypeScript declarations. Updated March 2026. |
+### New Dependencies
 
-### Supporting Libraries
+**None.** All four improvement areas are implementable with the existing stack. The techniques
+below use pure TypeScript logic layered on top of what is already installed.
 
-No additional supporting libraries are needed beyond `dedent`. The full presentation layer can be built as:
-
-1. A shared `src/lib/presenter.ts` module with tool-specific formatter functions
-2. An extended `src/lib/format.ts` with markdown helper primitives (sections, code fences, tables, lists)
-3. Zero new npm dependencies beyond `dedent`
-
-The existing `pino` logger is stdout-safe (already writes to stderr only) — no changes needed there.
-
-### Development Tools
-
-No changes to dev tooling. Existing `vitest` + `tsx` covers testing and dev execution of the new presenter module.
+| Technique | Implementation Approach | File |
+|-----------|------------------------|------|
+| Keyword boost reranking | Existing function, weight adjustment only | `src/services/retriever.ts` |
+| Config file noise filtering | New patterns in `ALWAYS_EXCLUDE_GLOBS` + post-filter regex | `src/services/crawler.ts` + `src/services/retriever.ts` |
+| Query symbol extraction | Regex-based camelCase/PascalCase token extraction | `src/services/retriever.ts` or `src/workflows/traceFlow.ts` |
+| RRF (Reciprocal Rank Fusion) | Pure TS formula `1 / (rank + k)` | `src/services/retriever.ts` |
 
 ---
 
-## Installation
+## Implementation Details
 
-```bash
-# Single new runtime dependency
-npm install dedent
-```
+### 1. Query-Aware Relevance Boosting
 
----
+**Current state:** `computeKeywordBoost()` and `extractQueryTokens()` already exist in
+`src/services/retriever.ts`. The blend is `similarity * 0.9 + boost * 0.1`. The implementation
+is correct. The weight (10%) is too conservative for lookup queries where the query subject
+directly names a file or function.
 
-## Integration Points with Existing MCP Tool Handlers
+**Recommended change — mode-aware boost weight:**
 
-All 6 tools live in `src/mcp/index.ts`. The integration pattern is:
+The boost weight should scale with retrieval mode. In `lookup` mode the user is asking about a
+specific symbol, so a filename match is a strong signal. In `explore` mode the user is asking
+about a domain concept, so filename matches are coincidental.
 
 ```typescript
-// Before (current pattern in all 6 tools):
-return {
-  content: [{ type: "text" as const, text: JSON.stringify(result) }],
-};
+// In searchChunks(), after mode is threaded through (or as a new opts field):
+const KEYWORD_BOOST_WEIGHT = mode === 'lookup' ? 0.20 : 0.10;
 
-// After (presentation layer pattern):
-import { presentSearchResults } from "../lib/presenter.js";
-
-return {
-  content: [{ type: "text" as const, text: presentSearchResults(chunks) }],
-};
+// Current blend (works correctly, just adjust the weight constant):
+return chunks
+  .map(chunk => ({
+    chunk,
+    score: chunk.similarity * (1 - KEYWORD_BOOST_WEIGHT)
+      + computeKeywordBoost(chunk, queryTokens) * KEYWORD_BOOST_WEIGHT,
+  }))
+  .sort((a, b) => b.score - a.score)
+  .map(({ chunk }) => chunk);
 ```
 
-Each tool gets a dedicated `present*` function in `src/lib/presenter.ts`. The `src/lib/format.ts` module houses reusable markdown primitives (section headers, code blocks, tables, horizontal rules) that the `present*` functions compose.
+The boost is already proportional (`matchCount / tokenCount`). No algorithmic change needed —
+just make the weight a parameter rather than a constant. Thread `mode` into `searchChunks()` via
+`opts` (add `mode?: QueryIntent` to `SearchOptions`).
 
-**Tool-specific presenter functions:**
+**No new dependency. Confidence: HIGH.**
 
-| Tool | Function | Output Identity |
-|------|----------|-----------------|
-| `search_codebase` | `presentSearchResults(chunks)` | Ranked result list with file paths, scores, and code snippets |
-| `build_context` | `presentContext(result)` | Evidence blocks grouped by file, with token savings footer |
-| `trace_flow` | `presentFlowTrace(hops)` | Numbered hop chain showing cross-file call propagation |
-| `explain_codebase` | `presentArchitectureOverview(overview)` | Module-grouped summary with component boundaries |
-| `index_repo` | `presentIndexResult(state)` | One-line status with file/chunk counts |
-| `doctor` | `presentHealth(health)` | Structured health check with status indicators |
+---
+
+### 2. Config File Noise Filtering
+
+**Problem:** `package.json`, `tsconfig.json`, `vite.config.ts`, `jest.config.ts`, and similar
+build tool configs match generic terms ("build", "test", "scripts", "config") and appear in
+results with misleadingly high cosine similarity scores. They contain no source logic.
+
+**Current state:** `ALWAYS_EXCLUDE_GLOBS` in `src/services/crawler.ts` already excludes
+`node_modules/`, `dist/`, `.git/`. Config files are not excluded and get indexed.
+
+**Two-layer approach:**
+
+**Layer 1 — Index-time exclusion in `ALWAYS_EXCLUDE_GLOBS` (primary fix):**
+
+```typescript
+// src/services/crawler.ts — add to ALWAYS_EXCLUDE_GLOBS:
+export const ALWAYS_EXCLUDE_GLOBS: string[] = [
+  // ... existing entries ...
+  '**/tsconfig*.json',
+  '**/jest.config.*',
+  '**/vitest.config.*',
+  '**/vite.config.*',
+  '**/eslint.config.*',
+  '**/.eslintrc*',
+  '**/.prettierrc*',
+  '**/prettier.config.*',
+  '**/babel.config.*',
+  '**/webpack.config.*',
+  '**/rollup.config.*',
+  '**/esbuild.config.*',
+  '**/.editorconfig',
+  '**/commitlint.config.*',
+];
+```
+
+Index-time exclusion is zero query-time cost and prevents embedding overhead waste.
+
+**Layer 2 — Query-time post-filter in `searchChunks()` (fallback for already-indexed repos):**
+
+```typescript
+// Pure function, no new deps:
+const CONFIG_NOISE_PATTERNS = [
+  /tsconfig[^/]*\.json$/,
+  /jest\.config\.[^/]+$/,
+  /vitest\.config\.[^/]+$/,
+  /vite\.config\.[^/]+$/,
+  /eslint\.config\.[^/]+$/,
+  /\.eslintrc[^/]*$/,
+  /prettier\.config\.[^/]+$/,
+  /webpack\.config\.[^/]+$/,
+];
+
+function filterConfigNoise(chunks: RetrievedChunk[]): RetrievedChunk[] {
+  return chunks.filter(c =>
+    !CONFIG_NOISE_PATTERNS.some(p => p.test(c.filePath))
+  );
+}
+```
+
+Apply `filterConfigNoise()` in `searchChunks()` before the keyword boost sort. Both layers
+should be shipped together — Layer 1 prevents future indexing, Layer 2 fixes existing indexes.
+
+**No new dependency. Confidence: HIGH.**
+
+---
+
+### 3. Trace Entry Point Resolution for Verbose Queries
+
+**Problem:** `runTraceFlow()` receives queries like "how does the compression workflow get
+triggered" and embeds the entire sentence. The vector seed search finds chunks vaguely related
+to "triggered" or "workflow" instead of `compressChunk`. The BFS then traces from the wrong
+entry point, producing an unrelated hop chain.
+
+**Root cause:** `resolveSymbolToChunkId()` in `flowTracer.ts` does exact SQL name lookup — it is
+never called for symbol extraction from the query at all. It only runs during BFS edge resolution,
+not for the initial entrypoint.
+
+**Current flow:**
+1. `runTraceFlow(entrypoint)` embeds the full verbose string via Ollama
+2. `searchChunks()` returns the nearest vectors — probabilistic match, may be wrong
+3. BFS traces from that seed, potentially from the wrong entry point
+
+**Recommended fix — symbol extraction before embedding:**
+
+Extract the most likely symbol name from the query using a camelCase/PascalCase regex. If the
+extracted candidate resolves to an exact chunk (via existing `resolveSymbolToChunkId()`), skip
+the embedding round-trip entirely.
+
+```typescript
+/**
+ * Extracts a candidate symbol name from a verbose trace query.
+ * Returns null when no camelCase, PascalCase, or snake_case symbol is found.
+ *
+ * Examples:
+ *   "how does compressChunk work"      → "compressChunk"
+ *   "trace the flow of runBuildContext" → "runBuildContext"
+ *   "what calls embedBatchWithRetry"   → "embedBatchWithRetry"
+ *   "explain the architecture"         → null (no symbol token)
+ */
+export function extractSymbolCandidate(query: string): string | null {
+  // Matches: camelCase (runSearch), PascalCase (BuildContext), or
+  // snake_case with underscore (embed_batch). Requires length >= 4
+  // to avoid short tokens like "the", "run", "add".
+  const candidates = [...query.matchAll(
+    /\b([a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*|[A-Z][a-zA-Z][a-zA-Z0-9]*|[a-z][a-z0-9]+_[a-z][a-z0-9_]+)\b/g
+  )].map(m => m[1]).filter(c => c.length >= 4);
+
+  if (candidates.length === 0) return null;
+  // Return longest candidate — more specific is more likely to be the target symbol
+  return candidates.sort((a, b) => b.length - a.length)[0];
+}
+```
+
+**Integration in `runTraceFlow()`:**
+
+```typescript
+// Before embedding: attempt direct symbol resolution
+const symbolCandidate = extractSymbolCandidate(entrypoint);
+if (symbolCandidate) {
+  const directId = await resolveSymbolToChunkId(table, symbolCandidate, '');
+  if (directId !== null) {
+    // Exact match found — skip embedding, use this chunk as seed
+    // (set seedResults to a synthetic one-element array)
+  }
+}
+// Fall through to vector search if no direct match
+```
+
+`resolveSymbolToChunkId()` already exists, is fast (SQL equality query, no Ollama), and
+handles multi-file disambiguation (prefers same-file match). This is purely additive — the
+existing vector path remains as the fallback.
+
+**No new dependency. Confidence: HIGH.**
+
+---
+
+### 4. Lightweight Reranking Without a Second Model
+
+**Current state:** Single-pass reranking: `score = similarity * 0.9 + keywordBoost * 0.1`.
+This handles the existing single-pass vector search. For v2.2, this is sufficient.
+
+**Reciprocal Rank Fusion (RRF) — for dual-pass retrieval (future use):**
+
+RRF is the standard merge algorithm for combining two separately ranked result lists. It requires
+no model, no external service, and no new dependencies. LanceDB's own built-in `RRFReranker`
+uses this same formula. The algorithm: `score = sum(1 / (rank + k))` across all ranked lists,
+where `k = 60` (standard constant from Cormack et al.).
+
+```typescript
+const RRF_K = 60;
+
+/**
+ * Merges multiple ranked result lists using Reciprocal Rank Fusion.
+ * Each list is an ordered array of chunk IDs (index 0 = highest rank).
+ * Returns chunk IDs ordered by descending merged score.
+ */
+export function reciprocalRankFusion(rankedLists: string[][]): string[] {
+  const scores = new Map<string, number>();
+  for (const list of rankedLists) {
+    list.forEach((id, index) => {
+      const rank = index + 1; // 1-based rank
+      scores.set(id, (scores.get(id) ?? 0) + 1 / (rank + RRF_K));
+    });
+  }
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
+}
+```
+
+**When to apply RRF vs. the existing blend:**
+
+- **Existing blend** (`similarity * w + boost * (1-w)`) — correct for the current single vector-pass.
+  Sufficient for all v2.2 goals.
+- **RRF** — correct when running *two separate retrieval passes* (e.g. vector search + a
+  filename-filtered pass) and merging their result lists. Not needed for v2.2 but implementable
+  trivially when that path is added.
+
+**No new dependency. Confidence: HIGH.**
+
+---
+
+### 5. LanceDB FTS Index — Assessment
+
+LanceDB 0.27.1 exposes `table.createIndex(column, { config: Index.fts() })` and
+`table.search(query, 'fts')` in the TypeScript client. The `rerankers` namespace is exported.
+The built-in `RRFReranker` is documented and works without external models.
+
+**Known issue:** GitHub issue #1557 reports `lancedb.Index.fts is not a function` in some
+configurations. The workaround (passing `'fts'` as the search type string directly rather than
+using `Index.fts()`) is stable. The core FTS query path works.
+
+**Recommendation for v2.2: Do NOT add FTS indexing.** Reasons:
+
+1. Requires schema migration — adds a new index to the `chunks` table, forcing all users to
+   re-index their repos.
+2. The noise problem is better solved by excluding config files at index time than by adding a
+   BM25 retrieval dimension to merge.
+3. The existing keyword boost already handles filename/name token matching without a full BM25
+   index and without query-time FTS overhead.
+4. FTS is best paired with RRF and dual-pass hybrid retrieval — that is a coherent v2.3 feature
+   if post-v2.2 testing shows the boost approach is still insufficient.
+
+**Defer FTS to v2.3+.** Confidence: HIGH.
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Template strings | `dedent` | `ts-dedent` v2.2.0 | `ts-dedent` was last published 5 years ago and has no active maintenance. `dedent` is actively maintained (March 2026 release), same API. |
-| Template strings | `dedent` | No library (manual `trim()` + string concat) | Manual indentation management in multi-line template literals is fragile and produces ugly source code. A tagged template literal approach is idiomatic TypeScript. |
-| Markdown construction | Custom format utilities | `marked` / `markdown-it` | Those are markdown *parsers* (text → HTML). We need markdown *generation* (data → markdown string). No parser is needed — we construct strings directly. |
-| Output format | Markdown strings | JSON with `structuredContent` | MCP 2025-06-18 spec introduces `structuredContent` for validated JSON output, but backwards compatibility requires also sending text. For Claude consumption, markdown text in the `content` field is correct and sufficient for all 6 tools. |
-| Color utilities | (none) | `picocolors` / `kleur` | ANSI color codes appear as raw escape sequences in Claude's text context — they are not stripped. Colors are appropriate for CLI output (`brain-cache doctor` terminal display) but NOT for MCP tool responses. The CLI already uses pino-pretty for coloring log output. |
-| Template engine | (none) | Handlebars / Mustache / Nunjucks | Heavy template engines add runtime overhead, a learning curve, and file-based template management. The presentation layer is 6 functions producing structured markdown — pure TypeScript string construction is simpler, type-safe, and testable without a template engine. |
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| Regex symbol extraction | `compromise` NLP library | Adds ~1MB dependency; camelCase regex captures 95%+ of TypeScript function/class names without POS tagging. No NLP needed for code symbol extraction. |
+| Regex symbol extraction | `keyword-extractor` npm | Removes stopwords only — does not identify camelCase tokens as symbol candidates. Opposite of what is needed. |
+| `ALWAYS_EXCLUDE_GLOBS` expansion | LanceDB `where()` SQL filter per query | Index-time exclusion prevents wasted embed cost. Query-time filter is the right *fallback* for existing indexes, not a replacement. |
+| Pure-TS RRF formula | `@lancedb/lancedb` `RRFReranker.create()` | LanceDB's RRFReranker is designed for hybrid (FTS + vector) merging — requires an active FTS index. Not applicable to the current single-pass vector path. |
+| Mode-aware boost weight | Cross-encoder reranker | Cross-encoders require a second model inference call per query. Explicitly out of scope per PROJECT.md ("Reranking with second LLM — Out of Scope"). |
+| Mode-aware boost weight | Increase `limit` then re-filter | Higher limits raise token cost in context assembly. Targeted boost is more precise and does not inflate the candidate set. |
+| Direct symbol resolution (SQL) | Re-embed a shorter extracted query | Double Ollama round-trip for marginal gain. SQL exact-match lookup is instantaneous and already implemented. |
 
----
-
-## What NOT to Add
+## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `picocolors`, `chalk`, `kleur`, any ANSI color library | ANSI escape codes appear as literal `\x1b[32m` characters in Claude's tool response text — they are not rendered as colors. Actively degrades output quality. | Plain markdown formatting only in MCP responses |
-| `marked`, `markdown-it`, `remark` | These parse markdown into HTML/AST — the opposite of what is needed. We generate markdown strings, not parse them. | Direct string construction with `dedent` |
-| Handlebars, Mustache, EJS, Nunjucks | Template engines add file-system dependencies, partials, helpers, and cache layers. The presentation layer is 6 functions; TypeScript is the template engine. | TypeScript template literals + `dedent` |
-| `ink`, `blessed`, `terminal-kit` | React-based or ncurses-style terminal UI frameworks. Completely inappropriate for MCP stdio responses — would produce raw terminal control sequences in Claude's context. | Plain markdown text |
-| `cli-table3` or `table` | ASCII table renderers use box-drawing characters that consume tokens wastefully and do not render as tables in Claude's context. Claude understands standard markdown `|col|col|` pipe tables natively. | Markdown pipe tables via string construction |
-| `react-markdown`, `@mdx-js/mdx` | JSX-based markdown rendering. Requires React runtime, irrelevant for a Node.js CLI tool producing string output. | Plain string construction |
-
----
-
-## Stack Patterns by Variant
-
-**For MCP tool responses (consumed by Claude):**
-- Use markdown headings (`##`, `###`), code fences (` ```typescript `), pipe tables, and bold for structure
-- Use `dedent` for all multi-line template literals to keep source code indentation clean
-- No ANSI codes, no box-drawing characters
-
-**For CLI terminal output (consumed by humans in a terminal):**
-- Existing pino + pino-pretty handles log output with colors already
-- For structured CLI output (e.g., `brain-cache doctor` status), use Unicode symbols (✓, ✗, ⚠) directly — these render correctly in modern terminals and are readable in plain text
-- No additional color library needed — the CLI surface area is small
-
-**For error messages in both contexts:**
-- Plain text error messages work in both MCP and CLI contexts
-- Prefix with a consistent pattern: `brain-cache: <message>` for CLI, structured error section in markdown for MCP
-
----
+| Cross-encoder models (ms-marco, etc.) | Second inference call per query; adds 200–800ms latency; explicitly out of scope in PROJECT.md | Mode-aware keyword boost blend |
+| LangChain / LlamaIndex retrieval wrappers | Out of scope per PROJECT.md; obscures direct LanceDB query API | Direct LanceDB query API |
+| `compromise`, `wink-nlp`, `natural` | NLP overhead not warranted for extracting camelCase symbols from code queries | Regex `/[a-z][a-zA-Z0-9]*[A-Z][a-zA-Z0-9]*/` |
+| LanceDB FTS index (v2.2) | Forces re-index migration; not needed when boost covers v2.2 scope | Index-time config exclusion + keyword boost |
+| Separate re-embedding with extracted query | Double Ollama latency | Symbol extraction → direct SQL lookup via `resolveSymbolToChunkId()` |
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| `dedent` 1.7.2 | Node.js >= 14, ESM and CJS | Dual exports (`import` → `.mjs`, `require` → `.js`). Compatible with `"type": "module"` in project's `package.json`. TypeScript declarations included. |
-| `dedent` 1.7.2 | TypeScript 5.x | `.d.mts` declarations for ESM TypeScript consumers. No `@types/dedent` needed. |
-
----
+| Package | Current Version | Notes |
+|---------|----------------|-------|
+| `@lancedb/lancedb` | 0.27.1 | FTS API exists and is deferred. Existing `query().where()` SQL filter API unchanged. |
+| All other packages | (unchanged) | No new packages required for v2.2. |
 
 ## Sources
 
-- [MCP Tools spec (2025-06-18)](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) — Confirmed `content[].type: "text"` is the correct unstructured tool response format; `structuredContent` is a new optional field for validated JSON but requires backwards-compatible text mirror — HIGH confidence
-- [dedent npm](https://www.npmjs.com/package/dedent) — v1.7.2, dual ESM/CJS exports confirmed via `npm info dedent --json`, updated March 2026 — HIGH confidence
-- [ts-dedent npm](https://www.npmjs.com/package/ts-dedent) — v2.2.0, last published 5 years ago — verified stale, not recommended
-- [picocolors GitHub](https://github.com/alexeyraspopov/picocolors) — v1.1.1, 7KB, no deps — confirmed appropriate for terminal CLI output only, not MCP responses
-- [Webex Developers: LLM-Friendly Content in Markdown](https://developer.webex.com/blog/boosting-ai-performance-the-power-of-llm-friendly-content-in-markdown) — confirms markdown is natively parsed by Claude; headings and structure improve LLM comprehension — MEDIUM confidence
-- `/workspace/src/mcp/index.ts` — Direct inspection of current tool response pattern (`JSON.stringify()` in all 6 tools)
-- `/workspace/src/lib/format.ts` — Direct inspection of existing formatting utility (manual padding, no markdown)
+- [LanceDB Full-Text Search docs](https://docs.lancedb.com/search/full-text-search) — `createIndex(col, { config: Index.fts() })` and `table.search(q, 'fts')` TypeScript API verified — HIGH
+- [LanceDB Hybrid Search docs](https://docs.lancedb.com/search/hybrid-search) — `RRFReranker.create()` confirmed as built-in no-external-model reranker; `.rerank(reranker)` chain API — HIGH
+- [LanceDB FTS issue #1557](https://github.com/lancedb/lancedb/issues/1557) — `Index.fts is not a function` bug with string workaround; issue open as of Nov 2024 — MEDIUM
+- [RRF Reranker — LanceDB docs](https://docs.lancedb.com/integrations/reranking/rrf) — RRF formula `1/(rank + k)`, k=60 confirmed as LanceDB default — HIGH
+- [Advanced RAG: RRF in Hybrid Search (Feb 2026)](https://glaforge.dev/posts/2026/02/10/advanced-rag-understanding-reciprocal-rank-fusion-in-hybrid-search/) — RRF algorithm behavior and k=60 constant confirmed — MEDIUM
+- `/workspace/src/services/retriever.ts` — Existing `computeKeywordBoost`, `extractQueryTokens`, `KEYWORD_BOOST_WEIGHT = 0.10` reviewed directly — HIGH
+- `/workspace/src/services/flowTracer.ts` — `resolveSymbolToChunkId` SQL exact-match lookup reviewed; not called during initial seed resolution — HIGH
+- `/workspace/src/services/crawler.ts` — `ALWAYS_EXCLUDE_GLOBS` reviewed; config file patterns absent — HIGH
+- `/workspace/.planning/PROJECT.md` — v2.2 goals, out-of-scope constraints (no second LLM for reranking) — HIGH
 
 ---
-
-## Complete New Additions Summary
-
-| Package | Action | Version | Reason |
-|---------|--------|---------|--------|
-| `dedent` | **Add** | 1.7.2 | Tagged template literal dedenting for multi-line markdown string construction. Only new npm dependency. |
-
-**Total new npm dependencies for v2.1: 1 (`dedent`).**
-
-The presentation layer is primarily a new module (`src/lib/presenter.ts`) and extensions to the existing `src/lib/format.ts` — not a dependency acquisition exercise.
-
----
-*Stack research for: brain-cache v2.1 Presentation Magic milestone*
+*Stack research for: brain-cache v2.2 Retrieval Quality milestone*
 *Researched: 2026-04-03*

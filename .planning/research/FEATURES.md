@@ -1,32 +1,29 @@
 # Feature Research
 
-**Domain:** MCP tool output presentation layer — unified formatting for code intelligence tools
+**Domain:** Retrieval quality improvements for brain-cache v2.2 — fixing tool routing, retrieval accuracy, and output quality
 **Researched:** 2026-04-03
-**Confidence:** HIGH (existing codebase read directly; MCP and CLI presentation patterns verified against current sources)
+**Confidence:** HIGH (primary evidence from direct codebase reads and documented test session failures; supplemented by RAG ecosystem research)
 
 ---
 
 ## Context: Scope of This Research
 
-This research covers only the **v2.1 Presentation Magic** milestone. All retrieval, indexing, and workflow logic is already shipped. The question is:
+This research covers the **v2.2 Retrieval Quality** milestone only. v2.1 shipped a polished presentation layer. v2.2 fixes the underlying accuracy and routing problems that surfaced during testing sessions.
 
-> What does a unified, polished presentation layer for 6 MCP tools look like?
+**Five improvement areas from the milestone, each tied to a documented test failure:**
 
-**What already exists (not in scope):**
-- 6 MCP tools: `index_repo`, `search_codebase`, `build_context`, `doctor`, `trace_flow`, `explain_codebase`
-- Each returns raw data via `content: [{ type: "text", text: ... }]`
-- Inconsistent output shapes: `index_repo` returns JSON, `search_codebase` returns a JSON array, `build_context` returns JSON with inline token savings text, `trace_flow` returns raw JSON, `explain_codebase` returns a hand-rolled markdown string, `doctor` returns raw JSON
-- One shared helper: `formatTokenSavings()` in `src/lib/format.ts` — padded key-value table, used only by `build_context` and `explain_codebase`
+1. **Query-term boosting** — query containing "buildContext" should rank buildContext.ts above the 0.85 threshold so it is not compressed (Test 1)
+2. **Preventing compression of high-relevance results** — when a file matching the query is compressed, Claude must do follow-up reads, negating savings (Test 1)
+3. **Reducing noise from build tool config files** — vitest.config.ts and tsup.config.ts ranked 3rd and 5th for "config values" query (Test 3)
+4. **Tool selection guidance for AI agents** — Claude used trace_flow for an intra-file logic question and search_codebase for a "how does X work" question (Tests 3, 4)
+5. **Honest token savings metrics** — trace_flow claimed 67% savings on a result that was abandoned as wrong (Test 4); search_codebase claimed savings on a result that required 3 follow-up reads (Test 3)
 
-**Current inconsistencies observed in the codebase:**
-- `index_repo`: returns `JSON.stringify({ status, path, fileCount, chunkCount })`
-- `search_codebase`: returns `JSON.stringify(chunks)` — raw array dump, no framing
-- `build_context`: returns `JSON.stringify({ ...result, tokenSavings: formatTokenSavings(...) })` — JSON with embedded text block
-- `doctor`: returns `JSON.stringify(health)` — raw health object
-- `trace_flow`: returns `JSON.stringify(result)` — raw hops array in JSON
-- `explain_codebase`: returns hand-assembled markdown string: `# Codebase Architecture Overview\n\n${content}\n\n---\n${tokenSavings}`
-
-**The goal:** every tool response feels like it comes from a single, polished system — consistent structure, predictable order, readable output suited for Claude Code's chat interface.
+**What already exists (not in scope for v2.2):**
+- Vector similarity search with distance threshold filtering
+- 10% keyword boost blend in `searchChunks` for filename/name reranking (already in `retriever.ts`)
+- 0.85 similarity gate protecting high-relevance chunks from compression (already in `compression.ts`)
+- `.braincacheignore` custom exclusion patterns (already in v2.0)
+- CLAUDE.md routing table with tool-to-query-type mappings (already in v2.0)
 
 ---
 
@@ -34,247 +31,217 @@ This research covers only the **v2.1 Presentation Magic** milestone. All retriev
 
 ### Table Stakes (Users Expect These)
 
-These are required for the presentation layer to feel complete. Missing any of these makes the output feel unfinished or inconsistent.
+Features that must work correctly for brain-cache to be trustworthy. Missing or broken = users stop trusting tool output and fall back to manual file reads.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| Consistent response envelope across all tools | Inconsistent output shapes force Claude (and humans reading tool results) to adapt per-tool — breaks the "single system" feel; all code intelligence tools from well-maintained projects (probe, atlas-mcp-server) use a consistent wrapper | LOW | A shared `formatToolResponse(tool, payload, meta?)` function in `src/lib/format.ts`; wraps all tool outputs in a predictable shape |
-| Summary line at the top of every response | Summary-first is a universal CLI convention (git, gh, cargo output patterns all front-load the result); without it, consumers must scan the full response to understand what happened | LOW | One-line summary rendered before body content: `Indexed 142 files (8,341 chunks) in /workspace` before the detail block |
-| Structured sections with clear labels | Separate sections for results, metadata, and errors prevent consumers from parsing mixed-format blobs; atlas-mcp-server shows this pattern produces better LLM reasoning | LOW | Markdown-style section headers (`## Results`, `## Metadata`) used consistently within text content responses |
-| Predictable field presence | Claude Code must infer meaning from tool output; if optional fields randomly appear or disappear, prompting becomes unreliable | LOW | All metadata fields always present with null/0 defaults rather than omitted; never conditional key presence |
-| Error responses that match success response structure | Current error paths return bare strings like `"Search failed: ..."` with no structure; LLM cannot distinguish an error from a result | LOW | Error responses use the same envelope as success, with an explicit `status: "error"` marker and `message` field |
-| Token savings consistent across tools that do retrieval | `build_context` shows token savings; `search_codebase` and `trace_flow` do not — yet they also perform local retrieval that saves tokens; inconsistency trains Claude to only look for savings in one place | LOW | Token savings metadata section present for all tools that perform retrieval (`search_codebase`, `build_context`, `trace_flow`, `explain_codebase`); absent for `index_repo` and `doctor` which do not retrieve |
+| **Identifier-aware retrieval boosting** | When a query contains a specific symbol name or filename ("buildContext", "compression.ts"), the file/function by that exact name must rank at or near the top — not below generic semantic matches | MEDIUM | The 10% keyword boost weight in `retriever.ts` is already implemented but undersized; a 40% weight is the standard starting point for hybrid search. Tied to Test 1 failure: buildContext.ts fell below 0.85 despite the query literally containing "buildContext" |
+| **Non-compression guarantee for high-relevance matches** | A chunk with similarity >= 0.85 already bypasses compression (rule 2 in `compression.ts`). The gap: the query-term boost currently only affects *ranking order*, not the stored similarity score — so a well-ranked chunk can still be compressed if its raw embedding similarity is below 0.85 | MEDIUM | The fix is to carry the blended reranking score through to the `similarity` field on `RetrievedChunk` so compression decisions see the boosted score, not just the raw cosine distance. Tied to Test 1: buildContext.ts body was stripped despite being the most relevant file |
+| **Build tool config file exclusion from application queries** | vitest.config.ts, tsup.config.ts, package.json, .eslintrc, and similar build/infra configs match many generic programming terms ("config", "options", "setup") but are almost never the answer to application-logic questions | LOW | Implement a built-in exclusion list for well-known non-application file patterns (*.config.ts, *.config.js, vitest.config.*, tsup.config.*, eslint.config.*) that applies during post-search filtering. Tied to Test 3: vitest.config.ts ranked 3rd for "config values" |
+| **Correct tool classification in CLAUDE.md and tool descriptions** | Claude chose trace_flow for "walk me through logic in chunkFile" (an intra-file logic question) and search_codebase for "what config values does brain-cache use" (a "how does it work" question). Tool descriptions must carry explicit negative examples showing when NOT to use each tool | LOW | No code changes — pure description and CLAUDE.md text update. Tied to Tests 3 and 4: wrong tool selection on 2 of 4 tests observed |
+| **Zero token savings claimed for discarded/wrong results** | trace_flow reported "67% savings" on a result that was completely discarded as wrong (Test 4). Claiming savings on irrelevant output is misleading — it trains users to distrust the savings metric entirely | LOW | Guard: if hops array is empty, or if the result was abandoned without being used, report 0% savings. More precisely: only report savings after a result is confirmed non-empty. Tied to Test 4: 67% claimed on empty/wrong trace |
 
 ### Differentiators (Competitive Advantage)
 
-These go beyond basic consistency — they make the output quality noticeably better than raw JSON dumps or hand-rolled strings.
+These exceed bare correctness — they make brain-cache noticeably more accurate and trustworthy than a naive vector search.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Tool-specific identity within the shared system | Each tool has its own result shape that makes sense for its content type: `trace_flow` shows numbered hops, `search_codebase` shows ranked file locations, `explain_codebase` shows directory tree + module groups, `doctor` shows a health dashboard; all within a shared envelope | MEDIUM | Shared formatter dispatches to tool-specific body renderers; each renderer lives in the same `format.ts` or a `formatters/` subfolder; the shared wrapper (header, metadata footer) never changes |
-| Hop-by-hop formatting for `trace_flow` | Flow traces are inherently sequential; rendering each hop as a numbered step with file + line + calls-found makes the execution path scannable at a glance — raw JSON forces Claude to reconstruct the path mentally | LOW | `Hop 1 → src/workflows/buildContext.ts:28 (runBuildContext)\n  Calls: runTraceFlow, runExplainCodebase` — plain text, no markdown tables |
-| Ranked result formatting for `search_codebase` | Search results have a similarity score; surfacing it as a ranked list with score + file + line makes the relevance gradient visible — Claude can use rank position to weight evidence | LOW | `1. src/services/embedder.ts:45 — embedBatch [function] (score: 0.94)\n2. ...` format; not a JSON array |
-| Health dashboard format for `doctor` | Structured health report with visual status indicators (installed/running/missing) is the standard pattern for diagnostic tools (Docker health checks, npm doctor) — raw JSON requires parsing to see status | LOW | `Ollama: running (v0.6.3)\nIndex:  indexed (142 files, 2026-04-03)\nModel:  nomic-embed-text (loaded)\nVRAM:   8.0 GiB (standard tier)` — fixed-width table |
-| `localTasksPerformed` surfaced as a readable pipeline | `metadata.localTasksPerformed` exists on every retrieval result but is currently buried inside JSON; showing it as a one-line pipeline summary (`embed → search → dedup → compress → group`) communicates what brain-cache did locally vs what Claude has to do | LOW | Append as a single "Pipeline" line in the metadata footer; already available from every workflow result |
-| Cohesion with Claude's response style | The output should read as a natural extension of Claude's own reasoning style — factual, structured, no decorative prose, no padding — so Claude's response wraps around it naturally without reformatting | LOW | Use plain text over JSON for human-readable sections; avoid bullet overload; prefer section headers to nested JSON keys; follow Claude's own convention of leading with the answer |
+| **Score passthrough from reranking to compression** | Today the blended score (vector + keyword boost) is used only for ranking order, then discarded — compression uses only the original cosine similarity. Carrying the blended score through means that a chunk which is highly relevant to the query (high keyword match + decent vector score) is protected from compression, even if its raw cosine distance is slightly below the 0.85 threshold | MEDIUM | Requires `searchChunks` to return a `rerankedScore` alongside `similarity`, and compression to use whichever is higher. This is the correct fix for Test 1 and closes the gap between "ranked first" and "protected from compression" |
+| **Configurable application-file-only mode** | A toggle (default: on) that filters search results to application source files only, excluding known infrastructure patterns. Makes the tool reliable for the primary use case (understanding application logic) without removing the ability to search build configs when explicitly needed | LOW | One filter function applied post-search. User can disable per-query or via config.json. This is more targeted than `.braincacheignore` (which removes files from indexing entirely) — these files stay indexed but are demoted in application-logic queries |
+| **Negative example routing in CLAUDE.md and tool descriptions** | Current descriptions say what each tool IS for. Adding explicit "Do NOT use this tool when..." statements reduces ambiguous tool calls where the description-match looks plausible but the tool is wrong | LOW | Pattern used by GitHub Copilot Workspace, atlas-mcp-server, and other multi-tool MCP servers — negative examples improve LLM tool selection more than positive examples alone |
+| **Trace entry point exact-match preference** | When the trace_flow entrypoint query exactly matches a function name in the index (case-insensitive), use that as the seed without vector search — bypassing embedding similarity entirely. Resolves Test 4 (trace_flow seeded on retriever code when given "chunkFile function") and Test 1 (trace_flow seeded on assembleContext when given "buildContext workflow") | MEDIUM | Requires a pre-search name lookup: `chunksTable.query().where("name = '...'")` before falling back to vector search. Builds on `resolveSymbolToChunkId` already in `flowTracer.ts` |
+| **Honest savings only on uncompressed, non-empty results** | Token savings should be reported only when brain-cache actually saved tokens the user would otherwise have spent — not on compressed files Claude will re-read, not on empty results, not on discarded traces | LOW | Extend the existing savings baseline logic in `buildContext.ts` (which already excludes files with compressed chunks) to also gate on result non-emptiness and to set savings to 0 when the result was produced by a wrong-seed trace |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Emoji status indicators (✅ ❌ ⚠️) | atlas-mcp-server uses them; they feel polished in demos | Claude Code renders tool output in a monospace panel where emojis sometimes display inconsistently; brain-cache CLAUDE.md instructions already state no emojis; adds visual noise to content Claude will reason about | Use text status words: `ok`, `error`, `warning`; or simple ASCII markers like `[ok]` / `[error]` if a prefix is needed |
-| JSON output as the default format | JSON is machine-parseable; seems like it gives Claude more to work with | Claude Code parses tool output as text, not as structured JSON — the AI reads the text content directly; JSON-formatted output produces worse Claude responses than well-structured prose because it forces Claude to re-parse structure instead of reading naturally | Use structured text (sections, labels, values) for default; raw JSON is appropriate only for `index_repo` success (a small status object) and `doctor` where field names carry meaning |
-| Rich markdown with tables everywhere | Tables look organised in chat; seem to communicate structure well | MCP tool output is rendered in a tool-result panel, not in the main chat markdown renderer; markdown tables are displayed as raw `|---|---|` strings in many Claude Code contexts | Use fixed-width aligned text for tabular data (like `git status` output); use plain headers (`## Results`) only where sections genuinely need names |
-| Returning both structured content and text content | MCP spec discussion #315 proposes `structuredContent` + backward-compat `TextContent` | The proposal is not finalised; Claude Code currently reads only the `text` content block; implementing dual-format adds code complexity with no practical benefit today | Return text content only; structured content field can be added in a future milestone if the spec stabilises |
-| Colour / ANSI escape codes in output | CLI tools use colour; improves scannability in terminal | MCP tool output is not rendered in a raw terminal — it goes through the MCP text content type and is displayed in Claude Code's tool result view; ANSI codes appear as raw `\x1b[32m` characters | No colour in MCP tool output; colour is appropriate for the CLI commands (`brain-cache doctor`, `brain-cache status`) but not for MCP |
-| Per-tool output format toggle (json vs text) | Power users want raw JSON for scripting | Brain-cache MCP tools are called by Claude Code, not by scripts; the consumer is always an LLM; a toggle adds config surface area with no practical use case | Default to readable text; `doctor` JSON fields are self-documenting enough to stay as a formatted text block |
-| Streaming / incremental output | Feels more responsive for long operations | MCP stdio transport buffers complete responses; partial output would require protocol-level support that the current SDK does not expose; index operations are better served by progress logs to stderr (which already exist) | Keep stdout for complete responses; use `process.stderr.write` for progress updates (already done in `buildContext.ts` and `explainCodebase.ts`) |
+| **Cross-encoder reranking (second model call)** | Industry RAG systems use a cross-encoder as a second pass to dramatically improve precision (BM25 + dense + rerank combo hits 87% recall vs 71% for dense alone) | Requires a second Ollama model load, adds 200-800ms latency per query, and violates the "no unnecessary complexity" constraint. The existing 10% keyword boost already partially addresses this for code search — the marginal gain from a cross-encoder doesn't justify the operational overhead for a local developer tool | Increase the keyword boost weight to 40% (hybrid weighting standard) and carry blended scores through to compression. This captures most of the precision gain with zero latency overhead |
+| **BM25 sparse index alongside LanceDB** | Hybrid BM25 + vector search is the SOTA approach for text retrieval | Requires a second index maintained in sync with LanceDB, adds dependency complexity, and is likely overkill for codebase-size corpora (typically 10K-100K chunks). LanceDB's FTS (full-text search) capabilities would be the right path if BM25 is ever needed | Rely on LanceDB's built-in full-text search or the existing token-level boost for keyword precision; don't add a second database |
+| **Dynamic exclusion lists from config** | Users want to tune which files are excluded | Adds surface area for misconfiguration; the built-in list should handle 90%+ of cases. The existing `.braincacheignore` already handles project-specific exclusions at index time | Add well-known patterns to the built-in exclusion list; use `.braincacheignore` for project-specific cases |
+| **LLM-based intent classification for tool routing** | LLM classification would be more accurate than keyword bigrams | Adds a Claude API round-trip (300-500ms) to every tool call, defeating the "reduce Claude token usage" core value. The current keyword classifier is fast, local, and the routing bugs are in the tool *descriptions*, not the intent classifier | Fix the CLAUDE.md routing table and tool descriptions; the intent classifier is not the root cause |
+| **Per-query savings toggle (show/hide)** | Users who trust the tool don't want savings noise | Adds a parameter to every tool call signature. The real fix is accurate savings numbers — accurate metrics are not annoying, inflated ones are | Fix the calculation so savings are only claimed when earned; don't add a toggle |
 
 ---
 
 ## Feature Definitions (Concrete Behaviours)
 
-### Shared response envelope — what "consistent structure" means
+### 1. Identifier-aware boosting — what "larger keyword weight" means
 
-Every tool response is text content in this shape:
-
-```
-[SUMMARY LINE]
-
-[TOOL-SPECIFIC BODY]
-
----
-[METADATA FOOTER]
-```
-
-- **Summary line:** one sentence, front-loaded. Always the first line. Always present.
-- **Tool-specific body:** varies by tool (see below). May be empty for simple operations.
-- **Separator:** `---` always separates body from footer.
-- **Metadata footer:** always present for retrieval tools; omitted for `index_repo` and `doctor` (they have no retrieval metadata). Contains: pipeline, token savings (if applicable).
-
-Example for `search_codebase`:
-```
-Found 5 results for "embed batch"
-
-1. src/services/embedder.ts:45 — embedBatch [function] (score: 0.94)
-2. src/services/embedder.ts:89 — embedBatchWithRetry [function] (score: 0.91)
-3. src/workflows/buildContext.ts:132 — embed call [file] (score: 0.78)
-4. src/services/lancedb.ts:201 — storeChunks [function] (score: 0.62)
-5. src/cli/index.ts:89 — runSearch call [file] (score: 0.58)
-
----
-Pipeline:   embed → search → dedup
-Tokens sent to Claude:   312
-Estimated without:       ~4,100  (5 files + overhead)
-Reduction:               92%
-```
-
-### Tool-specific body renderers — what each tool produces
-
-| Tool | Body Shape | Key Fields |
-|------|-----------|------------|
-| `index_repo` | `Indexed N files (M chunks) at /path` — single line body, no footer | fileCount, chunkCount, path |
-| `search_codebase` | Numbered ranked list: rank, file path, line, name, type, score | similarity, filePath, startLine, name, chunkType |
-| `build_context` | Full formatted context (existing `formatGroupedContext` output) unchanged | content, tokensSent, reductionPct |
-| `doctor` | Fixed-width health table: one service per row | ollamaStatus, indexFreshness, embeddingModel, vramAvailable |
-| `trace_flow` | Numbered hops: hop depth, file, line, name, calls-found list | hops[].filePath, hops[].name, hops[].callsFound |
-| `explain_codebase` | Directory tree preamble + module-grouped code sections (existing content) | content, directory tree |
-
-### Error envelope — what errors look like
-
-All errors use the same envelope. The `isError: true` flag stays on the MCP response for protocol compliance. The text content of the error is:
+The existing blend in `searchChunks` is:
 
 ```
-Error: [tool name] failed
-
-[error message]
-
-Suggestion: [actionable next step — e.g. "Run 'brain-cache init' first" or "Start Ollama with 'ollama serve'"]
+score = similarity * 0.90 + keywordBoost * 0.10
 ```
 
-The `Suggestion` line is only included if a remediation is known. It is omitted for unexpected errors.
+The failure mode: a query like "how does buildContext assemble chunks" produces `keywordBoost = 1.0` for `buildContext.ts` (exact name match) but the blended score is only `0.88 * 0.90 + 1.0 * 0.10 = 0.89`, which might not change the rank order enough. More critically, the `similarity` field on the returned `RetrievedChunk` is still the raw cosine similarity (0.82), not the blended score — so compression sees 0.82 (below 0.85) and strips the body.
 
-### `formatToolResponse` — the shared formatter signature
+**Fix:** Increase `KEYWORD_BOOST_WEIGHT` from 0.10 to 0.40. Update `searchChunks` to set `chunk.similarity = blendedScore` (not raw cosine similarity) so compression and downstream consumers see the query-aware score. This closes the Test 1 failure in one change.
 
-The single new function that all tools will call:
+Expected observable behavior: "How does buildContext work?" returns buildContext.ts with body intact, not a compressed manifest.
 
-```typescript
-// src/lib/format.ts (extends existing file)
-export function formatToolResponse(
-  tool: ToolName,
-  summary: string,
-  body: string,
-  meta?: ToolMetadata,
-): string
+### 2. Build tool config exclusion — what the filter looks like
+
+A post-search filter applied in `searchChunks` (or as a caller-side filter in each workflow) before returning results:
+
+```
+INFRASTRUCTURE_FILE_PATTERNS = [
+  /vitest\.config\.[tj]s$/,
+  /tsup\.config\.[tj]s$/,
+  /eslint\.config\.[tj]s$/,
+  /.eslintrc(\.(js|ts|json|yml|yaml))?$/,
+  /prettier\.config\.[tj]s$/,
+  /babel\.config\.[tj]s$/,
+  /jest\.config\.[tj]s$/,
+  /webpack\.config\.[tj]s$/,
+  /rollup\.config\.[tj]s$/,
+  /vite\.config\.[tj]s$/,
+]
 ```
 
-Where `ToolMetadata` carries:
-- `pipeline?: string[]` — tasks performed locally
-- `tokensSent?: number`
-- `estimatedWithout?: number`
-- `reductionPct?: number`
-- `filesInContext?: number`
+Applied only when the query does NOT explicitly mention the infrastructure tool name (e.g. a query containing "vitest" should still return vitest.config.ts). Detection: if any pattern token from `extractQueryTokens` appears in the infrastructure file name, pass it through.
 
-The function is pure (no I/O), testable, and replaces all the inline string assembly currently scattered across `mcp/index.ts`.
+Expected observable behavior: "What config values does brain-cache use?" returns config.ts, configLoader.ts, types.ts — not vitest.config.ts or tsup.config.ts.
+
+### 3. Tool routing — what the CLAUDE.md update looks like
+
+Current CLAUDE.md routing table has positive examples. The update adds:
+
+- `build_context` section: "Do NOT use trace_flow to understand how a single function works internally — trace_flow traces call paths ACROSS files, not logic WITHIN a function."
+- `trace_flow` section: "Do NOT use trace_flow for queries about how something works, what it does, or explaining logic. Use build_context for those."
+- `search_codebase` section: "Do NOT use search_codebase for 'how does X work' questions — it returns file locations, not explanations. Use build_context for understanding questions."
+- `build_context` section: add "Use for: 'How does X work?', 'Explain the logic in Y', 'What does this function do?'" to reinforce the positive case.
+
+The tool description strings in `mcp/index.ts` should mirror these negatives for tool discovery (MCP servers without CLAUDE.md).
+
+Expected observable behavior: "Walk me through the logic in chunkFile" → Claude calls build_context, not trace_flow.
+
+### 4. Honest token savings — what "zero for empty/wrong results" means
+
+Current flow: `buildContext.ts` computes savings after assembly, regardless of whether the assembled result is useful. `traceFlow.ts` doesn't compute savings at all (the MCP handler estimates them separately using a crude `tokensSent * 3` multiplier).
+
+**Fix 1 (trace_flow):** If `result.hops.length === 0`, report `tokensSent: 0`, `estimatedWithout: 0`, `reductionPct: 0`. Never claim savings on an empty trace.
+
+**Fix 2 (search_codebase handler):** Replace the `tokensSent * 3` rough multiplier with a calculation that accounts for the fact that search results are file locators, not complete file reads. The savings from search_codebase are minimal (Claude will read the files anyway) — report the actual tokens sent in the result, with estimatedWithout reflecting one tool call overhead only, not full file reads.
+
+**Fix 3 (build_context trace path):** When trace mode returns an empty hops array and falls back, report savings as 0 for the trace step rather than claiming the fallback savings retroactively.
+
+Expected observable behavior: trace_flow on a wrong-seed query shows "0% reduction" in the footer, not "67% reduction".
+
+### 5. trace_flow duplicate call list — the serialization bug
+
+Test 5 noted: "Hop 1 call list was noisy. The chunkFile hop listed its callees twice (the full list appears duplicated)."
+
+Looking at `traceFlow.ts` line 101-122: the `hops` output includes `callsFound: hop.callsFound` from `flowTracer.ts`. The `flowTracer.ts` line 102 builds `callsFound: callEdges.map(e => e.to_symbol)`. This produces the correct list once. The duplication is in the MCP formatter (`formatTraceFlow` in `src/lib/format.ts`), not in the data — the formatter likely renders `callsFound` twice during template assembly.
+
+Expected observable behavior: each hop shows its calls list exactly once.
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Shared response envelope]
-    └──required by──> [All tool-specific body renderers]
-    └──required by──> [Consistent error envelope]
+[Score passthrough from reranking to compression]
+    └──requires──> [Keyword boost weight increase]
+    └──enables──>  [Non-compression of identifier-matched chunks]
 
-[formatToolResponse function]
-    └──replaces──> [inline JSON.stringify calls in mcp/index.ts]
-    └──replaces──> [hand-assembled markdown string in explain_codebase handler]
-    └──extends──>  [existing formatTokenSavings in src/lib/format.ts]
+[Build tool config exclusion filter]
+    └──independent──> (no upstream dependencies)
+    └──should NOT remove from index──> .braincacheignore handles index exclusion; this is query-time filtering only
 
-[Tool-specific body renderers]
-    └──search_codebase renderer──requires──> [RetrievedChunk.similarity, .filePath, .startLine, .name, .chunkType]
-    └──trace_flow renderer──requires──>      [TraceFlowResult.hops[].hopDepth, .filePath, .name, .callsFound]
-    └──doctor renderer──requires──>          [health object fields from doctor handler]
-    └──index_repo renderer──requires──>      [indexState.fileCount, .chunkCount]
-    └──build_context renderer──requires──>   [existing formatGroupedContext output — no change]
-    └──explain_codebase renderer──requires── [existing content string — no change]
+[Tool routing CLAUDE.md update]
+    └──independent──> (pure text change, no code dependencies)
+    └──parallel-with──> [Tool description update in mcp/index.ts]
 
-[Token savings footer]
-    └──requires──> [formatTokenSavings (already exists)]
-    └──applies to──> search_codebase, build_context, trace_flow, explain_codebase
-    └──not applicable──> index_repo, doctor
+[Honest token savings]
+    └──requires──> [Non-empty trace result guard]
+    └──modifies──> [buildContext.ts savings baseline logic]
+    └──modifies──> [mcp/index.ts search handler savings estimate]
+
+[trace_flow duplicate call list fix]
+    └──independent──> (bug in format.ts renderer, not in flowTracer.ts or traceFlow.ts)
 ```
 
 ### Dependency Notes
 
-- **`build_context` and `explain_codebase` bodies are unchanged:** These tools already produce well-structured text (formatted grouped context, directory tree + module sections). The presentation layer wraps them with a consistent summary line and footer — the body content itself is not modified.
-- **`search_codebase` body is a complete rewrite from JSON array to ranked text:** Currently returns `JSON.stringify(chunks)`. The new body renderer converts the same data into a numbered ranked list. The underlying workflow (`runSearch`) is not touched.
-- **`trace_flow` body is a complete rewrite from JSON to hop-by-hop text:** Currently returns `JSON.stringify(result)`. The new body renderer formats hops as a numbered sequence. The underlying workflow (`runTraceFlow`) is not touched.
-- **`doctor` body is a complete rewrite from JSON to health table:** Currently returns `JSON.stringify(health)`. Health fields are stable and known; a fixed-width table is easy to produce.
-- **`index_repo` body is minimal change:** Currently returns `JSON.stringify({ status, path, fileCount, chunkCount })`. New format is a one-line summary — no body section needed.
-- **No workflow changes:** The presentation layer is purely in `mcp/index.ts` and `src/lib/format.ts`. No workflow, service, or type changes required.
+- **Score passthrough requires boost weight change first:** Carrying the blended score to `similarity` only makes sense if the blend weight is meaningful. At 10% weight, the blended score barely differs from raw cosine. Increase to 40% first, then passthrough is worthwhile.
+- **Build tool exclusion is purely additive:** No existing feature depends on infrastructure files appearing in results. Safe to ship independently.
+- **CLAUDE.md and tool descriptions are independent of code changes:** These can ship in the same PR as any other fix, or alone. Routing accuracy depends on neither code fix nor vice versa.
+- **Savings fix is layered:** The empty-trace guard is a 2-line change. The search_codebase multiplier fix is a separate concern. Both are low-risk and can ship together.
+- **Duplicate call list bug is in `format.ts`:** Does not affect retrieval logic. Safe to fix in isolation.
 
 ---
 
-## MVP Definition for v2.1
+## MVP Definition for v2.2
 
-### Launch With (v2.1 core)
+### Launch With (v2.2 core — all required for milestone)
 
-All of these are required for the milestone goal of "outputs feel like a single, polished system."
+- [ ] **Keyword boost weight: 0.10 → 0.40** — primary fix for Test 1 (buildContext.ts compressed despite query match); one constant change in `retriever.ts`
+- [ ] **Score passthrough to similarity field** — carry blended score to `chunk.similarity` in `searchChunks` so compression rule 2 fires correctly; one-line change in `retriever.ts`
+- [ ] **Build tool config exclusion filter** — post-search filter for vitest.config.ts / tsup.config.ts / eslint.config.ts etc. applied to non-infrastructure queries; fixes Test 3 noise
+- [ ] **CLAUDE.md routing table update** — add negative examples ("Do NOT use trace_flow for..."); fixes Tests 3 and 4 tool selection
+- [ ] **Tool description updates in mcp/index.ts** — mirror the negative examples in the MCP tool descriptions for Claude Code's tool selection
+- [ ] **trace_flow empty-result savings guard** — report 0% savings when hops array is empty; fixes Test 4 fraudulent 67% claim
+- [ ] **trace_flow duplicate call list fix** — find and fix the double-render in `formatTraceFlow` in `format.ts`; fixes Test 5 output noise
+- [ ] **trace_flow exact-match seed resolution** — try `name = 'X'` lookup before vector search for entrypoint; fixes Test 4 wrong-seed trace
 
-- [ ] **`formatToolResponse` shared function** — the foundation; all other presentation features build on this; lives in `src/lib/format.ts`
-- [ ] **Consistent summary line for all 6 tools** — first line of every response; one sentence; always present
-- [ ] **`search_codebase` ranked text renderer** — replace JSON array dump with numbered ranked list including score, file, line, name, type
-- [ ] **`trace_flow` hop-by-hop text renderer** — replace JSON dump with numbered hop sequence showing file, line, calls-found
-- [ ] **`doctor` health table renderer** — replace JSON object with fixed-width health dashboard
-- [ ] **`index_repo` summary renderer** — replace JSON object with single-line completion summary
-- [ ] **Consistent metadata footer for retrieval tools** — token savings + pipeline present for `search_codebase`, `build_context`, `trace_flow`, `explain_codebase`; absent for `index_repo` and `doctor`
-- [ ] **Consistent error envelope** — all 6 tools use the same error shape with `Error:`, message, and optional `Suggestion:`
+### Add After Validation (v2.2.x)
 
-### Add After Validation (v2.1.x)
+- [ ] **search_codebase savings estimate correction** — replace crude `tokensSent * 3` multiplier with a calculation based on actual search results; low priority, less misleading than trace_flow's 67% on wrong results
+- [ ] **Infrastructure file filter per-query bypass** — if query tokens include an infrastructure tool name, pass those files through; needed to avoid over-filtering when user explicitly asks about build config
 
-- [ ] **Pipeline label in footer** — `localTasksPerformed` shown as `embed → search → dedup → compress`; low value on launch but useful for debugging and transparency
+### Future Consideration (v2.3+)
 
-### Future Consideration (v2.2+)
-
-- [ ] **Structured content field alongside text content** — only if MCP spec discussion #315 stabilises and Claude Code adds client-side parsing; no practical benefit today
-- [ ] **Per-tool output format configuration** — only if scripted MCP consumers emerge as a real use case
+- [ ] **LanceDB FTS hybrid search** — if keyword boost at 40% is insufficient for precision, add a full-text search pass through LanceDB's native FTS; adds latency but no new dependency
+- [ ] **Cross-encoder reranking** — only if the blended score approach proves insufficient at scale; adds second Ollama model requirement
 
 ---
 
 ## Feature Prioritization Matrix
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| `formatToolResponse` shared function | HIGH | LOW | P1 |
-| Summary line — all tools | HIGH | LOW | P1 |
-| `search_codebase` ranked text renderer | HIGH | LOW | P1 |
-| `trace_flow` hop-by-hop renderer | HIGH | LOW | P1 |
-| `doctor` health table renderer | MEDIUM | LOW | P1 |
-| `index_repo` summary renderer | MEDIUM | LOW | P1 |
-| Consistent metadata footer | HIGH | LOW | P1 |
-| Consistent error envelope | HIGH | LOW | P1 |
-| Pipeline label in footer | LOW | LOW | P2 |
-| Structured content field | LOW | MEDIUM | P3 |
-
-**Priority key:**
-- P1: Required for v2.1 milestone
-- P2: Add in v2.1.x after core validated
-- P3: Future milestone
+| Feature | User Value | Implementation Cost | Priority | Test Failure |
+|---------|------------|---------------------|----------|--------------|
+| Keyword boost weight 0.10 → 0.40 | HIGH | LOW (1 constant) | P1 | Test 1 |
+| Score passthrough to similarity | HIGH | LOW (1 field assignment) | P1 | Test 1 |
+| Build tool config exclusion | HIGH | LOW (filter function + pattern list) | P1 | Test 3 |
+| CLAUDE.md routing table update | HIGH | LOW (text edit) | P1 | Tests 3, 4 |
+| MCP tool description negative examples | HIGH | LOW (text edit) | P1 | Tests 3, 4 |
+| trace_flow empty-result savings guard | MEDIUM | LOW (2-line guard) | P1 | Test 4 |
+| trace_flow duplicate call list fix | MEDIUM | LOW (bug in format.ts) | P1 | Test 5 |
+| trace_flow exact-match seed resolution | HIGH | MEDIUM (pre-search name lookup) | P1 | Tests 1, 4 |
+| search_codebase savings estimate correction | LOW | MEDIUM (recalculate baseline) | P2 | Test 3 (indirect) |
+| Infrastructure filter per-query bypass | LOW | LOW | P2 | — |
+| LanceDB FTS hybrid search | LOW | HIGH | P3 | — |
 
 ---
 
-## Competitor Format Analysis
+## Comparison: Existing vs Required Behavior Per Test
 
-Surveying how comparable developer tools format their tool/plugin output — looking at what Claude Code actually receives and reasons from.
-
-| Pattern | atlas-mcp-server | probe (code search) | gh CLI | brain-cache v2.1 approach |
-|---------|-----------------|---------------------|--------|---------------------------|
-| Summary line | Status emoji + name | Token count + result count | `#123  PR title  (open)` front-loaded | Plain text: `Found 5 results for "..."` |
-| Body structure | Hierarchical JSON-like text with labels | Markdown code blocks per result, AST-aware | Table or detail view depending on command | Tool-specific renderer within shared envelope |
-| Metadata footer | Pagination metadata | Token budget used | Rate limits in verbose mode | Token savings + pipeline for retrieval tools |
-| Error format | `❌ Error message` | Error message to stderr | Error to stderr + exit code | `Error: [tool] failed\n[message]\nSuggestion: [fix]` |
-| Status indicators | Emojis ✅ ❌ ⚠️ | None | Text status words | Text status words; no emojis (CLAUDE.md constraint) |
-| Consistency mechanism | `ResponseFormatter<T>` interface | Token-budget parameter; ranked output | Command-specific but consistent within `gh` | `formatToolResponse()` function called by all 6 handlers |
-
-**Key insight from research:** The ATLAS pattern (typed `ResponseFormatter<T>` interface per tool, with a central `createToolResponse` wrapper) is the closest match to what brain-cache needs. The difference is that brain-cache outputs text content, not structured JSON — so the equivalent is a `formatToolResponse` function with a tool-specific body renderer callback, not a JSON schema.
+| Test | Query | Expected Tool | Actual Tool Used | Root Cause | Fix |
+|------|-------|--------------|-----------------|------------|-----|
+| Test 1 | "how does buildContext assemble chunks" | build_context | trace_flow (wrong seed) + build_context (compressed result) | trace_flow seeded on assembleContext not buildContext; similarity 0.82 < 0.85 triggered compression on the most relevant file | Exact-match seed lookup + score passthrough |
+| Test 2 | "explain compression.test.ts" | Read (direct) | Read (correct) | N/A — direct read was appropriate | No change needed |
+| Test 3 | "what config values does brain-cache use" | build_context | search_codebase (wrong tool); vitest.config.ts ranked 3rd | search_codebase used for understanding question; infrastructure files polluted results | CLAUDE.md routing update + build tool exclusion filter |
+| Test 4 | "how does indexing pipeline chunk files" (verbose query) | search_codebase → build_context | trace_flow (wrong seed → retriever.ts) | Long, verbose entrypoint query — semantic embedding anchored to retriever.ts instead of chunker.ts | Exact-match seed lookup; shorten entrypoint extraction |
+| Test 5 | Same query with shorter entrypoint "chunkFile" | trace_flow (correct seed) | trace_flow (correct, but noisy output) | Correct seed found; duplicate callsFound in output | Fix formatTraceFlow double-render |
 
 ---
 
 ## Sources
 
-- `/workspace/src/mcp/index.ts` — all 6 MCP tool handlers, current output shapes (HIGH confidence — direct codebase read)
-- `/workspace/src/lib/format.ts` — existing `formatTokenSavings` helper (HIGH confidence — direct codebase read)
-- `/workspace/src/workflows/traceFlow.ts` — `TraceFlowResult` type with `hops[]` structure (HIGH confidence — direct codebase read)
-- `/workspace/src/workflows/explainCodebase.ts` — `ContextResult` type, existing content assembly (HIGH confidence — direct codebase read)
-- `/workspace/src/lib/types.ts` — `RetrievedChunk`, `ContextMetadata`, `ContextResult` type definitions (HIGH confidence — direct codebase read)
-- [ATLAS MCP Server Response Formatting — DeepWiki](https://deepwiki.com/cyanheads/atlas-mcp-server/5.6-response-formatting) — `ResponseFormatter<T>` interface pattern, `createToolResponse` wrapper, dual JSON/text format support (MEDIUM confidence — third-party analysis)
-- [MCP Suggested Response Format Discussion #315 — GitHub](https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/315) — proposal for `structuredContent` field; not finalised; backward-compat text content still primary (MEDIUM confidence — official spec discussion)
-- [probe code search tool — GitHub](https://github.com/probelabs/probe) — ranked output with file paths, scores, AST-aware complete blocks; multiple format options (markdown default, JSON, XML) (MEDIUM confidence — project README)
-- [MCP Response Formatting Guide — BytePlus](https://www.byteplus.com/en/topic/541423) — avoids narrative/explanatory text, consistent lowercase field names, structured extractable fields (LOW confidence — third-party guide)
-- [Top CLI UX Patterns — Medium](https://medium.com/@kaushalsinh73/top-8-cli-ux-patterns-users-will-brag-about-4427adb548b7) — structured output, smart errors, honest progress as key CLI UX patterns (LOW confidence — opinion piece, consistent with observed patterns)
+- `/workspace/.planning/debug/claude-debugging-itself-v2.md` — 5 test sessions documenting actual failures, wrong tool calls, wrong seeds, inflated savings claims, and output noise (HIGH confidence — direct test results)
+- `/workspace/src/services/retriever.ts` — `searchChunks`, `computeKeywordBoost`, `extractQueryTokens`, existing 10% blend weight (HIGH confidence — direct codebase read)
+- `/workspace/src/services/compression.ts` — `compressChunk`, rules 1-4, 0.85 threshold (HIGH confidence — direct codebase read)
+- `/workspace/src/workflows/buildContext.ts` — savings baseline calculation, `filesWithAnyCompressedChunk` exclusion logic (HIGH confidence — direct codebase read)
+- `/workspace/src/workflows/traceFlow.ts` — `runTraceFlow`, empty hops path, `localTasksPerformed` (HIGH confidence — direct codebase read)
+- `/workspace/src/services/flowTracer.ts` — `traceFlow`, `resolveSymbolToChunkId`, BFS implementation (HIGH confidence — direct codebase read)
+- `/workspace/src/mcp/index.ts` — tool descriptions, `buildSearchResponse` savings estimate, tool registration (HIGH confidence — direct codebase read)
+- [Optimizing RAG with Hybrid Search & Reranking — Superlinked VectorHub](https://superlinked.com/vectorhub/articles/optimizing-rag-with-hybrid-search-reranking) — BM25 + dense + rerank hitting 87% recall; 40% keyword weight as starting point for hybrid blends (MEDIUM confidence — industry research)
+- [Advanced RAG: Hybrid Search and Re-ranking — dasroot.net](https://dasroot.net/posts/2025/12/advanced-rag-techniques-hybrid-search/) — standard hybrid weighting patterns, reranking cost tradeoffs (MEDIUM confidence — technical blog, consistent with industry pattern)
+- [RAG Evaluation — Meilisearch](https://www.meilisearch.com/blog/rag-evaluation) — honest metrics as "the difference between a system that only looks impressive in demos and one that consistently delivers value" (MEDIUM confidence — vendor blog, reinforces honest-metrics finding)
 
 ---
 
-*Feature research for: brain-cache v2.1 Presentation Magic milestone*
+*Feature research for: brain-cache v2.2 Retrieval Quality milestone*
 *Researched: 2026-04-03*

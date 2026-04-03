@@ -1,171 +1,177 @@
 # Project Research Summary
 
-**Project:** brain-cache v2.1 Presentation Magic
-**Domain:** MCP Tool Output Presentation Layer — unified formatting for 6 code intelligence tools
+**Project:** brain-cache v2.2 Retrieval Quality
+**Domain:** RAG retrieval quality improvements — scoring, noise filtering, trace accuracy, and honest metrics
 **Researched:** 2026-04-03
 **Confidence:** HIGH
 
 ## Executive Summary
 
-brain-cache v2.1 is a narrow, well-scoped milestone: replace the raw `JSON.stringify()` output of 6 existing MCP tools with a unified, markdown-formatted presentation layer. The codebase is already fully functional — retrieval, indexing, and workflow logic are shipped. The only gap is that each tool returns output in a different shape (some JSON objects, one JSON array, one partial markdown string), making Claude's experience of the tool results inconsistent and harder to reason from. The recommended approach is a pure-function formatter layer in `src/lib/format.ts` with one named, type-safe formatter per tool, all called from the existing handlers in `src/mcp/index.ts`. One new npm dependency (`dedent` 1.7.2) covers template literal indentation; everything else is string construction in TypeScript.
+brain-cache v2.2 is a targeted accuracy milestone, not a feature expansion. All four research areas converge on a single diagnosis: the retrieval pipeline produces correct results in the average case but fails predictably in well-understood edge cases that directly erode user trust. The fixes are individually small (constants, optional parameters, guard clauses, text edits) but they interact in specific ways that require careful sequencing — changing the keyword boost weight without also carrying the blended score into compression creates a new class of budget exhaustion failures. The research confirms that no new dependencies are required: every improvement is implementable with pure TypeScript on top of the existing LanceDB/Ollama/Commander stack.
 
-The most important constraint to internalize: MCP tool text content is consumed by Claude, not displayed in a terminal. This means ANSI escape codes, box-drawing characters, and padded column alignment (`padEnd`) are all harmful — they consume tokens with zero semantic value. Real-world measurement (GitHub issue #15718) confirmed ANSI decoration can inflate token count by 50-80%. The correct formatting target is LLM-readable markdown: semantic headers, code fences for code snippets, plain `label: value` pairs for metadata, and summary-first structure. The existing `formatTokenSavings()` function uses `padEnd(27)` column alignment and must be redesigned before inclusion in the unified layer.
+The recommended approach is to ship six targeted fixes in four sequenced phases, ordered by dependency depth and risk. The isolated single-file fixes (trace deduplication, entry point resolution) ship first as the lowest-risk group. Retrieval scoring changes (config file penalty) follow independently. The cross-cutting changes (query-aware compression + honest savings computation) ship together in a single phase to avoid double-editing the same files. Documentation and routing description updates close the milestone, written last to reflect the behavior actually delivered rather than the behavior intended.
 
-The key risk is breaking Claude's existing learned behavior from tool outputs. `search_codebase`, `trace_flow`, and `doctor` currently return parseable JSON; if reformatting removes or renames fields Claude depends on (like `filePath`), downstream file reads and routing decisions will silently fail. The mitigation is to audit the output contract per tool before writing any formatter, define what fields Claude extracts, and preserve those values in the new format as clearly-labeled text values. Zero-result edge cases must be handled explicitly — a bare single-sentence response, never a structured empty frame.
+The key risk is well-documented: increasing `KEYWORD_BOOST_WEIGHT` to fix one failing test while ignoring the others will promote build tool config files above application code in the general case. PITFALLS.md is explicit that the weight must be validated against all five test queries from the debug session simultaneously. The pitfalls research also identifies a correct-looking but wrong fix for the compression bypass — name-match protection should raise the similarity score used in the existing threshold check, not add a new bypass code path. These two constraints are the critical guardrails for Phase 22-C.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The base stack (Node.js 22, TypeScript 5.x, MCP SDK, Ollama, LanceDB, pino, zod v4) is locked and unchanged. The only new dependency is `dedent` 1.7.2 — a tagged template literal utility that strips indentation from multi-line strings, enabling clean source code for the new formatter functions without fighting TypeScript indentation. It has dual ESM/CJS exports, TypeScript declarations included, and was updated March 2026. No other npm dependencies are needed: no markdown parsers, no template engines, no color libraries.
+The base stack is unchanged and validated. All v2.2 improvements are implementable with the already-installed packages: `@lancedb/lancedb` 0.27.1 (vector storage + SQL metadata filtering), `ollama` 0.6.3 (local embeddings), and TypeScript 5.x (type-safe retrieval logic). No new npm dependencies are needed for any of the six improvements in scope.
 
-**Core technologies for v2.1:**
-- `dedent` 1.7.2: Tagged template literal dedenting — the only new runtime dependency
-- `src/lib/format.ts` (extension): Home for all 5 new pure formatter functions plus redesigned `formatTokenSavings`
-- `src/mcp/index.ts` (modification): Wire each of 6 tool handlers to call its formatter instead of `JSON.stringify`
-- Existing `vitest` + `tsx`: Covers testing and dev execution of the new formatter module with no changes
+The one technology decision deferred for v2.2 is LanceDB's native FTS (full-text search) index. While the API exists in 0.27.1 and a known bug workaround is documented (GitHub issue #1557), adding FTS would force all users to re-index their repositories. The existing keyword boost at an increased weight addresses the same precision gap with zero migration cost. FTS is the correct path for a v2.3 hybrid retrieval milestone if post-v2.2 testing shows the boost approach remains insufficient.
 
-**What not to add:** ANSI color libraries (picocolors, chalk, kleur), markdown parsers (marked, remark), template engines (Handlebars, Mustache), or terminal UI frameworks (ink, blessed). All are inappropriate for MCP stdio output.
+**Core technologies (unchanged):**
+- `@lancedb/lancedb` 0.27.1: vector storage + SQL metadata filtering — embedded, disk-backed, no separate server required
+- `ollama` 0.6.3: local embeddings — official JS library, connection pooling included
+- TypeScript 5.x: type-safe retrieval logic — all improvements are pure TS layered on existing services
 
 ### Expected Features
 
-The v2.1 feature set is driven entirely by the existing tool surface — 6 tools, each needing a formatter that produces consistent, scannable output suited to LLM consumption.
+All v2.2 improvements are P1 — each is tied to a documented test session failure with an identified root cause. There are no "nice to have" items in the v2.2 core scope.
 
-**Must have (v2.1 core — P1):**
-- `formatToolResponse` shared function: foundation; all tool-specific formatters compose with it
-- Consistent summary line at the top of every tool response — summary-first is the universal pattern
-- `search_codebase` ranked text renderer: numbered list with score, file path, line, name, type
-- `trace_flow` hop-by-hop renderer: numbered hop sequence with file, line, calls-found per hop
-- `doctor` health table renderer: fixed-width status block, one service per row
-- `index_repo` summary renderer: single-line completion summary with file and chunk counts
-- Consistent metadata footer for retrieval tools: token savings present for `build_context` and `explain_codebase` only; not on `search_codebase`, `trace_flow`, `index_repo`, or `doctor`
-- Consistent error envelope: all 6 tools use `Error: [tool] failed\n[message]\nSuggestion: [fix]`
+**Must have (table stakes for v2.2):**
+- Keyword boost weight increase (0.10 to 0.40 as starting point) with score passthrough to compression — fixes Test 1 (buildContext.ts compressed despite query name match)
+- Build tool config file score penalty in search results — fixes Test 3 (vitest.config.ts ranked 3rd for "config values" query)
+- trace_flow exact-match entry point resolution before vector search — fixes Tests 1 and 4 (wrong seed chunk used for BFS)
+- CLAUDE.md routing table with explicit negative examples ("Do NOT use trace_flow for...") — fixes Tests 3 and 4 (wrong tool selection)
+- MCP tool description updates mirroring CLAUDE.md negative routing guidance
+- trace_flow empty-result savings guard (report 0% when hops array is empty) — fixes Test 4 (67% claimed on abandoned trace)
+- trace_flow duplicate callsFound fix — fixes Test 5 (call list rendered twice per hop)
 
-**Should have (after v2.1 core validated):**
-- Pipeline label in footer: `localTasksPerformed` rendered as `embed -> search -> dedup -> compress`
+**Should have (post-v2.2 validation):**
+- search_codebase savings estimate correction (replace `tokensSent * 3` multiplier with real calculation)
+- Infrastructure file filter per-query bypass (pass config files through when query explicitly mentions them by name)
 
-**Defer to v2.2+:**
-- `structuredContent` field alongside text content: only if MCP spec discussion #315 stabilises
-- Per-tool output format configuration: only if scripted MCP consumers emerge as a real use case
-
-**Anti-features to reject:** emoji status indicators (CLAUDE.md constraint; rendering inconsistent in tool panels), JSON as default output (LLMs read text, not parsed JSON), rich markdown tables everywhere (pipe tables render as raw `|---|---|` in MCP tool panels), ANSI color codes, streaming output (MCP stdio buffers complete responses).
+**Defer (v2.3+):**
+- LanceDB FTS hybrid search — adds latency, forces re-index migration; keyword boost at 40% should be sufficient
+- Cross-encoder reranking — second Ollama model per query; explicitly out of scope per PROJECT.md
 
 ### Architecture Approach
 
-The presentation layer is a pure-function extension to `src/lib/format.ts`. Workflows return typed data structures (`RetrievedChunk[]`, `TraceFlowResult`, `ContextResult`) and have no knowledge of output format — this separation is non-negotiable because CLI and MCP share the same workflows. The MCP handlers in `src/mcp/index.ts` are the only place that knows which tool is being called; they call the appropriate formatter and wrap the string in `{ type: "text", text }`. No other files change: not workflows, not services, not cli/, not lib/types.ts.
+The architecture is a layered MCP server: transport (`mcp/index.ts`) → workflow (`src/workflows/`) → service (`src/services/`) → data (LanceDB + Ollama). All six v2.2 improvements are in-place modifications to existing functions within this structure — no new modules are needed. The build order follows dependency depth: isolated single-file fixes first, scoring changes next, cross-cutting signature changes last, documentation closes.
 
-**Major components:**
+**Components changed in v2.2:**
+1. `src/services/retriever.ts` — build-config file score penalty in `searchChunks`; export `extractQueryTokens`
+2. `src/services/compression.ts` — optional `queryTokens?` parameter enabling name-match bypass via existing threshold
+3. `src/services/flowTracer.ts` — deduplicate `callsFound` with `[...new Set(...)]`
+4. `src/workflows/buildContext.ts` — pass `queryTokens` to each `compressChunk` call in lookup-mode path
+5. `src/workflows/traceFlow.ts` — pre-step exact-match symbol resolution before vector search; real savings computation replacing hardcoded `reductionPct: 67`
+6. `src/mcp/index.ts` — read savings from `result.metadata` (not hardcoded); sharper tool description strings
+7. `CLAUDE.md` — routing table with explicit negative examples per tool
 
-1. `src/lib/format.ts` (extended) — All presentation logic; pure functions; no imports from services or workflows; input types from `lib/types.ts` only
-2. `src/mcp/index.ts` (modified) — Replace 6 `JSON.stringify()` calls with 6 `format*()` calls; add one import line
-3. `tests/lib/format.test.ts` (new) — Unit tests for each formatter; no MCP SDK needed to test them
-4. `tests/mcp/server.test.ts` (updated) — Adjust assertions from JSON string matching to formatted string matching
+**Unchanged:** `src/workflows/search.ts`, `src/workflows/explainCodebase.ts`, `src/lib/format.ts` (likely), `src/lib/config.ts` (likely)
 
-Each formatter accepts the exact TypeScript return type of its workflow — no `any`, no `unknown`. TypeScript enforces that formatters stay in sync with workflow return types as they evolve.
-
-**Build order:** Phase 1 — write and test all formatter functions in `format.ts` (independently deliverable, behavior-transparent). Phase 2 — wire `mcp/index.ts` to call them (depends on Phase 1, mechanical substitution).
+**Key architectural patterns established:**
+- Optional parameter extension: `compressChunk(chunk, queryTokens?)` maintains backward compatibility with all callers
+- Pre-resolution before vector search: attempt exact SQL name lookup first, fall back to embedding only if no match
+- Savings computation in workflow, not MCP handler: follows the pattern already established by `buildContext.ts` lines 152-199
 
 ### Critical Pitfalls
 
-1. **ANSI codes in MCP text content** — Real-world case: 6k tokens of content + 7k tokens of ANSI decoration = 13k total (50-80% waste). Establish a no-ANSI rule in the formatter foundation and grep for `\x1b[` before any phase is considered done. Use markdown formatting only.
+1. **Keyword boost weight tuning corrupts the dominant signal** — increasing `KEYWORD_BOOST_WEIGHT` to fix one failing test promotes build tool config filenames above application code for generic queries. Validate against all five debug session queries simultaneously before settling on any weight above 0.15. Start at 0.40, adjust down if config noise returns. Never validate against a single case.
 
-2. **Breaking existing output contracts** — `search_codebase` returns `JSON.stringify(chunks)`; Claude uses `filePath` from those chunks to decide what to read. Reformatting to prose without preserving `filePath` as a parseable value silently breaks file reads. Audit what Claude extracts from each tool's output before writing the formatter; snapshot-test existing output shapes.
+2. **Name-match compression bypass exhausts the token budget** — implementing name-match protection as a binary bypass rule ("name matches → skip compression") can cause `buildContext.ts` (800+ tokens) to consume the entire token budget, displacing `compression.ts` and `retriever.ts` that actually answer the question. Correct fix: let keyword boost raise the chunk's similarity score above 0.85 so the existing threshold fires naturally. Do not add a new bypass code path.
 
-3. **Over-formatting for the wrong audience** — Decorative section headers, padded alignment (`padEnd`), and redundant separators consume tokens without adding semantic signal. The existing `formatTokenSavings()` uses `padEnd(27)` — this must be replaced with plain `label: value` pairs before inclusion in the unified layer. Rule: if removing a formatting element loses no information, remove it.
+3. **Build tool file noise filter breaks explicit queries** — a hardcoded filename exclusion list removes `tsup.config.ts` from results for "How does tsup build the project?" Use a score penalty (×0.7 or a subtracted coefficient) with an explicit-mention opt-out, not hard exclusion.
 
-4. **Rigid templates failing at 0 or 1 results** — A zero-result response must be a single clean sentence, not a structured frame with empty sections. Claude interprets a structured empty frame as a partial result. Define the zero/one/many rendering contract per tool before writing each formatter; test all three cases.
+4. **CLAUDE.md and MCP description changes in one commit make regression attribution impossible** — if both surfaces are changed together and routing regresses, there is no way to determine which change caused it. Change MCP descriptions first, verify all five test queries, then update CLAUDE.md.
 
-5. **Formatter diverging from workflow return types** — If formatters accept `any` or `Record<string, unknown>`, TypeScript cannot surface when a new field is added to `TraceFlowResult` or `ContextResult`. Type each formatter to its exact workflow return type; add unit tests that instantiate the full return type — adding a new field will break the test, forcing formatter update.
-
-6. **Token savings metadata on every tool call** — Adding the savings footer to all 6 tools adds ~240 tokens per 6-tool workflow on accounting metadata alone. `search_codebase` does not do context assembly so the "savings" framing is misleading there. Savings footer belongs only on `build_context` and `explain_codebase`; this policy must be decided in the foundation phase.
+5. **trace_flow callsFound duplication root cause must be confirmed before fixing** — adding dedup in `format.ts` hides a potential indexing bug in the edges table or BFS traversal. Log raw `TraceFlowResult.hops[0].callsFound` before any formatter runs. Fix at the layer where duplicates originate.
 
 ## Implications for Roadmap
 
-The milestone naturally splits into two sequential phases with the foundation phase as a hard dependency.
+Based on research, suggested phase structure:
 
-### Phase 1: Formatter Foundation
+### Phase 22-A: Isolated Single-File Fixes
+**Rationale:** Contained to one file each with no callers to update. Lowest risk, independently verifiable. Ship first to establish confidence before touching cross-cutting code.
+**Delivers:** trace_flow correct entry point resolution for verbose queries; deduplicated callsFound output
+**Addresses:** Test 4 wrong seed (verbose entrypoint), Test 5 duplicate call list
+**Avoids:** Do not change `resolveSymbolToChunkId` signature — already exported and correct. Pre-step in `traceFlow.ts` only.
+**Files:** `src/workflows/traceFlow.ts` (entry point resolution), `src/services/flowTracer.ts` (callsFound dedup)
+**Research flag:** Standard patterns — no additional research needed. Direct codebase evidence is high confidence for both fixes.
 
-**Rationale:** All 5 tool-specific formatters share design decisions — ANSI policy, token savings policy, edge case contracts, type-safe interface conventions. These decisions must be locked and implemented before any formatter is written. This phase also redesigns `formatTokenSavings` to eliminate the `padEnd` token waste. The result is testable, isolated formatter functions with no change to MCP behavior yet.
+### Phase 22-B: Retrieval Scoring (Config Noise)
+**Rationale:** Additive change to `retriever.ts` scoring formula. No callers change signature. Independent of compression changes in Phase 22-C. Ships cleanly in isolation.
+**Delivers:** Build tool config files demoted in search results for application-logic queries
+**Addresses:** Test 3 (vitest.config.ts ranked 3rd for "config values")
+**Avoids:** Score penalty, not exclusion list. Pattern-match on filename shape (`*.config.ts`, `*.rc.ts`) not hardcoded filenames. Penalty is `BUILD_CONFIG_PENALTY_WEIGHT = 0.05` subtracted from blend.
+**Files:** `src/services/retriever.ts`
+**Research flag:** Standard patterns — penalty formula specified with exact coefficients in ARCHITECTURE.md. No unknowns.
 
-**Delivers:** Extended `src/lib/format.ts` with 5 new pure formatter functions (`formatSearchResults`, `formatContext`, `formatTraceFlow`, `formatDoctorOutput`, `formatIndexResult`) plus redesigned `formatTokenSavings`; full unit test suite in `tests/lib/format.test.ts` covering 0/1/N result cases for each formatter; no MCP behavior change.
+### Phase 22-C: Compression and Savings (Cross-Cutting)
+**Rationale:** Both improvements touch `traceFlow.ts` and `buildContext.ts`. Shipping them together avoids double-editing. Highest complexity phase: changes `compressChunk` signature (backward-compatible via optional parameter) and extends `TraceFlowResult.metadata`.
+**Delivers:** Identifier-named chunks protected from compression via boosted similarity score; real token savings numbers in trace_flow output (no more hardcoded 67%)
+**Addresses:** Test 1 (buildContext.ts body stripped despite name in query), Test 4 (67% savings on wrong/discarded trace)
+**Avoids:** Do NOT implement name-match as a new bypass rule — carry blended score into `chunk.similarity` so the existing `>= 0.85` threshold fires. `chunk.similarity` for compression must remain the raw cosine distance used for ranking; the blended score is for sort order only (see integration gotcha in PITFALLS.md). Cap reported reduction at 95%.
+**Files:** `src/services/compression.ts`, `src/services/retriever.ts` (export `extractQueryTokens`), `src/workflows/buildContext.ts`, `src/workflows/traceFlow.ts`, `src/mcp/index.ts`, `src/lib/types.ts` (TraceFlowMetadata extension)
+**Research flag:** Needs careful post-implementation verification — run all 5 test queries. Both `buildContext.ts` AND `compression.ts` must appear in context for Test 1's query. Savings must be in 20-70% range. Update test assertions alongside the savings model change (they will assert old values).
 
-**Addresses:** All P1 features from FEATURES.md except the MCP wiring; establishes the shared response envelope, summary line, tool-specific body shapes, error envelope, and metadata footer policy.
-
-**Avoids:** Pitfalls 1 (ANSI), 3 (over-formatting), 4 (rigid templates), 5 (type drift), 6 (savings redundancy) — all caught by formatter unit tests and no-ANSI grep before any handler is touched.
-
-**Research flag:** No additional research needed. Patterns are well-documented via direct codebase inspection, MCP spec, and Anthropic engineering guides. Standard implementation phase.
-
-### Phase 2: MCP Handler Wiring
-
-**Rationale:** Mechanical substitution — replace `JSON.stringify(result)` with `format*(result)` in each of 6 handlers. Can only proceed after Phase 1 because the formatters must exist and be tested before the handlers call them. Low risk because all complex logic is in Phase 1; this phase is one line changed per handler.
-
-**Delivers:** Updated `src/mcp/index.ts` with all 6 handlers calling their formatters; updated `tests/mcp/server.test.ts` with assertions adjusted for formatted output; behavior change now visible to Claude Code.
-
-**Uses:** `dedent` 1.7.2 (for multi-line template literals in formatters), all formatters from Phase 1.
-
-**Implements:** The `mcp/index.ts` → `lib/format.ts` → `lib/types.ts` component boundary defined in ARCHITECTURE.md.
-
-**Avoids:** Pitfall 2 (broken output contract) — snapshot tests in Phase 2 verify field preservation; CLAUDE.md routing guidance updated in the same commit that changes output shapes.
-
-**Research flag:** No additional research needed. Integration pattern is one line per handler; all decision-making is in Phase 1.
+### Phase 22-D: Documentation and Routing Descriptions
+**Rationale:** Documentation changes ship last so descriptions reflect behavior actually delivered by Phases A-C. CLAUDE.md and MCP descriptions tested in sequence to enable regression attribution.
+**Delivers:** Claude selects correct tool for all five documented test queries
+**Addresses:** Tests 3 and 4 tool misselection (trace_flow for code-understanding, search_codebase for "how does X work")
+**Avoids:** Do not use abstract descriptions ("call propagation"). Use concrete query patterns. Lead with what each tool is NOT for. Change MCP descriptions first, test all five queries, then update CLAUDE.md and test again.
+**Files:** `CLAUDE.md`, `src/mcp/index.ts` (description strings only)
+**Research flag:** Low code risk. High behavior risk — replay all five debug session queries explicitly after each surface is updated.
 
 ### Phase Ordering Rationale
 
-- Phase 1 before Phase 2 is a hard dependency: handlers cannot call formatters that do not exist.
-- Within Phase 1, the 5 formatter functions are independent of each other and can be written in any order. The output contract audit (Pitfall 2 mitigation) must be the first task — before any formatter is written.
-- `build_context` and `explain_codebase` are simpler in Phase 1 because their body content is already well-structured; they need only a consistent wrapper added. `search_codebase`, `trace_flow`, and `doctor` are complete rewrites from JSON.
-- The `formatTokenSavings` redesign (eliminating `padEnd`) must happen in Phase 1 before the shared formatter composes it — retrofitting after Phase 2 ships would require re-testing all 4 retrieval tool outputs.
+- **A before B and C:** Isolated fixes have no dependencies. Establishing a working trace pipeline before changing scoring behavior makes failures easier to isolate.
+- **B before C:** Retrieval scoring is independent of compression. If Phase C interactions are unexpected, Phase B's verified baseline provides a clean isolation point.
+- **C grouped (not split):** `compressChunk` signature change and `TraceFlowResult.metadata` extension both touch `traceFlow.ts` and `buildContext.ts`. Splitting forces double-editing and risks inconsistent intermediate states.
+- **D last:** Documentation describes delivered behavior, not intended behavior. CLAUDE.md routing must describe what the code actually does after A-C.
 
 ### Research Flags
 
-Phases with standard patterns (no additional research needed):
-- **Phase 1:** All formatter input types confirmed by direct codebase inspection. MCP spec and Anthropic engineering guides fully define the output constraints. No unknowns.
-- **Phase 2:** Handler wiring is mechanical. MCP SDK usage pattern is unchanged.
+Phases needing attention during execution:
+- **Phase 22-C:** `KEYWORD_BOOST_WEIGHT` change must be validated against all five debug session test queries simultaneously. The distinction between "blended score for sort order" vs. "raw cosine similarity for compression threshold" is a critical invariant — `chunk.similarity` must remain the raw cosine distance.
+- **Phase 22-D:** Two separate verification steps — test after MCP description change, test again after CLAUDE.md change. Do not combine.
 
-No phase requires a `/gsd:research-phase` call during planning. All research is complete.
+Phases with standard, well-documented patterns (skip research-phase):
+- **Phase 22-A:** Both fixes are one-liners with confirmed root causes from direct code inspection.
+- **Phase 22-B:** Score penalty formula specified with exact coefficients in ARCHITECTURE.md.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Single new dependency (`dedent`) verified against npm; all other decisions based on direct codebase inspection and confirmed MCP specification |
-| Features | HIGH | All 6 tool handlers inspected directly; current output shapes confirmed; feature scope is additive with no external API surface |
-| Architecture | HIGH | All workflow return types confirmed by direct file reads; formatter boundary and component responsibilities are unambiguous; build order is clear |
-| Pitfalls | HIGH | Primary pitfalls backed by Anthropic engineering documentation, MCP spec, and real-world GitHub issue with measured token counts; secondary pitfalls confirmed by multiple independent sources |
+| Stack | HIGH | All techniques confirmed against existing codebase; zero new dependencies; LanceDB 0.27.1 API verified |
+| Features | HIGH | Each feature tied to a documented test failure with exact query, expected behavior, and root cause identified |
+| Architecture | HIGH | All findings from direct source inspection of the actual files; no inference |
+| Pitfalls | HIGH | Pitfalls derived from observed failures in live test sessions and IR literature; recovery strategies specified per pitfall |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **`formatTokenSavings` redesign scope:** The exact replacement format for `padEnd(27)` alignment — `label: value` pairs on separate lines vs. inline prose — should be decided at the start of Phase 1 and applied consistently across all 4 retrieval tool formatters. Low risk; pure string formatting decision with no external dependencies.
-
-- **MCP `structuredContent` field:** The 2025-06-18 MCP spec introduces a `structuredContent` field for separating display content from LLM context. Claude Code client support is not yet confirmed stable. Research recommends deferring to v2.2+. Monitor MCP spec discussion #315 — if this stabilises, it is a low-effort addition but should not be planned for now.
-
-- **CLAUDE.md routing guidance sync:** After Phase 2 ships and output shapes change, the CLAUDE.md tool routing table must be audited for accuracy. Stale descriptions cause routing regressions. Flag this as a post-Phase-2 task in the same commit that wires the handlers.
+- **Keyword boost weight target (0.40 vs. lower):** FEATURES.md recommends 0.40 as the "hybrid search standard starting point." PITFALLS.md warns against exceeding 0.15-0.20 without regression testing. These are not contradictory — start at 0.40, validate against all five test queries, and adjust down if config file noise returns. Do not treat 0.40 as a fixed commitment.
+- **Token savings baseline model consistency:** Switching to per-file partial savings (`fullFileTokens - tokensActuallySent`) will break existing test assertions. Phase 22-C must update test assertions alongside the savings model change — do not leave tests asserting old baseline values.
+- **trace_flow entry point: code vs. description fix scope:** PITFALLS.md recommends fixing the `entrypoint` schema description first (deterring verbose usage) and adding code extraction logic only if the description fix alone is insufficient. ARCHITECTURE.md describes a pre-step code fix. Implement both: schema description deters verbose usage; symbol extraction code handles cases that still slip through.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- `/workspace/src/mcp/index.ts` — Direct inspection of all 6 MCP tool handlers; current output patterns confirmed
-- `/workspace/src/lib/format.ts` — Direct inspection of existing `formatTokenSavings` helper with `padEnd(27)` usage
-- `/workspace/src/lib/types.ts` — `RetrievedChunk`, `ContextResult`, `TraceFlowResult` type definitions confirmed
-- [MCP Specification 2025-06-18 — Tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) — `content[].type: "text"` confirmed as correct unstructured response format
-- [Anthropic Engineering — Writing Effective Tools for AI Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) — "return only high signal information"; "avoid formatting noise that confuses agents"
-- [GitHub claude-code#15718](https://github.com/anthropics/claude-code/issues/15718) — ANSI token waste measured: 6k content + 7k ANSI = 13k total
-- [dedent npm](https://www.npmjs.com/package/dedent) — v1.7.2, dual ESM/CJS, TypeScript declarations, updated March 2026
+- `/workspace/src/services/retriever.ts` — `searchChunks`, `computeKeywordBoost`, `extractQueryTokens`, `KEYWORD_BOOST_WEIGHT = 0.10`
+- `/workspace/src/services/compression.ts` — `compressChunk`, rules 1-4, `HIGH_RELEVANCE_SIMILARITY_THRESHOLD = 0.85`
+- `/workspace/src/workflows/buildContext.ts` — savings baseline at lines 152-199, `filesWithAnyCompressedChunk` exclusion logic
+- `/workspace/src/workflows/traceFlow.ts` — entry point embedding, BFS delegation, hardcoded `reductionPct: 67`
+- `/workspace/src/services/flowTracer.ts` — `traceFlow` BFS loop, `callsFound` construction, `resolveSymbolToChunkId`
+- `/workspace/src/mcp/index.ts` — 6 tool handlers, hardcoded savings estimate, tool description strings
+- `/workspace/.planning/debug/claude-debugging-itself-v2.md` — 5 live test sessions, exact failure modes, tool selection errors
+- `/workspace/.planning/PROJECT.md` — v2.2 milestone target features, out-of-scope constraints
 
 ### Secondary (MEDIUM confidence)
 
-- [ATLAS MCP Server — DeepWiki](https://deepwiki.com/cyanheads/atlas-mcp-server/5.6-response-formatting) — `ResponseFormatter<T>` interface pattern as comparable reference
-- [probe code search tool — GitHub](https://github.com/probelabs/probe) — ranked output with file paths, scores, multiple format options
-- [Anthropic Engineering — Effective Context Engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) — progressive disclosure and information density principles
-- [Trail of Bits — ANSI terminal codes in MCP](https://blog.trailofbits.com/2025/04/29/deceiving-users-with-ansi-terminal-codes-in-mcp/) — ANSI in MCP output confirmed as tokenization problem and security surface
+- [LanceDB Full-Text Search docs](https://docs.lancedb.com/search/full-text-search) — FTS API confirmed; deferred to v2.3+
+- [LanceDB Hybrid Search docs](https://docs.lancedb.com/search/hybrid-search) — `RRFReranker` confirmed as built-in no-model reranker
+- [Optimizing RAG with Hybrid Search — Superlinked VectorHub](https://superlinked.com/vectorhub/articles/optimizing-rag-with-hybrid-search-reranking) — 40% keyword weight as hybrid search starting point; BM25 + dense + rerank at 87% recall
+- [Advanced RAG: RRF — glaforge.dev](https://glaforge.dev/posts/2026/02/10/advanced-rag-understanding-reciprocal-rank-fusion-in-hybrid-search/) — RRF formula, k=60 constant verified
 
 ### Tertiary (LOW confidence)
 
-- [MCP spec discussion #315](https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/315) — proposal for `structuredContent`; not finalised; monitor only
-- [BytePlus MCP Response Formatting Guide](https://www.byteplus.com/en/topic/541423) — consistent field names and structured output patterns; third-party guide
+- [LanceDB FTS issue #1557](https://github.com/lancedb/lancedb/issues/1557) — `Index.fts is not a function` bug; open as of Nov 2024; used to justify deferring FTS to v2.3+
 
 ---
 *Research completed: 2026-04-03*

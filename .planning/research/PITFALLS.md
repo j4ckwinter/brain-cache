@@ -1,160 +1,175 @@
 # Pitfalls Research
 
-**Domain:** Unified Presentation Layer for MCP Tools (brain-cache v2.1)
+**Domain:** Retrieval Quality Improvements — brain-cache v2.2
 **Researched:** 2026-04-03
-**Confidence:** HIGH (primary pitfalls confirmed via Anthropic engineering docs, MCP specification, GitHub issues, and official guidance; secondary pitfalls from multiple independent sources)
+**Confidence:** HIGH (primary pitfalls derived from observed test failures in the debug session, actual source code, and established IR/ranking literature; all critical pitfalls confirmed against the real implementation)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Formatting Codes Are Tokens — ANSI and Unicode Decoration Wastes Context Budget
+### Pitfall 1: Keyword Boost Weight Tuning Corrupts the Dominant Signal
 
 **What goes wrong:**
-ANSI escape sequences (`\x1b[38;2;255;136;0m`, `\x1b[0m`, etc.) and Unicode box-drawing characters are tokenized character-by-character as regular text. A real-world case (GitHub issue #15718 in the Claude Code repo) showed a tool result where actual content was ~6k tokens but ANSI decoration added another ~7k tokens — 50–80% of the total context consumed by visual chrome that provides zero semantic value to the LLM. For brain-cache, which runs 6 tools in multi-step workflows, this compounds: 7 chained tool calls with 2x token inflation could easily consume 50k+ tokens on decoration alone.
+The hybrid scoring formula `similarity * (1 - WEIGHT) + keywordBoost * WEIGHT` is only safe as long as WEIGHT stays below the threshold where a purely keyword-matched result can outrank a highly vector-relevant result. The current implementation uses 0.10 (10%). If the weight is increased to "fix" missed filename matches, a chunk from `vitest.config.ts` with 3 keyword matches can outscore a chunk from `compression.ts` with similarity 0.82. The vector ranking ceases to be the primary signal and keyword matching noise takes over.
 
 **Why it happens:**
-Developers design the presentation layer for human readability in a terminal. A colorized, box-bordered output looks polished in screenshots and demos. The mistake is treating the terminal display as the primary consumer. The actual primary consumer is Claude, which sees every escape sequence as opaque token noise.
+During testing you see a case where the correct file (e.g. `buildContext.ts`) is ranked 3rd despite its name appearing verbatim in the query. The natural impulse is to increase KEYWORD_BOOST_WEIGHT from 0.10 to 0.25 or 0.30 to fix this. That fixes the specific failing case but introduces a regression in the general case: queries that do NOT mention a specific filename start returning wrong results because short common tokens in config filenames match many queries.
 
 **How to avoid:**
-- Never include ANSI escape sequences in MCP tool `text` content. The MCP server sends over stdio and Claude receives the raw bytes.
-- Use markdown formatting (`**bold**`, `##` headers, `` `code` ``) instead of ANSI color codes. Claude is trained on markdown and processes it semantically, not as decoration.
-- If you want a polished terminal experience for CLI commands, keep the ANSI formatting in the CLI rendering layer only — not in the MCP tool handler.
-- The MCP specification's `structuredContent` field (introduced in the 2025-06-18 spec) can carry display-only content separately from LLM context content, but this separation is not yet reliably implemented in all clients. Do not depend on it in v2.1.
-- Run a token count before and after any formatting change. `@anthropic-ai/tokenizer` is already in the stack.
+- Do not increase KEYWORD_BOOST_WEIGHT above 0.15 without running a regression suite against all 5 test queries from the debug session. The 0.10 weight was set conservatively for exactly this reason.
+- The correct fix for "buildContext.ts ranked 3rd despite exact name in query" is to lower `HIGH_RELEVANCE_SIMILARITY_THRESHOLD` in compression (currently 0.85) rather than increasing the boost weight. A file that appears verbatim in the query but scores 0.82 similarity is a retrieval quality issue, not a reranking issue.
+- Alternatively, apply the keyword boost as a tiebreaker only (post-filter), not as a blended score. This preserves vector ranking entirely and only reorders items with similar similarity scores (within ±0.05 of each other).
+- Never apply the boost to chunks from files in a hardcoded exclusion list (build tool files, test config files). These should be demoted, not just not-boosted.
 
 **Warning signs:**
-- Tool output contains `\x1b[` in the text content
-- Token count for a tool result is more than 1.3x the semantic content estimate
-- Claude responses reference "formatting codes" or treat escape sequences as literal text
+- `vitest.config.ts` or `tsup.config.ts` appears in top-3 results for a query about application code
+- A query containing a function name exactly returns that function 4th or lower after weight increase
+- Regression in test 3 (`"What config values does brain-cache use?"`) which already returned vitest.config.ts at rank 5
 
 **Phase to address:**
-Formatting foundation phase. Establish a no-ANSI rule in the shared presenter and enforce it with a lint check or test assertion before any tool-specific formatting is added.
+Hybrid scoring phase. Establish the invariant before implementation: the top-ranked vector result must remain top-ranked unless the keyword boost is above 0.20 on the boosted candidate AND below 0.50 similarity on the vector result.
 
 ---
 
-### Pitfall 2: Changing Existing Tool Output Shapes Breaks Claude's Learned Routing Behavior
+### Pitfall 2: Query-Term Name Matching Protects Against Compression When It Shouldn't
 
 **What goes wrong:**
-Claude Code sessions build up implicit knowledge of tool outputs through conversation history. If `search_codebase` currently returns raw JSON (`[{"filePath": "...", "score": 0.8, ...}]`) and v2.1 wraps it in a prose header followed by a structured section, Claude's pattern-matching for downstream references to search results will fail. Field names embedded in prose summaries are harder to extract than field names in JSON. More critically, if the existing tests or CLAUDE.md routing guidance reference specific output fields by name, those references break silently — the tool still returns `isError: false` but the content contract has changed.
+The proposed fix for "buildContext.ts body-stripped despite query containing 'buildContext'" is to protect files whose name matches a query term from compression. This interacts dangerously with the token budget in `assembleContext`. If `buildContext.ts` is large (220+ lines, ~800+ tokens) and is never compressed due to name match protection, the budget fills up and other relevant files (e.g. `compression.ts`, `retriever.ts`) are dropped entirely. The query "how does buildContext assemble chunks" would then return only `buildContext.ts` intact, missing the compression and retrieval services that answer the actual question.
 
 **Why it happens:**
-Presentation changes feel cosmetic. "I'm just adding a header" seems safe. But for an LLM consumer, structure IS the contract. Switching from `JSON.stringify(chunks)` to a formatted string means Claude can no longer programmatically access `result.chunks[0].filePath` — it must now parse prose to extract that value, which introduces fragility.
-
-**Why it happens (specifically in brain-cache):**
-Looking at the current MCP handlers: `search_codebase` returns `JSON.stringify(chunks)`, `doctor` returns `JSON.stringify(health)`, `trace_flow` returns `JSON.stringify(result)`. These are parseable structures. `build_context` returns `JSON.stringify({...result, tokenSavings: formatTokenSavings(...)})` — already mixed (structured data plus formatted string appended). `explain_codebase` is already formatted prose (`# Codebase Architecture Overview\n\n${result.content}\n\n---\n${tokenSavings}`). The inconsistency is already there; unifying without breaking means auditing what each consumer actually does with the output.
+Name-match-based compression bypass is implemented as a binary gate — if the name matches, the chunk passes through uncompressed. But compression bypass already exists for high-relevance chunks (`similarity >= 0.85`). Adding a second bypass path (name match) creates two independent exemption mechanisms that can both fire simultaneously for large files.
 
 **How to avoid:**
-- Audit what Claude actually does with each tool's output before changing its shape. For `search_codebase`, Claude uses `filePath` to decide which files to read — if that becomes a prose description of a file path rather than a JSON key, file reads will fail.
-- Preserve all existing JSON-parseable fields. Adding a formatted header on top of the JSON is safer than replacing JSON with formatted text.
-- Never rename fields in tool output. `filePath` → `file_path` is a breaking change.
-- Update CLAUDE.md routing guidance in the same commit that changes the output format, so they stay in sync.
-- Add a snapshot test for each tool's output shape and run it against the actual workflow before shipping.
+- The compression bypass for name-matching chunks should only apply within the existing budget. If a name-matched chunk would exhaust more than 60% of the token budget alone, apply structural compression anyway (preserve signature + JSDoc, strip body).
+- Prefer fixing the upstream cause: if the query contains "buildContext" and the vector search returns `buildContext.ts` with similarity 0.79 instead of 0.85+, the real problem is that the embedding isn't strong enough on filename tokens. Keyword boost (see Pitfall 1) should push it into the HIGH_RELEVANCE threshold naturally, making compression bypass happen through the existing high-relevance path — not a new code path.
+- Do not implement a separate "name match = no compression" rule. Instead, ensure the keyword boost raises the `similarity` value on name-matching chunks so the existing `similarity >= HIGH_RELEVANCE_SIMILARITY_THRESHOLD` rule fires.
 
 **Warning signs:**
-- Claude fails to extract a file path from a search result after the formatting change
-- Claude Code tries to `JSON.parse` the text content of a formatted result
-- Claude response says "I couldn't determine which file to read" when the file was in the search results
+- Token budget report shows one file consuming 70%+ of the budget
+- `compression.ts` and `retriever.ts` are absent from the context for a query about `buildContext` after name-match protection is added
+- Token savings percentage drops to near zero (no files were compressed, budget was consumed by a single uncompressed file)
 
 **Phase to address:**
-First phase of the milestone — define the output contract for each tool explicitly before writing any formatter, so the contract can be preserved throughout.
+Query-aware relevance boosting phase. Verify with a test: after the fix, the query "how does buildContext assemble and compress chunks" must return BOTH `buildContext.ts` AND `compression.ts` in the context.
 
 ---
 
-### Pitfall 3: Over-Formatting for the Wrong Audience — Visual Chrome That Confuses Rather Than Helps LLM Reasoning
+### Pitfall 3: Build Tool File Noise — Suppression That Breaks Legitimate Queries
 
 **What goes wrong:**
-Presentation layers designed to make outputs "readable" for humans often introduce structural noise that interferes with LLM reasoning. Common examples: decorative ASCII separators (`---`, `===`, `***`), repeated section labels that don't carry new information (`### Results`, `### Summary`, `### Details` as boilerplate), excessive nesting (headers inside headers inside boxes), and padded column alignment using spaces (`label:                    value`). The Anthropic engineering guide explicitly warns: tools should "return only high signal information" and avoid "formatting noise that confuses agents."
+`vitest.config.ts` and `tsup.config.ts` ranking in the top-5 results for generic queries ("config values", "configuration") is a real noise problem. The temptation is to add a hardcoded exclusion list for build tool file patterns (`vitest.config.*`, `tsup.config.*`, `*.config.ts`, etc.) in the retriever. This breaks legitimate queries: "How does tsup build the project?" or "What does the tsup config do?" must return `tsup.config.ts` as the top result, but an exclusion list would suppress it.
 
 **Why it happens:**
-The developer runs the tool in a terminal, sees the output, and applies human visual design intuitions — "I need to visually separate these sections." An LLM doesn't scan visually; it processes tokens sequentially. Visual structure from whitespace and lines consumes tokens without providing semantic signal.
+Build tool filenames use the word "config" which is also a domain term in the project (`config.ts`, `configLoader.ts`, `UserConfig`). The embedding model can't distinguish "tsup configuration" from "application configuration" without additional context. A naive exclusion list conflates "suppress when noisy" with "suppress always."
 
 **How to avoid:**
-- Test every formatted output by reading it as a sequence of tokens, not a visual layout. Ask: does this token sequence help Claude locate the answer faster, or does it just look nice?
-- Use semantic structure: a `## Hops (3 total)` header signals semantic content. A `--- --- ---` separator between hops signals nothing; delete it.
-- Column-aligned text using `padEnd()` (as `formatTokenSavings` currently does) looks good in a monospace terminal but becomes meaningless token padding in LLM context. Replace with `label: value` on separate lines or a clean prose summary.
-- Reserve markdown formatting for semantic distinctions: code blocks for code snippets, bold for the most important item in a section, headers for genuine section boundaries. Do not use formatting purely for visual spacing.
-- The rule: if removing a formatting element doesn't lose any information, remove it.
+- Apply a distance-based penalty (not exclusion) to known build tool file patterns. Multiply their computed score by 0.7 before ranking. This makes them rank lower than application code of equal relevance without removing them from the result set entirely.
+- The penalty must be opt-out: if the query contains the filename explicitly (e.g. query contains "tsup" or "vitest"), skip the penalty for that file.
+- Test the penalty against: (a) query "What config values does brain-cache use?" — `vitest.config.ts` must not appear in top-3; (b) query "How does tsup build the project?" — `tsup.config.ts` must appear in top-1.
+- Do not use distance thresholds to solve this. Raising `distanceThreshold` from 0.4 to 0.3 for explore mode would suppress both noise AND relevant edge cases.
 
 **Warning signs:**
-- Token count increases by more than 15% after adding a "presentation" header to existing JSON output
-- The formatted output has more decoration lines than data lines
-- Claude's response uses phrases like "according to the formatted output above" rather than directly referencing the content — signal that it's treating the format as opaque
+- Query "How does tsup work?" returns no results after adding exclusions
+- `vitest.config.ts` exclusion causes test-related queries ("What's in compression.test.ts") to skip the test file
+- The exclusion list grows beyond 3-4 entries, becoming a maintenance burden
 
 **Phase to address:**
-Foundation phase — establish the formatting principles document before any tool-specific formatter is written. Define what counts as "semantic structure" vs. "visual chrome" and apply consistently.
+Search noise reduction phase. Required test: before and after the penalty, verify the config-noise query AND a query explicitly mentioning the tool filename.
 
 ---
 
-### Pitfall 4: Rigid Templates That Produce Redundant or Misleading Output for Variable-Length Results
+### Pitfall 4: trace_flow Entry Point Matching Fails on Verbose Queries — Wrong Fix
 
 **What goes wrong:**
-A templated section like `## Top Results (10 results)` works when there are 10 results. When the query returns 1 result, it becomes `## Top Results (1 results)` — not broken, but awkward. When it returns 0 results, `## Top Results (0 results)\n\n_No results found._` forces Claude to process a section header, a count, and a prose disclaimer for what should be a single signal: no match. More dangerously, rigid templates applied to `trace_flow` output when the trace finds no hops will emit a full structured frame with empty sections, which Claude may interpret as a partial result rather than a clean negative signal.
+Test 4 (`"How does the indexing pipeline chunk files? Walk me through the logic in chunkFile"`) caused `trace_flow` to return results from `retriever.ts` instead of `chunker.ts`. The fix is straightforward: the trace seed search uses a verbose multi-clause query and the embedding centers on the dominant terms ("indexing pipeline") rather than the specific entry point ("chunkFile"). The wrong fix is to extract the entry point from the query with a heuristic (e.g. grab the last noun phrase). This produces a new failure: verbose queries like "how does the compression service compress a chunk" would extract "chunk" as the entry point and land on the wrong seed.
 
 **Why it happens:**
-Templates are written for the happy path. The common case (10 results, 5 hops) shapes the template. Edge cases (0, 1, partial) are handled as afterthoughts by inserting `_No results found._` inside an otherwise structured section.
+The `trace_flow` MCP tool's `entrypoint` parameter is semantically a function name, not a question. The user (or Claude) passes a full question as the entrypoint when `trace_flow` is invoked from a workflow that does intent classification. Test 4 failed because Claude called `trace_flow(entrypoint: "chunkFile function in the indexing pipeline", maxHops: 5)` — a verbose phrase. Test 5 (same underlying question) succeeded because Claude called `trace_flow(entrypoint: "chunkFile", maxHops: 5)` — a short, precise symbol name.
 
 **How to avoid:**
-- For zero-result cases, return a single clear statement without section scaffolding: `No matching symbols found for "${query}" in the indexed codebase.` Do not wrap it in a section header.
-- For single-result cases, suppress count suffixes and plural/singular handling — just render the result.
-- Build edge-case rendering paths into the presenter alongside the normal path, not as fallbacks inside template strings.
-- Test every template against input sets of 0, 1, N, and N+1 (above any hard limit) before shipping.
+- The fix is in the CLAUDE.md tool description and MCP tool `inputSchema` description for `entrypoint`, not in the code. The `entrypoint` parameter description must say: "The function or symbol name to trace FROM. Use a short, precise name (e.g. 'chunkFile', 'runBuildContext') — NOT a question or full sentence. Verbose queries cause the seed search to land on the wrong chunk."
+- Adding a simple pre-processing step that extracts the last token before common suffixes ("function", "in the", "logic") would improve robustness without overfitting. But this is a secondary improvement — the primary fix is the schema description.
+- Do not add fuzzy query rewriting logic inside `runTraceFlow`. The workflow is already correct — the problem is upstream (Claude's choice of what to pass as the entrypoint).
 
 **Warning signs:**
-- Templates contain `${count} result${count !== 1 ? 's' : ''}` inline string logic — signals the template wasn't designed for edge cases
-- Zero-result output has more tokens than a single-result output
-- Claude responds with uncertainty ("it seems there may be results...") when the result was actually empty
+- Test 4 retest with the same verbose entrypoint query still fails
+- `trace_flow` returns results from a file with no semantic relationship to the mentioned function name
+- Claude uses a 10+ word phrase as the `entrypoint` argument after the schema description is improved
 
 **Phase to address:**
-Each tool-specific formatter phase. Define the zero/one/many rendering contract for each tool before writing the formatter logic.
+trace_flow entry point matching phase. Verify by replaying Test 4 with verbose entrypoint AND with short entrypoint — both should now resolve correctly (verbose via improved schema description deterring that usage; short via the same working path as Test 5).
 
 ---
 
-### Pitfall 5: The Presentation Layer Becomes a Second Source of Truth — Diverging From Workflow Return Types
+### Pitfall 5: Honest Token Savings Reporting — Over-Correction Zeros Out the Metric
 
 **What goes wrong:**
-The workflows return typed TypeScript interfaces: `TraceFlowResult` has `hops[]` and `metadata`. `ContextResult` has `content`, `chunks`, and `metadata`. If a presentation layer transforms these into prose descriptions without preserving the structured data, the text becomes the only form of the data. When a bug report says "the hop depth is wrong," there's no machine-readable form to diff — only formatted text. Worse, if the formatter is updated independently of the workflow types, it will silently skip new fields added to the return type that weren't in the original template.
+The v2.1 fix for inflated token savings (only count files where ALL chunks are uncompressed) is correct but creates a new problem: if the query returns 5 files and 4 of them have even one compressed chunk, `estimatedWithoutBraincache` counts only 1 file and the reported savings look tiny even when brain-cache genuinely saved thousands of tokens. Over-correcting in the other direction (counting all files as savings) inflates the number. The real failure mode is reporting 0% or negative savings when the tool clearly worked.
 
 **Why it happens:**
-Presenters are often written once and not maintained in sync with the types they format. TypeScript's type system doesn't enforce that a formatter handles every field of a union or interface.
+The current logic (`filesWithAnyCompressedChunk` exclusion) is the result of a previous over-inflation fix. If a file has 4 uncompressed chunks and 1 compressed chunk, the whole file is excluded from savings — even though brain-cache sent 4 complete function bodies instead of the entire file. This is unnecessarily conservative.
 
 **How to avoid:**
-- The formatter for each tool must accept the exact TypeScript return type of the workflow (`TraceFlowResult`, `ContextResult`, etc.) as its input, not a loosened `any` or a destructured subset. TypeScript will then surface missing fields when the return type evolves.
-- Write formatter unit tests that instantiate the full return type and assert the output contains every top-level field's value. When a new field is added to the return type, the test will fail, forcing the formatter to be updated.
-- Do not convert structured metadata to prose summaries. `metadata.totalHops: 4` should appear as a parseable value, not buried in "The trace followed 4 hops across the codebase."
+- The savings baseline should account for the actual bytes NOT sent, not for whole-file exclusion. For each file in the context: `savedTokens = (fullFileTokens - tokensActuallySent)`. Sum these across all files, whether or not any chunk was compressed. This is more accurate than the binary "file has any compressed chunk" gate.
+- Do not move to a completely different savings model mid-milestone. The current model is directionally correct — the fix is to calculate per-file savings rather than excluding files entirely.
+- Cap reported reduction at 95% to prevent obviously-wrong 100% savings claims when tiny queries return large files.
+- Test with the query that exposed the problem in Test 1: "how does buildContext assemble and compress chunks" — the savings should be meaningful (>30%) after the fix, not 0% or >90%.
 
 **Warning signs:**
-- Formatter functions accept `any` or `Record<string, unknown>` instead of the typed workflow result
-- Adding a new field to `TraceFlowResult` requires no formatter change (it should)
-- Post-migration, Claude cannot tell you the `seedChunkId` from a trace result because it was formatted away
+- Savings reported as 0% for a query that returned 4 compressed chunks
+- Savings reported as 95%+ when the query returned 2 small uncompressed functions
+- The `reductionPct` field is negative (can happen if `finalTokenCount > estimatedWithoutBraincache`)
 
 **Phase to address:**
-Foundation phase — define the formatter interface before implementation. Each formatter must be typed to its workflow output type.
+Token savings reporting phase. The fix is confined to `buildContext.ts` lines 155–199. Verify the savings calculation produces a plausible 20–60% range across the 5 test queries.
 
 ---
 
-### Pitfall 6: Token Savings Metadata Displayed Redundantly Across Every Tool Call Wastes Context
+### Pitfall 6: CLAUDE.md Tool Description Rewrite Causes Routing Regression
 
 **What goes wrong:**
-`build_context` and `explain_codebase` already append a token savings block to every response. If the unified presentation layer adds this block to all 6 tools, every tool call in a multi-step workflow adds the same accounting footer. In a 7-call workflow, that's 7 instances of `Tokens sent to Claude: X\nEstimated without: ~Y (Z files + overhead)\nReduction: N%`. The `formatTokenSavings` function currently uses `padEnd(27)` column alignment — padding that consumes tokens without adding information. At 6 tools × average 40 tokens per savings block = 240 tokens per workflow just on accounting metadata.
+The v2.2 goal includes "sharper tool descriptions and CLAUDE.md routing so Claude picks build_context over trace_flow for code understanding queries." Test 1 showed Claude calling `trace_flow` first for "how does buildContext assemble and compress chunks" — clearly a `build_context` query. Rewriting the descriptions to steer toward `build_context` more aggressively can cause the opposite problem: Claude stops using `trace_flow` entirely, even for genuine cross-file call-path queries where it performs well.
 
 **Why it happens:**
-The token savings block is a core value signal of brain-cache — "look how much context we saved." It gets added to every tool that does retrieval, because every retrieval is a savings opportunity. The mistake is confusing "available to compute" with "useful to report on every call."
+Tool descriptions in CLAUDE.md and MCP schema must distinguish between "understanding" queries (build_context) and "propagation" queries (trace_flow). The v2.0 CLAUDE.md already has a routing table, but the distinction "use trace_flow when the question is about call propagation or execution flow across files" isn't clear enough — Claude treats "how does buildContext flow" as both a propagation query AND an understanding query.
 
 **How to avoid:**
-- Only include token savings metadata in tools where it's meaningful and non-obvious: `build_context` and `explain_codebase`. Tools like `index_repo` and `doctor` have no retrieval savings to report.
-- `search_codebase` returns raw chunks; the "savings" framing is misleading (the user asked for results, not context reduction). Do not add savings metadata to it.
-- `trace_flow` has `metadata.localTasksPerformed` already — this is the appropriate place for local computation reporting. Do not duplicate it with a token savings block.
-- Replace `padEnd(27)` column alignment with plain `label: value` pairs. The alignment is a terminal formatting artifact that wastes tokens in LLM context.
-- If savings metadata is included, it must be at the end of the response and clearly labeled as metadata so Claude can deprioritize it when extracting the primary result.
+- The routing boundary must be operationally defined, not conceptually. Replace "call propagation" (abstract) with concrete query patterns: "trace_flow is correct when the query is 'trace X calls Y', 'what does X call?', or 'call path from X to Y'. It is NOT correct for 'how does X work', 'explain X', 'what does X do', or 'what happens inside X' — use build_context for those."
+- Changing both the MCP tool description AND CLAUDE.md simultaneously means two routing surfaces. If the test fails after both changes, it's impossible to know which one caused the regression. Change them in sequence, test after each.
+- The MCP tool description for `trace_flow` should lead with what it is NOT for: "Not for understanding how a function works internally — use build_context for that. Use trace_flow only when you need to see the chain of calls across multiple files."
+- After rewriting, replay all 5 test queries from the debug session and verify tool selection matches the expected tool.
 
 **Warning signs:**
-- Savings footer appears in `doctor` output (no retrieval happened)
-- Token count for `index_repo` success response increases after the presentation layer ships
-- Claude includes token savings numbers in its reasoning about code structure
+- Claude never calls `trace_flow` after the rewrite, even for "trace how buildIndex calls embedBatch"
+- Claude calls `build_context` for a trace query and then reports the answer is incomplete (because build_context doesn't return hop structure)
+- The routing table in CLAUDE.md and the MCP tool description use different phrasing and contradict each other for edge cases
 
 **Phase to address:**
-Foundation phase — decide the token savings policy (which tools, what format, where in the response) before any per-tool formatter is written.
+Tool routing clarification phase. Required regression test: all 5 debug session queries must select the correct tool after the rewrite. Both CLAUDE.md and MCP description changes must be included in the same phase to prevent drift.
+
+---
+
+### Pitfall 7: trace_flow Duplicated Call List — Wrong Root Cause Attribution
+
+**What goes wrong:**
+Test 5 identified that the `chunkFile` hop in trace_flow output lists its callees twice. The symptom: `callsFound` appears to be duplicated in the serialized output. The wrong fix is to add a deduplication step in the formatter (`formatTraceFlow` in `src/lib/format.ts`). If the duplication happens in `flowTracer.ts` during BFS traversal (e.g. a call edge is visited twice because it appears in both the chunk's direct edges and a re-traversed path), deduplication in the formatter hides the root cause and the underlying data remains corrupt.
+
+**Why it happens:**
+The `callsFound` array in each hop is built from the `edges` table lookup for that chunk. If an edge is stored twice in the table (duplicate row from indexing), the array will have duplicates. Alternatively, if the formatter's `formatTraceFlow` expands the `callsFound` array once for display AND once for metadata, the duplication is a formatter-only bug. These require different fixes.
+
+**How to avoid:**
+- Before implementing a fix, log the raw `callsFound` array from `runTraceFlow` directly (before any formatter touches it). If the duplicates are there, the fix is in `flowTracer.ts` or `runTraceFlow`. If the array is clean and the output is duplicated, the fix is in `formatTraceFlow`.
+- Add a unit test for `formatTraceFlow` with a hop that has `callsFound: ['foo', 'bar']` and assert the output contains each name exactly once.
+- Do not add `.filter((v, i, arr) => arr.indexOf(v) === i)` to `runTraceFlow`'s output without first confirming the data source is correct. Silently deduplicating before returning masks a potential indexing bug.
+
+**Warning signs:**
+- The duplicate appears only in the formatted output (formatter bug)
+- The duplicate appears in the raw `TraceFlowResult` returned by `runTraceFlow` (data bug in flowTracer or retriever)
+- The duplicate only happens for specific files with many outgoing edges (data bug at scale)
+
+**Phase to address:**
+trace_flow output quality phase. Confirm root cause before fixing — log raw result, then add formatter test.
 
 ---
 
@@ -162,13 +177,12 @@ Foundation phase — decide the token savings policy (which tools, what format, 
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Apply the same template to all tools regardless of output type | Single code path, fast to build | Trace output looks like search output looks like doctor output — no tool identity, harder for Claude to parse | Never — tool identity is the goal |
-| Use `padEnd()` for column alignment in formatted strings | Pretty terminal output | Adds silent token waste proportional to the label length; content collapses in non-monospace contexts | Never in MCP output — CLI renderers only |
-| Add ANSI colors to MCP tool text content | Colorized output in Claude Code terminal | Up to 80% token inflation on decoration; breaks in non-terminal clients; security surface (Trail of Bits) | Never — use markdown instead |
-| Format the raw workflow result directly in the MCP handler | Keeps `mcp/index.ts` self-contained | No type-safe boundary between presenter and workflow; formatter not testable in isolation | Never — presenters belong in `src/lib/` |
-| Skip edge case testing (0 results, empty trace) | Faster initial implementation | Edge case templates emit noisy structured frames for empty data; Claude misreads as partial results | Never |
-| Export both formatted text and structured JSON in every tool response | Maximum flexibility | Doubles token count on every call; structured JSON already in the workflow result | Only if `structuredContent` field is reliably supported by the Claude Code client (currently not confirmed) |
-| Maintain formatting logic inline in each tool handler | No abstraction needed | Each tool diverges; a change to the shared header requires editing 6 files | Never — defeats the entire purpose of a unified presentation layer |
+| Increase KEYWORD_BOOST_WEIGHT to 0.25+ to fix one failing test | Quick win on the failing case | Noise files (vitest.config.ts) now outrank application code for generic queries | Never — tune weight against the full test suite, not one case |
+| Add build tool filename exclusions to suppress noise | Eliminates vitest.config.ts from results | Breaks explicit queries about those files; exclusion list grows into a maintenance burden | Never — use a score penalty that respects explicit query mention |
+| Use name-match as a binary compression bypass | Protects specific named files from being stripped | Large files consume the entire token budget, displacing other relevant results | Never — apply name-match protection only if the chunk fits within budget constraints |
+| Rewrite CLAUDE.md and MCP descriptions in one commit without regression testing | Single change to deploy | When routing regresses, unclear which change caused it | Never — sequence the changes and test after each |
+| Fix `callsFound` duplication with a dedup call in the formatter | Zero-risk quick fix | Hides a potential indexing or BFS traversal bug that will manifest elsewhere | Only if confirmed the raw data is clean (formatter-only bug) |
+| Copy the v2.1 PITFALLS.md template and re-skin it for v2.2 | Saves time | v2.1 pitfalls are about presentation layer; v2.2 pitfalls are retrieval-quality specific — different failure modes, wrong advice | Never for milestone-specific research |
 
 ---
 
@@ -176,12 +190,11 @@ Foundation phase — decide the token savings policy (which tools, what format, 
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| MCP stdio transport | Include ANSI escape codes in `content[].text` | ANSI sequences are tokenized as raw bytes; use markdown formatting only |
-| `formatTokenSavings` (existing) | Reuse as-is in the new unified presenter | The current `padEnd(27)` column alignment wastes tokens; redesign as plain `label: value` pairs before importing into the presenter |
-| TypeScript formatter typing | Accept `any` to handle all tool result shapes | Accept the specific workflow return type interface per formatter; TypeScript's exhaustiveness catches schema drift |
-| MCP `structuredContent` field | Use to separate display output from LLM context | Claude Code client support for `structuredContent` is not yet confirmed stable; do not depend on it as the primary separation mechanism in v2.1 |
-| Zod v4 validation of tool inputs | Presenter is on the output side, not input side | Zod is not relevant to the presenter; do not add schema validation to the output formatting path — it's unnecessary overhead |
-| `src/mcp/index.ts` (tool handlers) | Add formatting logic directly in the handler | Formatting logic belongs in `src/lib/presenter.ts` (or equivalent); handlers call the presenter, not the other way around |
+| LanceDB distance filter + keyword boost | Apply keyword boost before the distance threshold filter | Filter by distance first (this is already done in `searchChunks`), then apply boost to the filtered set |
+| `HIGH_RELEVANCE_SIMILARITY_THRESHOLD` (compression.ts) vs. hybrid score | Comparing the hybrid-blended score against 0.85 after boosting | The `chunk.similarity` field stored in `RetrievedChunk` must remain the raw vector similarity, not the blended score. The blended score is only for ranking order; compression must check the raw vector similarity |
+| `classifyRetrievalMode` vs. `trace_flow` MCP tool | Changing `classifyRetrievalMode` keyword lists causes `build_context` to route to `trace_flow` internally (via the trace mode branch in `runBuildContext`) AND changes how `search_codebase` operates | Keyword list changes in `retriever.ts` affect ALL three routing paths simultaneously — test all three after any change |
+| `entrypoint` parameter in `trace_flow` MCP vs. `runTraceFlow` function | The MCP `entrypoint` parameter is passed directly as the query string to `embedBatchWithRetry` | Short, precise symbol names produce better seed results than verbose phrases — enforce this in the schema description, not in pre-processing logic |
+| Token savings baseline vs. `finalChunks` array | The savings calculation iterates `finalChunks` to identify compressed files, but `finalChunks` in trace and explore modes contains chunks with `similarity: 1` (synthetic) or synthetic IDs — the savings math will be wrong | Apply the actual savings baseline only in the lookup mode path; use a different savings model (or skip savings) for trace and explore modes |
 
 ---
 
@@ -189,23 +202,22 @@ Foundation phase — decide the token savings policy (which tools, what format, 
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Template rendering on the hot path for every tool call | Latency added to every `search_codebase` invocation | Formatting should be string concatenation only, no async operations, no I/O, no computation | Any time string interpolation is replaced with async work |
-| Token counting the formatted output on every call (to verify savings) | `@anthropic-ai/tokenizer` adds ~20ms per call | Token counting is already done in the workflow layer; do not add a second count in the presenter | Immediately — every call adds tokenizer overhead |
-| Building the formatted output with repeated string concatenation inside loops | Memory allocations proportional to result count | Use array join pattern (`lines.push(...); return lines.join('\n')`) | Any `trace_flow` result with 10+ hops |
-| Re-formatting the same output multiple times (e.g., once for logging, once for the MCP response) | CPU overhead, inconsistent output in logs vs. MCP | Format once, store in a variable, reuse | Any tool that logs its output |
+| Reading full file content for savings baseline on every `build_context` call | Latency spike on large files (readFile on 1000-line files × 5 files = significant I/O on every query) | The savings baseline file reads already exist in the current code — do not add more file reads to the hot path | Any query returning more than 10 files in context |
+| Computing keyword boost with a regex per chunk × per token | O(chunks × queryTokens) inner loop that scales with result set | Current `extractQueryTokens` + `computeKeywordBoost` is O(n) per chunk with simple string includes — preserve this pattern; do not use regex in the inner loop | Always — regex in an inner loop is always wrong |
+| Re-embedding the query multiple times (once for search, once for trace seed) | Double Ollama round-trip latency for queries that trigger trace mode in `build_context` | `runBuildContext` embeds the query then passes the vector to `searchChunks`, but trace mode calls `runTraceFlow` which re-embeds — the vector is not passed through | Every trace-mode query via `build_context` |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **No ANSI in MCP content:** Grep the presenter and all tool handlers for `\x1b[` — zero matches required before shipping.
-- [ ] **Token count baseline established:** Run each of the 6 tools against a representative query, record the token count of the raw output, record the token count of the formatted output. Formatted output must be within 20% of raw output token count or justify the increase with semantic value.
-- [ ] **Existing JSON fields preserved:** For `search_codebase` and `trace_flow` (currently returning `JSON.stringify`), verify that all top-level fields (`filePath`, `score`, `content`, `hops`, `metadata`) are accessible in the new formatted output — either as JSON or as clearly labeled values Claude can parse.
-- [ ] **Zero-result rendering tested:** Call each tool with a query guaranteed to return empty results. Verify the output is a clean single-line statement, not a structured frame with empty sections.
-- [ ] **Formatter typed to workflow return type:** Each formatter function must accept the exact TypeScript interface of its tool's workflow return value — no `any`, no `object`.
-- [ ] **Token savings only where meaningful:** Verify savings metadata appears in `build_context` and `explain_codebase` only. Check `doctor`, `index_repo`, `search_codebase`, and `trace_flow` — no savings footer.
-- [ ] **Presenter is isolated and testable:** Import the presenter in a unit test with a mock workflow result. Format it. Assert the output. No MCP SDK dependency required to test the formatter.
-- [ ] **CLAUDE.md routing guidance updated:** After output formats change, verify the CLAUDE.md tool routing table and tool descriptions remain accurate. Stale descriptions cause routing regressions.
+- [ ] **Keyword boost does not inflate config file scores:** Run query "What config values does brain-cache use?" after boost changes — `vitest.config.ts` and `tsup.config.ts` must NOT appear in top-3.
+- [ ] **Name-match protection respects token budget:** Run query "how does buildContext assemble and compress chunks" — both `buildContext.ts` AND `compression.ts` must appear in the context, not just one large uncompressed file.
+- [ ] **trace_flow entry point fix tested with verbose AND short entrypoints:** Test 4 (verbose: "chunkFile function in the indexing pipeline") and Test 5 (short: "chunkFile") must both resolve to `chunker.ts`. Test 4's fix is in the schema description deterring verbose usage; Test 5's path must remain working.
+- [ ] **`callsFound` duplication root cause confirmed before fix:** Log raw `TraceFlowResult.hops[0].callsFound` to stderr before any formatter runs — confirm whether duplicates exist in the data or only in the output.
+- [ ] **CLAUDE.md routing table and MCP description are consistent:** The routing decision for "how does X flow through Y" must be the same in both places. They must not contradict for any of the 5 test queries.
+- [ ] **Token savings range is plausible:** All 5 test queries should report 20–70% reduction after fixes. A result of 0% or >90% is a signal the savings calculation is wrong.
+- [ ] **`chunk.similarity` field is unchanged after keyword boost:** The `RetrievedChunk` objects returned by `searchChunks` must have the raw vector similarity in `.similarity`, not the blended score. The blended score is used only for sort order.
+- [ ] **`classifyRetrievalMode` change tested against all three mode paths:** After any keyword list change, verify lookup, trace, AND explore intent classification against the 5 test queries.
 
 ---
 
@@ -213,12 +225,12 @@ Foundation phase — decide the token savings policy (which tools, what format, 
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| ANSI codes shipped in MCP text content | LOW | Grep for `\x1b[` in output layer; strip all ANSI; no workflow changes needed |
-| Existing JSON contract broken (field removed or renamed) | HIGH | Roll back formatter change; audit what Claude's downstream behavior depends on; rebuild formatter preserving fields |
-| Token count inflated 2x by decoration | LOW–MEDIUM | Profile which formatting elements add the most tokens (headers, separators, metadata footers); strip decorative elements first; measure again |
-| Formatter diverged from workflow type after type change | LOW | Add TypeScript strict check; formatter will fail to compile; fix the formatter to handle new fields |
-| Token savings metadata appearing on every tool call | LOW | Move savings block to opt-in or restrict to build_context and explain_codebase; one config change |
-| Rigid template produces confusing output for empty results | LOW | Add zero-result branch to each formatter; returns a clean fallback string instead of the structured template |
+| Keyword boost weight too high — noise files outrank application code | LOW | Revert `KEYWORD_BOOST_WEIGHT` to 0.10; confirm test suite passes; re-tune against full test suite, not single case |
+| Name-match compression bypass exhausts token budget | MEDIUM | Remove name-match bypass code path; rely on keyword boost raising similarity above HIGH_RELEVANCE threshold instead |
+| Build tool file exclusion list breaks explicit queries | LOW | Replace exclusion list with score penalty; add opt-out for queries containing the filename |
+| CLAUDE.md rewrite causes routing regression | MEDIUM | Revert CLAUDE.md to v2.1 version; identify which query is mis-routed; fix that specific pattern before re-deploying |
+| `callsFound` duplication fixed in formatter but root cause in data | LOW–MEDIUM | Add raw data log to confirm root cause; if indexing bug, re-index and verify; if BFS bug, add dedup in `flowTracer.ts` |
+| Token savings reporting drops to near 0% after accuracy fix | LOW | Switch to per-file partial savings model (saved = fullFileTokens - tokensActuallySent) instead of binary file exclusion |
 
 ---
 
@@ -226,12 +238,13 @@ Foundation phase — decide the token savings policy (which tools, what format, 
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| ANSI codes waste 50–80% of tokens | Formatting foundation (Phase 1) | Grep for `\x1b[` in all presenter output; token count delta < 20% |
-| Output shape change breaks existing contract | Contract audit (Phase 1) | Snapshot test: existing tool outputs before and after the presentation layer; field names unchanged |
-| Visual chrome confuses LLM reasoning | Formatting principles definition (Phase 1) | Manual: ask Claude to extract a specific field from each tool's output; measure success rate |
-| Rigid templates fail at 0 or 1 results | Per-tool formatter phases | Edge case tests: 0 results, 1 result, N results for every tool formatter |
-| Formatter diverges from workflow types | Foundation / type-safe presenter interface | TypeScript compile: formatter typed to workflow return type; adding new field to type causes build failure |
-| Token savings metadata redundancy | Foundation — savings policy decision | Count tokens in a 6-tool workflow; savings metadata tokens < 5% of total |
+| Keyword boost weight corruption | Hybrid scoring weight tuning | Run all 5 debug session queries; verify no build tool file in top-3 |
+| Name-match compression bypass exceeds budget | Query-aware relevance boosting | buildContext query must return both the named file AND dependent services in context |
+| Build tool config file noise | Search noise reduction | Config query test (noise files not in top-3) + explicit build tool query test (file IS in top-1) |
+| trace_flow verbose entry point failure | trace_flow entry point matching | Test 4 (verbose) deterred by schema; Test 5 (short) still resolves correctly |
+| Token savings over-correction | Token savings reporting fix | All 5 queries report 20–70% savings; no negatives or >90% outliers |
+| CLAUDE.md/MCP description routing regression | Tool routing clarification | All 5 debug session queries select correct tool after rewrite |
+| `callsFound` duplication | trace_flow output quality | Unit test for `formatTraceFlow` with known duplicates; raw data log confirms source |
 
 ---
 
@@ -239,27 +252,27 @@ Foundation phase — decide the token savings policy (which tools, what format, 
 
 | Phase / Topic | Likely Pitfall | Mitigation |
 |---------------|----------------|------------|
-| Presentation foundation / shared presenter | Using `padEnd()` or ANSI from existing `formatTokenSavings` | Redesign the savings format to plain `label: value` before including it in the shared presenter |
-| `search_codebase` formatter | Replacing JSON output with prose breaks Claude's file path extraction | Preserve all JSON fields; add a formatted header only; keep the structured data accessible |
-| `trace_flow` formatter | Hop list rendered as prose loses structural hop ordering | Render hops as an ordered list with consistent field labels; never convert hop data to a prose summary |
-| `explain_codebase` formatter | Already partially formatted (prose + `---` footer); unifying may over-format | Audit existing format first; the goal is consistency, not more structure — may require simplification, not addition |
-| `doctor` formatter | Temptation to add status icons (`✓`, `✗`) using Unicode | Unicode symbols are fine; ANSI color codes around them are not — `[ok]` not `\x1b[32m[ok]\x1b[0m` |
-| `build_context` formatter | Token savings footer already using padded alignment | Replace `padEnd` formatting with plain key-value before the unified presenter ships; measure token delta |
-| All tools | Adding section scaffolding to zero-result responses | Zero-result output must be a single sentence, not a structured empty frame |
+| Hybrid scoring weight tuning | Increasing weight to fix one test breaks general ranking | Test against all 5 debug queries simultaneously, not individually |
+| Query-aware relevance boosting (filename protection) | Protected file consumes entire token budget | Apply budget constraint: name-match bypass only if chunk fits within 60% of budget |
+| Build tool noise reduction | Exclusion list breaks explicit queries about those tools | Use score penalty (×0.7) with explicit-mention opt-out, not exclusion |
+| trace_flow entry point matching | Code change to entry point extraction over-fits to test phrases | Fix the schema description first; only add code changes if schema fix alone is insufficient |
+| Token savings baseline | Per-file savings model produces different values than old model (breaking existing assertions) | Update test assertions alongside the savings model change; do not leave tests asserting old values |
+| CLAUDE.md + MCP tool description rewrite | Both surfaces changed in one commit makes regression attribution impossible | Change MCP description first, run tests; change CLAUDE.md second, run tests again |
+| trace_flow duplicated call list | Fix in formatter masks a data-layer bug | Log raw data before formatter; fix at the layer where the duplication originates |
 
 ---
 
 ## Sources
 
-- Anthropic Engineering — Writing Effective Tools for AI Agents (https://www.anthropic.com/engineering/writing-tools-for-agents) — "return only high signal information back to agents"; "avoid formatting noise that confuses agents"
-- Anthropic Engineering — Effective Context Engineering for AI Agents (https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) — progressive disclosure, tool result clearing, information density principles
-- GitHub (claude-code#15718) — MCP Tools: Support display/context separation to save 50-80% tokens on formatted output (https://github.com/anthropics/claude-code/issues/15718) — real-world ANSI token waste measurement (6k content + 7k ANSI = 13k total)
-- Trail of Bits — Deceiving users with ANSI terminal codes in MCP (https://blog.trailofbits.com/2025/04/29/deceiving-users-with-ansi-terminal-codes-in-mcp/) — ANSI in MCP output confirmed security surface and tokenization problem
-- MCP Specification 2025-06-18 — Tools (https://modelcontextprotocol.io/specification/2025-06-18/server/tools) — `structuredContent` field for separating display from LLM context; backward compatibility requirement
-- DEV Community / AWS Heroes — MCP Tool Design: Why Your AI Agent Is Failing (https://dev.to/aws-heroes/mcp-tool-design-why-your-ai-agent-is-failing-and-how-to-fix-it-40fc) — schema contract problems, description quality impact on routing accuracy
-- Nordic APIs — The Weak Point in MCP Nobody's Talking About: API Versioning (https://nordicapis.com/the-weak-point-in-mcp-nobodys-talking-about-api-versioning/) — output contract breaking when formatting changes
-- Medium / Joe Njenga — Claude Code cuts MCP context bloat by 46.9% with Tool Search (https://medium.com/@joe.njenga/claude-code-just-cut-mcp-context-bloat-by-46-9-51k-tokens-down-to-8-5k-with-new-tool-search-ddf9e905f734) — tool definition token overhead context
+- `.planning/debug/claude-debugging-itself-v2.md` — 5 live test sessions with brain-cache MCP, Claude's own failure analysis, root cause for buildContext.ts compression miss, trace_flow wrong entry point, vitest.config.ts noise, callsFound duplication
+- `src/services/retriever.ts` — KEYWORD_BOOST_WEIGHT = 0.10, extractQueryTokens, computeKeywordBoost implementation; confirms current hybrid scoring formula
+- `src/services/compression.ts` — HIGH_RELEVANCE_SIMILARITY_THRESHOLD = 0.85, COMPRESSION_TOKEN_THRESHOLD = 500, COMPRESSION_HARD_LIMIT = 800; confirms compression decision tree
+- `src/workflows/buildContext.ts` — filesWithAnyCompressedChunk savings logic (lines 155–199); confirms the binary file exclusion model and its over-conservative behavior
+- `src/workflows/traceFlow.ts` — `similarity: 1` synthetic value on all trace hops; confirms savings model is inapplicable to trace mode
+- `src/mcp/index.ts` — MCP tool descriptions for all 6 tools; confirms current routing language for build_context and trace_flow
+- `CLAUDE.md` — Current routing table and tool descriptions; confirms both routing surfaces exist and may diverge
+- `.planning/PROJECT.md` — v2.2 target features list; confirms scope of intended improvements
 
 ---
-*Pitfalls research for: brain-cache v2.1 Presentation Magic milestone*
+*Pitfalls research for: brain-cache v2.2 Retrieval Quality milestone*
 *Researched: 2026-04-03*

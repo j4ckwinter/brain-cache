@@ -12,7 +12,8 @@
 - ✅ **v1.1.1 Post-Ship Cleanup** — Phase 14 (shipped 2026-04-02)
 - ✅ **v1.2 MCP Tool Adoption** — Phase 13 (shipped 2026-04-02)
 - ✅ **v2.0 MCP Magic** — Phases 15-19 (shipped 2026-04-03)
-- 📋 **v2.1 Presentation Magic** — Phases 20-21 (planned)
+- ✅ **v2.1 Presentation Magic** — Phases 20-21 (shipped 2026-04-03) — [archive](milestones/v2.1-ROADMAP.md)
+- 🚧 **v2.2 Retrieval Quality** — Phases 22-25 (in progress)
 
 ## Phases
 
@@ -65,10 +66,22 @@
 
 </details>
 
-**v2.1 Presentation Magic (Phases 20-21)**
+<details>
+<summary>✅ v2.1 Presentation Magic (Phases 20-21) — SHIPPED 2026-04-03</summary>
 
-- [x] **Phase 20: Formatter Foundation** - Pure-function formatter layer in src/lib/format.ts with shared envelope, summary lines, tool-specific body renderers, and consistent error envelope (completed 2026-04-03)
-- [x] **Phase 21: MCP Handler Wiring and Metadata** - Wire all 6 MCP handlers to call their formatters, add token savings footer and pipeline labels to retrieval tools (completed 2026-04-03)
+- [x] Phase 20: Formatter Foundation (2/2 plans) — completed 2026-04-03
+- [x] Phase 21: MCP Handler Wiring and Metadata (2/2 plans) — completed 2026-04-03
+
+</details>
+
+### 🚧 v2.2 Retrieval Quality (In Progress)
+
+**Milestone Goal:** Fix tool routing, retrieval accuracy, and output quality issues discovered during v2.1 testing — make brain-cache reliably return the right content via the right tool.
+
+- [ ] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop
+- [ ] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise
+- [ ] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings
+- [ ] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior
 
 ## Phase Details
 
@@ -183,6 +196,56 @@ Plans:
 - [x] 21-01-PLAN.md — Add formatPipelineLabel to format.ts, wire all 6 MCP handlers to formatters
 - [x] 21-02-PLAN.md — Update server.test.ts assertions for formatted output, pipeline labels, and token savings
 
+### Phase 22: Isolated Trace Fixes
+**Goal**: trace_flow anchors to the correct function when given a verbose query, and each callee appears exactly once per hop in the output
+**Depends on**: Phase 21
+**Requirements**: OUT-01, RET-03
+**Success Criteria** (what must be TRUE):
+  1. Calling `trace_flow` with "how does chunkFile work" resolves to the `chunkFile` function as the entry point, not an unrelated chunk that happens to match keywords
+  2. Each hop in a `trace_flow` result lists each callee name at most once in its calls list — no duplicate entries regardless of how many edges the BFS traverses
+  3. The exact-name SQL lookup runs before any vector search and short-circuits the embedding step when a symbol name match is found
+  4. If no exact match exists in the chunks table, trace_flow falls back to vector search and behaves identically to the pre-fix behavior
+**Plans:** 2 plans
+
+Plans:
+- [ ] 22-01-PLAN.md — Deduplicate callsFound entries in trace_flow hop output (OUT-01)
+- [ ] 22-02-PLAN.md — Add exact-name SQL lookup for trace_flow entry point resolution (RET-03)
+
+### Phase 23: Search Noise Reduction
+**Goal**: Build tool config files rank below application code in search results unless the user's query explicitly mentions the config tool by name
+**Depends on**: Phase 22
+**Requirements**: NOISE-01
+**Success Criteria** (what must be TRUE):
+  1. A search for "config values" returns application configuration code ahead of vitest.config.ts, tsup.config.ts, tsconfig.json, and similar build tool files
+  2. A search for "how does tsup build the project" still surfaces tsup.config.ts in results — the penalty does not apply when the tool name appears in the query
+  3. The penalty is a score coefficient subtracted from the blended score, not a hard exclusion — penalized files remain reachable for explicit queries
+  4. The penalty constant is named and documented in retriever.ts so its intent is clear without reading surrounding code
+**Plans**: TBD
+
+### Phase 24: Compression and Savings Accuracy
+**Goal**: Chunks whose file or symbol name matches a query term are protected from body compression, and token savings figures reflect only results that were actually returned and relevant
+**Depends on**: Phase 23
+**Requirements**: RET-01, RET-02, OUT-02
+**Success Criteria** (what must be TRUE):
+  1. Calling `build_context` with a query that names a specific file (e.g. "how does buildContext.ts work") returns that file's content uncompressed in the response
+  2. The keyword boost weight is per-intent-mode — a lookup query boosts name-matched chunks more aggressively than an explore query
+  3. Calling `trace_flow` on a query that resolves to zero hops reports zero token savings, not a fabricated percentage
+  4. Calling `trace_flow` on a query that resolves to the wrong entry point reports zero savings rather than an inflated number based on discarded results
+  5. Token savings on successful trace_flow calls are computed from the actual content returned, not a hardcoded constant
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 25: Tool Routing Documentation
+**Goal**: Claude selects the correct brain-cache tool for all documented query patterns, guided by explicit negative examples in both MCP tool descriptions and CLAUDE.md
+**Depends on**: Phase 24
+**Requirements**: ROUTE-01
+**Success Criteria** (what must be TRUE):
+  1. Given "how does X work" (code understanding), Claude calls `build_context` — not `trace_flow`
+  2. Given "trace how X calls Y" (call path), Claude calls `trace_flow` — not `build_context`
+  3. Each MCP tool description contains at least one "Do NOT use this tool when..." negative example that names a specific anti-pattern query
+  4. The CLAUDE.md routing table rows reflect the behavior delivered by Phases 22-24, not prior intent
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -206,9 +269,13 @@ Plans:
 | 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 18. File Watcher | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 19. CLAUDE.md Refinements | v2.0 | 2/2 | Complete | 2026-04-03 |
-| 20. Formatter Foundation | v2.1 | 2/2 | Complete    | 2026-04-03 |
-| 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete   | 2026-04-03 |
+| 20. Formatter Foundation | v2.1 | 2/2 | Complete | 2026-04-03 |
+| 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete | 2026-04-03 |
+| 22. Isolated Trace Fixes | v2.2 | 0/2 | Planning | - |
+| 23. Search Noise Reduction | v2.2 | 0/? | Not started | - |
+| 24. Compression and Savings Accuracy | v2.2 | 0/? | Not started | - |
+| 25. Tool Routing Documentation | v2.2 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 21 planned (2 plans)*
+*Last updated: 2026-04-03 — v2.2 Retrieval Quality roadmap added (Phases 22-25)*
