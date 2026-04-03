@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 20-01-PLAN.md
+stopped_at: Completed 20-02-PLAN.md
 last_updated: "2026-04-03T08:57:08.306Z"
 last_activity: 2026-04-03
 progress:
@@ -47,6 +47,13 @@ Progress: [█████████░] 93% (13/14 plans complete)
 
 None.
 
+### Key Decisions (Phase 20, Plan 02 — result-list formatters)
+
+- Use parentheses `(function)` for chunkType in formatSearchResults — plan spec showed `[function]` but behavior spec requires no JSON brackets; parentheses resolve the conflict
+- formatContext is intentional passthrough returning ContextResult.content as-is — token savings footer deferred to Phase 21 (META-01 scope)
+- formatTraceFlow zero-hop message explicitly references index_repo to guide user recovery
+- depth displayed as `depth:N` prefix (not `[depth N]`) to avoid square brackets violating no-JSON-output constraint
+
 ### Key Decisions (v2.1 Roadmap — from research)
 
 - Formatter layer is pure functions in `src/lib/format.ts` only — no workflow or service changes
@@ -87,9 +94,9 @@ See prior STATE.md entries for v1.x and v2.0 quick tasks (archived).
 
 **Last session:** 2026-04-03T08:57:08.302Z
 
-**Stopped at:** Completed 20-01-PLAN.md
+**Stopped at:** Completed 20-02-PLAN.md
 
-**Next action:** `/gsd:plan-phase 20`
+**Next action:** `/gsd:execute-phase 21`
 
 ---
 *State initialized: 2026-03-31*
