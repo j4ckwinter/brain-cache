@@ -19,6 +19,63 @@ import { runExplainCodebase } from './explainCodebase.js';
 import { DEFAULT_TOKEN_BUDGET, TOOL_CALL_OVERHEAD_TOKENS } from '../lib/config.js';
 import type { ContextResult, RetrievedChunk, SearchOptions } from '../lib/types.js';
 
+function splitCamelCase(name: string): string[] {
+  return name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(t => t.length >= 2);
+}
+
+function extractQueryTokens(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/[\s.,;:!?'"()\[\]{}/\\]+/)
+    .filter(t => t.length >= 3);
+}
+
+function isPrimaryMatch(chunk: RetrievedChunk, queryTokens: string[]): boolean {
+  if (queryTokens.length === 0) return false;
+  const fileName = chunk.filePath.split('/').pop()?.toLowerCase() ?? '';
+  const fileNameStem = fileName.replace(/\.[^.]+$/, '');
+  const originalName = chunk.name ?? '';
+  const chunkName = originalName.toLowerCase();
+
+  // Tier 1: exact symbol name match
+  if (chunkName.length > 0 && queryTokens.some(t => t === chunkName)) return true;
+
+  // Tier 2: camelCase sub-token match (all sub-tokens in query)
+  // Use original (non-lowercased) name so splitCamelCase can detect uppercase boundaries
+  const subTokens = originalName.length > 0 ? splitCamelCase(originalName) : [];
+  if (subTokens.length > 1 && subTokens.every(sub => queryTokens.some(t => t.includes(sub) || sub.includes(t)))) return true;
+
+  // Tier 3: filename stem exact match
+  if (fileNameStem.length > 0 && queryTokens.some(t => t === fileNameStem)) return true;
+
+  return false;
+}
+
+const TEST_FILE_PATTERNS = ['.test.', '.spec.', '/__tests__/', '/tests/'];
+
+function isTestFile(filePath: string): boolean {
+  return TEST_FILE_PATTERNS.some(p => filePath.includes(p));
+}
+
+const CONFIG_FILE_PATTERNS = [
+  /vitest\.config\./,
+  /tsup\.config\./,
+  /tsconfig.*\.json$/,
+  /jest\.config\./,
+  /eslint\.config\./,
+  /\.eslintrc/,
+];
+
+function isConfigFile(filePath: string): boolean {
+  const fileName = filePath.split('/').pop() ?? '';
+  return CONFIG_FILE_PATTERNS.some(p => p.test(fileName));
+}
+
 export interface BuildContextOptions {
   maxTokens?: number;
   limit?: number;
@@ -137,14 +194,20 @@ export async function runBuildContext(
     const assembled = assembleContext(deduped, { maxTokens });
     const enriched = await enrichWithParentClass(assembled.chunks, table, { maxTokens, currentTokens: assembled.tokenCount });
 
-    // Apply compression to oversized chunks
-    const compressed = enriched.map(compressChunk);
+    // COMP-02: Drop peripheral chunks (test files, config files) before compression
+    const withoutPeripheral = enriched.filter(chunk => !isTestFile(chunk.filePath) && !isConfigFile(chunk.filePath));
+
+    // COMP-01: Primary result protection — skip compression for query-matched chunks
+    const queryTokens = extractQueryTokens(query);
+    const compressed = withoutPeripheral.map(chunk =>
+      isPrimaryMatch(chunk, queryTokens) ? chunk : compressChunk(chunk)
+    );
 
     const groups = groupChunksByFile(compressed);
     finalContent = formatGroupedContext(groups);
     finalChunks = compressed;
     finalTokenCount = assembled.tokenCount;
-    localTasksPerformed = ['embed_query', 'vector_search', 'dedup', 'parent_enrich', 'compress', 'cohesion_group', 'token_budget'];
+    localTasksPerformed = ['embed_query', 'vector_search', 'dedup', 'parent_enrich', 'drop_peripheral', 'compress', 'cohesion_group', 'token_budget'];
   }
 
   // 9. Estimate tokens without brain-cache
