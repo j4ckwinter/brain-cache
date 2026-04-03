@@ -359,7 +359,12 @@ server.registerTool(
     }
     try {
       const result = await runTraceFlow(entrypoint, { maxHops, path });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
+      return {
+        content: [
+          { type: 'text' as const, text: JSON.stringify({ ...result, tokenSavings: formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext }) }) },
+        ],
+      };
     } catch (err) {
       return { isError: true, content: [{ type: 'text' as const, text: `trace_flow failed: ${err instanceof Error ? err.message : String(err)}` }] };
     }
