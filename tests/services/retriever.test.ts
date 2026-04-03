@@ -396,3 +396,123 @@ describe('similarity promotion (RET-02)', () => {
     expect(results[0].similarity).toBeCloseTo(0.60, 5);
   });
 });
+
+describe('PREC-01 / PREC-02: tiered keyword boost', () => {
+  // Test A: Exact symbol name match must rank above semantically adjacent symbol with much higher vector similarity.
+  // The gap is designed so that the old partial-match boost (returns 0.5 for "compresschunk" in 2-token query)
+  // cannot overcome a 0.25 similarity gap — but Tier 1 (returns 1.0 for exact name) can.
+  //   Old exactMatch score:    0.45 * 0.60 + 0.5 * 0.40 = 0.27 + 0.20 = 0.47
+  //   Old adjacentMatch score: 0.80 * 0.60 + 0.0 * 0.40 = 0.48
+  //   Old result: adjacentMatch wins (0.48 > 0.47) — FAIL
+  //   New Tier-1 exactMatch score: 0.45 * 0.60 + 1.0 * 0.40 = 0.27 + 0.40 = 0.67 — PASS
+  it('exact symbol name match ranks above semantically adjacent symbol (PREC-01)', async () => {
+    const exactMatch = makeRow({ id: 'exact', file_path: 'src/services/compression.ts', name: 'compressChunk', _distance: 0.55 });
+    const adjacentMatch = makeRow({ id: 'adjacent', file_path: 'src/services/retriever.ts', name: 'searchChunks', _distance: 0.20 });
+    const table = makeMockTable([exactMatch, adjacentMatch]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.6, keywordBoostWeight: 0.40 },
+      'compressChunk function'
+    );
+
+    // compressChunk must rank first despite much lower raw similarity (0.45 vs 0.80)
+    expect(results[0].id).toBe('exact');
+  });
+
+  // Test B: camelCase sub-token match — "searchChunks" decomposed to ["search", "chunks"],
+  // both appear in query "search chunks function".
+  // Old behavior: target "retriever.ts searchchunks" includes "search" and "chunks" — also partial match!
+  // Gap: set noMatch similarity high enough that old fallback can't overcome it.
+  //   Old camelMatch (d=0.45 → sim=0.55): "search" in "searchchunks" and "chunks" in "searchchunks" → 2/3 = 0.667 boost
+  //     score = 0.55 * 0.60 + 0.667 * 0.40 = 0.33 + 0.267 = 0.597
+  //   Old noMatch (d=0.18 → sim=0.82): "format" NOT in "formatchunk"? wait — "formatChunk" target = "formatter.ts formatchunk"
+  //     "search" not in target, "chunks" not in target, "function" not in target → 0 boost
+  //     score = 0.82 * 0.60 = 0.492
+  //   Actually old impl passes too! We need noMatch to have a name that accidentally matches tokens.
+  // Solution: use a noMatch whose name and file have no overlap with query at all, but a VERY high similarity.
+  //   Old camelMatch score: 0.597; Old noMatch score (d=0.10→sim=0.90): 0.90*0.60=0.54 — noMatch wins!
+  //   New Tier-2: all sub-tokens ["search","chunks"] in query → return 1.0
+  //     camelMatch score: 0.55 * 0.60 + 1.0 * 0.40 = 0.33 + 0.40 = 0.73 > 0.54 — PASS
+  it('camelCase sub-token match boosts matching chunk (PREC-01)', async () => {
+    const camelMatch = makeRow({ id: 'camel', file_path: 'src/services/retriever.ts', name: 'searchChunks', _distance: 0.45 });
+    const noMatch = makeRow({ id: 'nomatch', file_path: 'src/services/emitter.ts', name: 'emitEvent', _distance: 0.10 });
+    const table = makeMockTable([camelMatch, noMatch]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.5, keywordBoostWeight: 0.40 },
+      'search chunks function'
+    );
+
+    // searchChunks must rank first via camelCase sub-token decomposition
+    expect(results[0].id).toBe('camel');
+  });
+
+  // Test C: Filename stem match (PREC-02).
+  // Query "compression service" → tokens: ["compression", "service"]
+  // fileMatch (compression.ts): old behavior — "compression" appears in "compression.ts" target → 1/2 = 0.5 boost
+  //   But with large similarity gap, old boost may not suffice.
+  //   fileMatch score (d=0.45→sim=0.55): 0.55*0.60 + 0.5*0.40 = 0.33+0.20 = 0.53
+  //   otherFile (d=0.15→sim=0.85): 0 matches → score = 0.85*0.60 = 0.51 — fileMatch wins by old impl (0.53 > 0.51)!
+  // Increase gap further: otherFile d=0.10 → sim=0.90 → score=0.54 — old impl fails (0.54 > 0.53)!
+  // New Tier-3: "compression" === fileNameStem → return 0.8
+  //   fileMatch score: 0.55*0.60 + 0.8*0.40 = 0.33 + 0.32 = 0.65 > 0.54 — PASS
+  it('filename stem match boosts file-matching chunks (PREC-02)', async () => {
+    const fileMatch = makeRow({ id: 'filematch', file_path: 'src/services/compression.ts', name: 'compressChunk', _distance: 0.45 });
+    const otherFile = makeRow({ id: 'other', file_path: 'src/services/retriever.ts', name: 'searchChunks', _distance: 0.10 });
+    const table = makeMockTable([fileMatch, otherFile]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.5, keywordBoostWeight: 0.40 },
+      'compression service'
+    );
+
+    // compression.ts chunk must rank first because "compression" === filename stem
+    expect(results[0].id).toBe('filematch');
+  });
+
+  // Test D: Filename stem "chunker" — exact stem match.
+  // Query "chunker implementation" → tokens: ["chunker", "implementation"]
+  // Old: "chunker" in "chunker.ts chunkfile" → yes, 1/2 = 0.5. But with large gap it fails.
+  //   stemMatch (d=0.45→sim=0.55): 0.55*0.60+0.5*0.40=0.53; otherStem (d=0.08→sim=0.92): 0.92*0.60=0.552 — otherStem wins!
+  // New Tier-3: "chunker" === fileNameStem → 0.8
+  //   stemMatch score: 0.55*0.60+0.8*0.40=0.33+0.32=0.65 > 0.552 — PASS
+  it('filePath stem token boosts matching file (PREC-02)', async () => {
+    const stemMatch = makeRow({ id: 'stem', file_path: 'src/services/chunker.ts', name: 'chunkFile', _distance: 0.45 });
+    const otherStem = makeRow({ id: 'otherstem', file_path: 'src/services/retriever.ts', name: 'searchChunks', _distance: 0.08 });
+    const table = makeMockTable([stemMatch, otherStem]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.5, keywordBoostWeight: 0.40 },
+      'chunker implementation'
+    );
+
+    // chunker.ts chunk must rank first because "chunker" exactly equals the filename stem
+    expect(results[0].id).toBe('stem');
+  });
+
+  it('no name or file match preserves similarity-based ranking (fallback)', async () => {
+    // logger.ts / initLogger: no match for "how does logging work", raw similarity 0.85 (higher)
+    // config.ts / loadConfig: no match, raw similarity 0.70 (lower)
+    const highSim = makeRow({ id: 'high', file_path: 'src/services/logger.ts', name: 'initLogger', _distance: 0.15 });
+    const lowSim = makeRow({ id: 'low', file_path: 'src/services/config.ts', name: 'loadConfig', _distance: 0.30 });
+    const table = makeMockTable([highSim, lowSim]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.5, keywordBoostWeight: 0.40 },
+      'how does logging work'
+    );
+
+    // Higher raw similarity wins when no name or file boost applies
+    expect(results[0].id).toBe('high');
+  });
+});
