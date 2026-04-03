@@ -11,8 +11,11 @@ import {
   RETRIEVAL_STRATEGIES,
 } from '../services/retriever.js';
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
-import { traceFlow } from '../services/flowTracer.js';
 import { groupChunksByFile, enrichWithParentClass, formatGroupedContext } from '../services/cohesion.js';
+import { compressChunk } from '../services/compression.js';
+import { loadUserConfig, resolveStrategy } from '../services/configLoader.js';
+import { runTraceFlow } from './traceFlow.js';
+import { runExplainCodebase } from './explainCodebase.js';
 import { DEFAULT_TOKEN_BUDGET, TOOL_CALL_OVERHEAD_TOKENS } from '../lib/config.js';
 import type { ContextResult, RetrievedChunk, SearchOptions } from '../lib/types.js';
 
@@ -53,16 +56,11 @@ export async function runBuildContext(
   }
   const table = await db.openTable('chunks');
 
-  // Open edges table if it exists
+  // Check if edges table exists (needed for trace mode routing decision)
   const hasEdges = tableNames.includes('edges');
-  const edgesTable = hasEdges ? await db.openTable('edges') : null;
 
-  // 5. Classify intent and determine search strategy
+  // 5. Classify intent
   const mode = classifyRetrievalMode(query);
-  const strategy: SearchOptions = {
-    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
-    distanceThreshold: RETRIEVAL_STRATEGIES[mode].distanceThreshold,
-  };
 
   const maxTokens = opts?.maxTokens ?? DEFAULT_TOKEN_BUDGET;
 
@@ -70,87 +68,86 @@ export async function runBuildContext(
     `brain-cache: building context (intent=${mode}, budget=${maxTokens} tokens)\n`
   );
 
-  // 6. Embed query using model from index state
-  const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
-  const queryVector = vectors[0];
+  // 6. Load user config and resolve strategy
+  const userConfig = await loadUserConfig();
+  const strategy: SearchOptions = resolveStrategy(
+    mode,
+    userConfig,
+    opts?.limit !== undefined ? { limit: opts.limit } : undefined
+  );
 
   let finalChunks: RetrievedChunk[];
   let finalContent: string;
   let finalTokenCount: number;
   let localTasksPerformed: string[];
 
-  if (mode === 'trace' && edgesTable !== null) {
-    // Trace mode: seed search + BFS flow tracing
-    const seedResults = await searchChunks(table, queryVector, strategy);
-    const seeds = deduplicateChunks(seedResults);
+  if (mode === 'trace' && hasEdges) {
+    // Delegate to runTraceFlow workflow
+    const traceResult = await runTraceFlow(query, {
+      maxHops: 3,
+      path: opts?.path,
+      limit: strategy.limit,
+      distanceThreshold: strategy.distanceThreshold,
+    });
 
-    if (seeds.length > 0) {
-      // BFS trace from first seed
-      const hops = await traceFlow(edgesTable, table, seeds[0].id, { maxHops: 3 });
+    // Convert TraceFlowResult hops to RetrievedChunk[] for ContextResult compatibility
+    const traceChunks: RetrievedChunk[] = traceResult.hops.map((hop, i) => ({
+      id: `trace-hop-${i}`,
+      filePath: hop.filePath,
+      chunkType: 'function',
+      scope: null,
+      name: hop.name,
+      content: hop.content,
+      startLine: hop.startLine,
+      endLine: 0,
+      similarity: 1 - (hop.hopDepth * 0.1),
+    }));
 
-      // Convert FlowHop[] to RetrievedChunk[] for assembleContext compatibility
-      const traceChunks: RetrievedChunk[] = hops.map(hop => ({
-        id: hop.chunkId,
-        filePath: hop.filePath,
-        chunkType: 'function',
-        scope: null,
-        name: hop.name,
-        content: hop.content,
-        startLine: hop.startLine,
-        endLine: hop.endLine,
-        similarity: 1 - (hop.hopDepth * 0.1),
-      }));
-
-      const assembled = assembleContext(traceChunks, { maxTokens });
-
-      // Apply cohesion grouping
-      const groups = groupChunksByFile(assembled.chunks);
-      finalContent = formatGroupedContext(groups);
-      finalChunks = assembled.chunks;
-      finalTokenCount = assembled.tokenCount;
-      localTasksPerformed = ['embed_query', 'seed_search', 'bfs_trace', 'cohesion_group', 'token_budget'];
-    } else {
-      // No seeds found — fall through to explore mode behavior
-      const results = await searchChunks(table, queryVector, {
-        ...RETRIEVAL_STRATEGIES['explore'],
-        limit: opts?.limit ?? RETRIEVAL_STRATEGIES['explore'].limit,
-      });
-      const deduped = deduplicateChunks(results);
-      const assembled = assembleContext(deduped, { maxTokens });
-      const enriched = await enrichWithParentClass(assembled.chunks, table, { maxTokens, currentTokens: assembled.tokenCount });
-      const groups = groupChunksByFile(enriched);
-      finalContent = formatGroupedContext(groups);
-      finalChunks = enriched;
-      finalTokenCount = assembled.tokenCount;
-      localTasksPerformed = ['embed_query', 'vector_search', 'dedup', 'parent_enrich', 'cohesion_group', 'token_budget'];
-    }
+    const assembled = assembleContext(traceChunks, { maxTokens });
+    const groups = groupChunksByFile(assembled.chunks);
+    finalContent = formatGroupedContext(groups);
+    finalChunks = assembled.chunks;
+    finalTokenCount = assembled.tokenCount;
+    localTasksPerformed = traceResult.metadata.localTasksPerformed;
+  } else if (mode === 'explore') {
+    // Delegate to runExplainCodebase workflow
+    const exploreResult = await runExplainCodebase({
+      question: query,
+      maxTokens,
+      path: opts?.path,
+      limit: strategy.limit,
+      distanceThreshold: strategy.distanceThreshold,
+    });
+    finalContent = exploreResult.content;
+    finalChunks = exploreResult.chunks;
+    finalTokenCount = exploreResult.metadata.tokensSent;
+    localTasksPerformed = exploreResult.metadata.localTasksPerformed;
   } else {
-    // Trace mode without edges table: warn and fall through to explore
-    if (mode === 'trace' && edgesTable === null) {
-      process.stderr.write(
-        `brain-cache: No edges table found, falling back to explore mode\n`
-      );
+    // Lookup mode (or trace fallback without edges table)
+    if (mode === 'trace' && !hasEdges) {
+      process.stderr.write(`brain-cache: No edges table found, falling back to explore mode\n`);
     }
 
-    // Lookup or explore mode (or trace fallback): vector search + cohesion
+    // 6. Embed query using model from index state
+    const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
+    const queryVector = vectors[0];
+
     const results = await searchChunks(table, queryVector, strategy);
     const deduped = deduplicateChunks(results);
     const assembled = assembleContext(deduped, { maxTokens });
-
-    // Enrich with parent class chunks
     const enriched = await enrichWithParentClass(assembled.chunks, table, { maxTokens, currentTokens: assembled.tokenCount });
 
-    // Group by file and format
-    const groups = groupChunksByFile(enriched);
+    // Apply compression to oversized chunks
+    const compressed = enriched.map(compressChunk);
+
+    const groups = groupChunksByFile(compressed);
     finalContent = formatGroupedContext(groups);
-    finalChunks = enriched;
+    finalChunks = compressed;
     finalTokenCount = assembled.tokenCount;
-    localTasksPerformed = ['embed_query', 'vector_search', 'dedup', 'parent_enrich', 'cohesion_group', 'token_budget'];
+    localTasksPerformed = ['embed_query', 'vector_search', 'dedup', 'parent_enrich', 'compress', 'cohesion_group', 'token_budget'];
   }
 
   // 9. Estimate tokens without brain-cache
-  // Baseline: full file content + tool-call overhead for the search workflow.
-  // Without brain-cache, Claude would: 1 Grep to locate files + 1 Read per file.
   const uniqueFiles = [...new Set(finalChunks.map((c) => c.filePath))];
   const numFiles = uniqueFiles.length;
   let fileContentTokens = 0;
@@ -163,12 +160,11 @@ export async function runBuildContext(
     }
   }
 
-  // Tool-call overhead: 1 Grep/Glob search + 1 Read per file
   const toolCalls = 1 + numFiles;
   const toolCallOverhead = toolCalls * TOOL_CALL_OVERHEAD_TOKENS;
   const estimatedWithoutBraincache = fileContentTokens + toolCallOverhead;
 
-  // 10. Compute reduction (assembled output vs realistic alternative)
+  // 10. Compute reduction
   const reductionPct =
     estimatedWithoutBraincache > 0
       ? Math.max(0, Math.round((1 - finalTokenCount / estimatedWithoutBraincache) * 100))

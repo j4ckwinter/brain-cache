@@ -34,14 +34,28 @@ vi.mock('../../src/services/tokenCounter.js', () => ({
   countChunkTokens: vi.fn(),
 }));
 
-vi.mock('../../src/services/flowTracer.js', () => ({
-  traceFlow: vi.fn(),
-}));
-
 vi.mock('../../src/services/cohesion.js', () => ({
   groupChunksByFile: vi.fn(),
   enrichWithParentClass: vi.fn(),
   formatGroupedContext: vi.fn(),
+}));
+
+vi.mock('../../src/services/compression.js', () => ({
+  compressChunk: vi.fn((chunk) => chunk),
+}));
+
+vi.mock('../../src/services/configLoader.js', () => ({
+  loadUserConfig: vi.fn(),
+  resolveStrategy: vi.fn(),
+}));
+
+// Mock the delegated workflow functions
+vi.mock('../../src/workflows/traceFlow.js', () => ({
+  runTraceFlow: vi.fn(),
+}));
+
+vi.mock('../../src/workflows/explainCodebase.js', () => ({
+  runExplainCodebase: vi.fn(),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -62,8 +76,10 @@ import {
   classifyRetrievalMode,
 } from '../../src/services/retriever.js';
 import { assembleContext, countChunkTokens } from '../../src/services/tokenCounter.js';
-import { traceFlow } from '../../src/services/flowTracer.js';
 import { groupChunksByFile, enrichWithParentClass, formatGroupedContext } from '../../src/services/cohesion.js';
+import { loadUserConfig, resolveStrategy } from '../../src/services/configLoader.js';
+import { runTraceFlow } from '../../src/workflows/traceFlow.js';
+import { runExplainCodebase } from '../../src/workflows/explainCodebase.js';
 import { readFile } from 'node:fs/promises';
 
 const mockReadProfile = vi.mocked(readProfile);
@@ -76,11 +92,14 @@ const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
 const mockClassifyRetrievalMode = vi.mocked(classifyRetrievalMode);
 const mockAssembleContext = vi.mocked(assembleContext);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
-const mockTraceFlow = vi.mocked(traceFlow);
 const mockGroupChunksByFile = vi.mocked(groupChunksByFile);
 const mockEnrichWithParentClass = vi.mocked(enrichWithParentClass);
 const mockFormatGroupedContext = vi.mocked(formatGroupedContext);
 const mockReadFile = vi.mocked(readFile);
+const mockLoadUserConfig = vi.mocked(loadUserConfig);
+const mockResolveStrategy = vi.mocked(resolveStrategy);
+const mockRunTraceFlow = vi.mocked(runTraceFlow);
+const mockRunExplainCodebase = vi.mocked(runExplainCodebase);
 
 const mockProfile = {
   version: 1 as const,
@@ -142,7 +161,7 @@ describe('runBuildContext', () => {
       return true;
     });
 
-    // Happy path defaults (explore mode, no edges table)
+    // Happy path defaults (lookup mode, no edges table)
     mockReadProfile.mockResolvedValue({ ...mockProfile });
     mockIsOllamaRunning.mockResolvedValue(true);
     mockReadIndexState.mockResolvedValue({ ...mockIndexState });
@@ -150,7 +169,7 @@ describe('runBuildContext', () => {
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
-    mockClassifyRetrievalMode.mockReturnValue('explore');
+    mockClassifyRetrievalMode.mockReturnValue('lookup');
     mockSearchChunks.mockResolvedValue(dedupedChunks);
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     mockAssembleContext.mockReturnValue({
@@ -170,8 +189,27 @@ describe('runBuildContext', () => {
     ]));
     mockFormatGroupedContext.mockReturnValue('// ── /project/src/auth.ts ──\ncontent1\n\n---\n\n// ── /project/src/router.ts ──\ncontent2');
 
-    // traceFlow mock
-    mockTraceFlow.mockResolvedValue([]);
+    // Config mocks
+    mockLoadUserConfig.mockResolvedValue({});
+    mockResolveStrategy.mockReturnValue({ limit: 5, distanceThreshold: 0.25 });
+
+    // Workflow delegation mocks
+    mockRunTraceFlow.mockResolvedValue({
+      hops: [],
+      metadata: { seedChunkId: null, totalHops: 0, localTasksPerformed: ['embed_query', 'seed_search'] },
+    });
+    mockRunExplainCodebase.mockResolvedValue({
+      content: 'explore content',
+      chunks: dedupedChunks,
+      metadata: {
+        tokensSent: 150,
+        estimatedWithoutBraincache: 1900,
+        reductionPct: 92,
+        filesInContext: 2,
+        localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'parent_enrich', 'compress', 'cohesion_group', 'token_budget'],
+        cloudCallsMade: 0,
+      },
+    });
 
     // Dynamically import after mocks are in place
     const mod = await import('../../src/workflows/buildContext.js');
@@ -195,13 +233,14 @@ describe('runBuildContext', () => {
     expect(result.metadata).toHaveProperty('cloudCallsMade');
   });
 
-  it('metadata.localTasksPerformed for explore mode includes cohesion steps', async () => {
+  it('metadata.localTasksPerformed for lookup mode includes expected steps', async () => {
     const result = await runBuildContext('how does routing work');
     expect(result.metadata.localTasksPerformed).toEqual([
       'embed_query',
       'vector_search',
       'dedup',
       'parent_enrich',
+      'compress',
       'cohesion_group',
       'token_budget',
     ]);
@@ -325,23 +364,33 @@ describe('runBuildContext', () => {
     expect(combined).toContain('intent=lookup');
   });
 
-  it('calls enrichWithParentClass for explore mode', async () => {
-    mockClassifyRetrievalMode.mockReturnValue('explore');
+  it('calls enrichWithParentClass for lookup mode', async () => {
+    mockClassifyRetrievalMode.mockReturnValue('lookup');
     await runBuildContext('how does the system work');
     expect(mockEnrichWithParentClass).toHaveBeenCalled();
   });
 
-  it('calls formatGroupedContext for explore mode', async () => {
-    mockClassifyRetrievalMode.mockReturnValue('explore');
+  it('calls formatGroupedContext for lookup mode', async () => {
+    mockClassifyRetrievalMode.mockReturnValue('lookup');
     await runBuildContext('how does routing work');
     expect(mockFormatGroupedContext).toHaveBeenCalled();
   });
 
+  it('calls loadUserConfig to get user configuration', async () => {
+    await runBuildContext('test query');
+    expect(mockLoadUserConfig).toHaveBeenCalled();
+  });
+
+  it('calls resolveStrategy with the classified mode', async () => {
+    await runBuildContext('test query');
+    expect(mockResolveStrategy).toHaveBeenCalledWith('lookup', {}, undefined);
+  });
+
   describe('trace mode with edges table', () => {
     const seedChunk = fakeChunk('seed-1', '/project/src/auth.ts');
-    const mockHops = [
-      { chunkId: 'seed-1', filePath: '/project/src/auth.ts', name: 'authenticate', startLine: 10, endLine: 30, content: 'function authenticate() {}', hopDepth: 0 },
-      { chunkId: 'hop-1', filePath: '/project/src/db.ts', name: 'queryUser', startLine: 5, endLine: 20, content: 'function queryUser() {}', hopDepth: 1 },
+    const traceHops = [
+      { filePath: '/project/src/auth.ts', name: 'authenticate', startLine: 10, content: 'function authenticate() {}', callsFound: ['queryUser'], hopDepth: 0 },
+      { filePath: '/project/src/db.ts', name: 'queryUser', startLine: 5, content: 'function queryUser() {}', callsFound: ['query'], hopDepth: 1 },
     ];
 
     beforeEach(() => {
@@ -351,9 +400,14 @@ describe('runBuildContext', () => {
         return mockTable;
       });
       mockClassifyRetrievalMode.mockReturnValue('trace');
-      mockSearchChunks.mockResolvedValue([seedChunk]);
-      mockDeduplicateChunks.mockReturnValue([seedChunk]);
-      mockTraceFlow.mockResolvedValue(mockHops);
+      mockRunTraceFlow.mockResolvedValue({
+        hops: traceHops,
+        metadata: {
+          seedChunkId: 'seed-1',
+          totalHops: 2,
+          localTasksPerformed: ['embed_query', 'seed_search', 'bfs_trace', 'compress'],
+        },
+      });
       mockAssembleContext.mockReturnValue({
         content: 'trace content',
         chunks: [seedChunk],
@@ -363,25 +417,17 @@ describe('runBuildContext', () => {
       mockFormatGroupedContext.mockReturnValue('// ── /project/src/auth.ts ──\ntrace content');
     });
 
-    it('calls traceFlow when mode is trace and edges table exists', async () => {
+    it('calls runTraceFlow when mode is trace and edges table exists', async () => {
       await runBuildContext('trace the flow from authenticate');
-      expect(mockTraceFlow).toHaveBeenCalledWith(
-        mockEdgesTable,
-        mockTable,
-        'seed-1',
-        { maxHops: 3 }
+      expect(mockRunTraceFlow).toHaveBeenCalledWith(
+        'trace the flow from authenticate',
+        expect.objectContaining({ maxHops: 3 })
       );
     });
 
     it('localTasksPerformed for trace mode includes bfs_trace', async () => {
       const result = await runBuildContext('trace the flow from authenticate');
-      expect(result.metadata.localTasksPerformed).toEqual([
-        'embed_query',
-        'seed_search',
-        'bfs_trace',
-        'cohesion_group',
-        'token_budget',
-      ]);
+      expect(result.metadata.localTasksPerformed).toContain('bfs_trace');
     });
 
     it('applies cohesion grouping after trace', async () => {
@@ -397,19 +443,43 @@ describe('runBuildContext', () => {
       mockClassifyRetrievalMode.mockReturnValue('trace');
     });
 
-    it('falls back to explore mode behavior when no edges table', async () => {
+    it('falls back to lookup mode behavior when no edges table', async () => {
       const result = await runBuildContext('trace the auth flow');
-      // Should NOT call traceFlow
-      expect(mockTraceFlow).not.toHaveBeenCalled();
+      // Should NOT call runTraceFlow
+      expect(mockRunTraceFlow).not.toHaveBeenCalled();
       // Should use vector search + cohesion
       expect(mockSearchChunks).toHaveBeenCalled();
       expect(mockFormatGroupedContext).toHaveBeenCalled();
     });
 
-    it('logs warning when falling back from trace to explore', async () => {
+    it('logs warning when falling back from trace to lookup', async () => {
       await runBuildContext('trace the auth flow');
       const combined = stderrOutput.join('');
       expect(combined).toContain('No edges table found');
+    });
+  });
+
+  describe('explore mode', () => {
+    beforeEach(() => {
+      mockClassifyRetrievalMode.mockReturnValue('explore');
+      mockResolveStrategy.mockReturnValue({ limit: 20, distanceThreshold: 0.45 });
+    });
+
+    it('delegates to runExplainCodebase for explore mode', async () => {
+      await runBuildContext('explain the architecture');
+      expect(mockRunExplainCodebase).toHaveBeenCalledWith(
+        expect.objectContaining({ question: 'explain the architecture' })
+      );
+    });
+
+    it('does not call searchChunks directly for explore mode', async () => {
+      await runBuildContext('explain the architecture');
+      expect(mockSearchChunks).not.toHaveBeenCalled();
+    });
+
+    it('returns content from runExplainCodebase', async () => {
+      const result = await runBuildContext('explain the architecture');
+      expect(result.content).toBe('explore content');
     });
   });
 });
