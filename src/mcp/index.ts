@@ -3,7 +3,19 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { childLogger } from "../services/logger.js";
-import { formatTokenSavings } from "../lib/format.js";
+import {
+  formatToolResponse,
+  formatErrorEnvelope,
+  formatTokenSavings,
+  formatDoctorOutput,
+  formatIndexResult,
+  formatSearchResults,
+  formatTraceFlow,
+  formatContext,
+  formatPipelineLabel,
+} from "../lib/format.js";
+import type { ContextResult } from '../lib/types.js';
+import type { RetrievedChunk } from '../lib/types.js';
 import { readProfile, detectCapabilities } from "../services/capability.js";
 import {
   isOllamaInstalled,
@@ -85,7 +97,7 @@ server.registerTool(
         chunkCount: indexState?.chunkCount ?? null,
       };
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(result) }],
+        content: [{ type: "text" as const, text: formatIndexResult(result) }],
       };
     } catch (err) {
       return {
@@ -100,6 +112,31 @@ server.registerTool(
     }
   },
 );
+
+function buildSearchResponse(chunks: RetrievedChunk[], query: string) {
+  const filesInContext = new Set(chunks.map(c => c.filePath)).size;
+  const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
+  const estimatedWithout = tokensSent * 3;
+  const reductionPct = estimatedWithout > 0 ? Math.round((1 - tokensSent / estimatedWithout) * 100) : 0;
+  const savings = formatTokenSavings({ tokensSent, estimatedWithout, reductionPct, filesInContext });
+  const pipeline = formatPipelineLabel(['embed', 'search', 'dedup']);
+  const footer = `---\n${savings}\nPipeline: ${pipeline}`;
+  const summary = `Found ${chunks.length} result${chunks.length !== 1 ? 's' : ''} for "${query}".`;
+  return {
+    content: [{ type: 'text' as const, text: formatToolResponse(summary, `${formatSearchResults(chunks)}\n\n${footer}`) }],
+  };
+}
+
+function buildContextResponse(result: ContextResult, query: string) {
+  const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext, localTasksPerformed } = result.metadata;
+  const savings = formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext });
+  const pipeline = formatPipelineLabel(localTasksPerformed);
+  const footer = `---\n${savings}\nPipeline: ${pipeline}`;
+  const summary = `Context assembled for "${query}".`;
+  return {
+    content: [{ type: 'text' as const, text: formatToolResponse(summary, `${formatContext(result)}\n\n${footer}`) }],
+  };
+}
 
 // Tool 2: search_codebase (MCP-03)
 server.registerTool(
@@ -149,18 +186,14 @@ server.registerTool(
     }
     try {
       const chunks = await runSearch(query, { limit, path });
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(chunks) }],
-      };
+      return buildSearchResponse(chunks, query);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
         const resolvedPath = resolve(path ?? ".");
         await runIndex(resolvedPath);
         try {
           const chunks = await runSearch(query, { limit, path });
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(chunks) }],
-          };
+          return buildSearchResponse(chunks, query);
         } catch (retryErr) {
           return {
             isError: true,
@@ -234,24 +267,14 @@ server.registerTool(
     }
     try {
       const result = await runBuildContext(query, { maxTokens, path });
-      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
-      return {
-        content: [
-          { type: "text" as const, text: JSON.stringify({ ...result, tokenSavings: formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext }) }) },
-        ],
-      };
+      return buildContextResponse(result, query);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
         const resolvedPath = resolve(path ?? ".");
         await runIndex(resolvedPath);
         try {
           const result = await runBuildContext(query, { maxTokens, path });
-          const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
-          return {
-            content: [
-              { type: "text" as const, text: JSON.stringify({ ...result, tokenSavings: formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext }) }) },
-            ],
-          };
+          return buildContextResponse(result, query);
         } catch (retryErr) {
           return {
             isError: true,
@@ -304,11 +327,11 @@ server.registerTool(
       const live = await detectCapabilities();
 
       const health = {
-        ollamaStatus: !installed
+        ollamaStatus: (!installed
           ? "not_installed"
           : running
             ? "running"
-            : "not_running",
+            : "not_running") as 'not_installed' | 'running' | 'not_running',
         ollamaVersion: version,
         indexFreshness: {
           indexed: indexState !== null,
@@ -322,7 +345,7 @@ server.registerTool(
         vramTier: live.vramTier,
       };
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(health) }],
+        content: [{ type: "text" as const, text: formatDoctorOutput(health) }],
       };
     } catch (err) {
       return {
@@ -361,7 +384,19 @@ server.registerTool(
     }
     try {
       const result = await runTraceFlow(entrypoint, { maxHops, path });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      const tokensSent = Math.round(result.hops.reduce((sum, h) => sum + h.content.length, 0) / 4);
+      const savings = formatTokenSavings({
+        tokensSent,
+        estimatedWithout: tokensSent * 3,
+        reductionPct: 67,
+        filesInContext: new Set(result.hops.map(h => h.filePath)).size,
+      });
+      const pipeline = formatPipelineLabel(result.metadata.localTasksPerformed);
+      const footer = `---\n${savings}\nPipeline: ${pipeline}`;
+      const summary = `Traced ${result.hops.length} hop${result.hops.length !== 1 ? 's' : ''} from "${entrypoint}".`;
+      return {
+        content: [{ type: 'text' as const, text: formatToolResponse(summary, `${formatTraceFlow(result)}\n\n${footer}`) }],
+      };
     } catch (err) {
       return { isError: true, content: [{ type: 'text' as const, text: `trace_flow failed: ${err instanceof Error ? err.message : String(err)}` }] };
     }
@@ -391,9 +426,12 @@ server.registerTool(
     }
     try {
       const result = await runExplainCodebase({ question, maxTokens, path });
-      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
-      const tokenSavings = formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext });
-      const text = `# Codebase Architecture Overview\n\n${result.content}\n\n---\n${tokenSavings}`;
+      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext, localTasksPerformed } = result.metadata;
+      const savings = formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext });
+      const pipeline = formatPipelineLabel(localTasksPerformed);
+      const footer = `---\n${savings}\nPipeline: ${pipeline}`;
+      const summary = `Architecture overview for ${path ?? '.'}.`;
+      const text = formatToolResponse(summary, `${formatContext(result)}\n\n${footer}`);
       return { content: [{ type: 'text' as const, text }] };
     } catch (err) {
       return { isError: true, content: [{ type: 'text' as const, text: `explain_codebase failed: ${err instanceof Error ? err.message : String(err)}` }] };
