@@ -14,8 +14,8 @@ Requirements for Final Quality Pass milestone. Each maps to roadmap phases.
 
 ### Compression Protection
 
-- [ ] **COMP-01**: build_context protects chunks whose file or symbol name matches the query from body compression, spending token budget on the primary result first
-- [ ] **COMP-02**: build_context drops test file chunks and config file chunks before compressing any production source file that directly answers the query
+- [x] **COMP-01**: build_context protects chunks whose file or symbol name matches the query from body compression, spending token budget on the primary result first
+- [x] **COMP-02**: build_context drops test file chunks and config file chunks before compressing any production source file that directly answers the query
 
 ### Trace Quality
 
@@ -82,8 +82,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | PREC-01 | Phase 26 | Complete |
 | PREC-02 | Phase 26 | Complete |
-| COMP-01 | Phase 27 | Pending |
-| COMP-02 | Phase 27 | Pending |
+| COMP-01 | Phase 27 | Complete |
+| COMP-02 | Phase 27 | Complete |
 | TRACE-01 | Phase 28 | Pending |
 | TRACE-02 | Phase 28 | Pending |
 | TRACE-03 | Phase 28 | Pending |

@@ -88,7 +88,7 @@
 ### v2.3 Final Quality Pass (Phases 26-29)
 
 - [x] **Phase 26: Search Precision** - Exact-match and filename-aware retrieval boosting in search_codebase (completed 2026-04-03)
-- [ ] **Phase 27: Compression Protection** - Protect primary results from body compression, drop noise before trimming production code
+- [x] **Phase 27: Compression Protection** - Protect primary results from body compression, drop noise before trimming production code (completed 2026-04-03)
 - [ ] **Phase 28: Trace Output Quality** - Noise filtering, confidence warnings, and CLI entrypoint preference in trace_flow
 - [ ] **Phase 29: Explain Codebase Depth** - Behavioral summaries for key modules in explain_codebase
 
@@ -292,7 +292,10 @@ Plans:
   2. Calling `build_context("how does chunkFile work")` returns `chunkFile` in full while test file chunks (`logger.test.ts`, `compression.test.ts`, `flowTracer.test.ts`) are excluded before any production file is compressed (debug.md: chunkFile lookup scenario)
   3. When the token budget is tight, test file chunks are dropped first, config file chunks are dropped second, and production source files are compressed last
   4. A chunk whose file path or symbol name is a close match to the query is marked as the primary result and exempt from compression regardless of chunk size
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 27-01-PLAN.md — TDD: peripheral chunk drop and primary result compression protection
 
 ### Phase 28: Trace Output Quality
 **Goal**: trace_flow produces clean, trustworthy output — test files and stdlib methods are absent from hop lists, low-confidence seeds are surfaced explicitly, and CLI queries anchor to CLI entry files
@@ -346,8 +349,8 @@ Plans:
 | 23. Search Noise Reduction | v2.2 | 1/1 | Complete    | 2026-04-03 |
 | 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete    | 2026-04-03 |
 | 25. Tool Routing Documentation | v2.2 | 2/2 | Complete    | 2026-04-03 |
-| 26. Search Precision | v2.3 | 1/1 | Complete   | 2026-04-03 |
-| 27. Compression Protection | v2.3 | 0/? | Not started | - |
+| 26. Search Precision | v2.3 | 1/1 | Complete    | 2026-04-03 |
+| 27. Compression Protection | v2.3 | 1/1 | Complete   | 2026-04-03 |
 | 28. Trace Output Quality | v2.3 | 0/? | Not started | - |
 | 29. Explain Codebase Depth | v2.3 | 0/? | Not started | - |
 
