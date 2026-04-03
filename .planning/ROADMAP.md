@@ -11,7 +11,8 @@
 - ✅ **v1.1 Hardening** — Phases 6-12 (shipped 2026-04-01) — [archive](milestones/v1.1-ROADMAP.md)
 - ✅ **v1.1.1 Post-Ship Cleanup** — Phase 14 (shipped 2026-04-02)
 - ✅ **v1.2 MCP Tool Adoption** — Phase 13 (shipped 2026-04-02)
-- 📋 **v2.0 MCP Magic** — Phases 15-19 (planned)
+- ✅ **v2.0 MCP Magic** — Phases 15-19 (shipped 2026-04-03)
+- 📋 **v2.1 Presentation Magic** — Phases 20-21 (planned)
 
 ## Phases
 
@@ -53,13 +54,21 @@
 
 </details>
 
-**v2.0 MCP Magic (Phases 15-19)**
+<details>
+<summary>✅ v2.0 MCP Magic (Phases 15-19) — SHIPPED 2026-04-03</summary>
 
 - [x] **Phase 15: Storage Foundation and Index Pipeline** - Add LanceDB edges table, `.braincacheignore` support, and LanceDB write mutex; extend chunker to emit call edges (completed 2026-04-02)
 - [x] **Phase 16: Retrieval Intelligence** - Expand intent classifier to lookup/trace/explore modes, build flow tracer BFS service, add context cohesion grouping (completed 2026-04-03)
 - [x] **Phase 17: New MCP Tools and Workflows** - Ship `trace_flow` and `explain_codebase` MCP tools, configurable retrieval depth, and structural context compression (completed 2026-04-03)
 - [x] **Phase 18: File Watcher** - Live re-indexing via chokidar v5 with debounce and write-safe incremental updates (completed 2026-04-03)
 - [x] **Phase 19: CLAUDE.md Refinements** - Guide Claude toward new MCP tools with accurate routing language for the full 6-tool suite (completed 2026-04-03)
+
+</details>
+
+**v2.1 Presentation Magic (Phases 20-21)**
+
+- [ ] **Phase 20: Formatter Foundation** - Pure-function formatter layer in src/lib/format.ts with shared envelope, summary lines, tool-specific body renderers, and consistent error envelope
+- [ ] **Phase 21: MCP Handler Wiring and Metadata** - Wire all 6 MCP handlers to call their formatters, add token savings footer and pipeline labels to retrieval tools
 
 ## Phase Details
 
@@ -142,6 +151,34 @@ Plans:
 - [x] 19-01-PLAN.md — Update CLAUDE_MD_SECTION template and project CLAUDE.md with 6-tool routing table
 - [x] 19-02-PLAN.md — Add MCP handler tests for trace_flow and explain_codebase, full regression check
 
+### Phase 20: Formatter Foundation
+**Goal**: Every MCP tool response is produced by a type-safe pure-function formatter in src/lib/format.ts that delivers a consistent envelope — summary line, tool-specific body, and error handling — with no change to MCP behavior yet
+**Depends on**: Phase 19
+**Requirements**: FMT-01, FMT-02, REND-01, REND-02, REND-03, REND-04, META-02
+**Success Criteria** (what must be TRUE):
+  1. Calling `formatToolResponse` with a summary and body string produces a single formatted string beginning with the summary sentence
+  2. Each of the 5 tool-specific formatters (`formatSearchResults`, `formatContext`, `formatTraceFlow`, `formatDoctorOutput`, `formatIndexResult`) accepts its exact workflow return type — no `any` — and produces LLM-readable markdown with no ANSI escape codes
+  3. Passing zero results to `formatSearchResults` or `formatTraceFlow` produces a single clean sentence, not an empty structured frame
+  4. Passing an error to `formatErrorEnvelope` produces a consistent block with `Error:`, the message, and an optional `Suggestion:` line across all 6 tools
+  5. All formatter unit tests in `tests/lib/format.test.ts` pass, covering zero/one/many result cases per tool
+**Plans:** 1/2 plans executed
+
+Plans:
+- [x] 20-01-PLAN.md — Core formatters: envelope, error, token savings redesign, doctor, index result
+- [ ] 20-02-PLAN.md — Result-list formatters: search results, trace flow, context
+
+### Phase 21: MCP Handler Wiring and Metadata
+**Goal**: All 6 MCP tool handlers return formatted text produced by the Phase 20 formatters, with token savings and pipeline labels visible in retrieval tool responses — making the presentation change live and observable in Claude Code
+**Depends on**: Phase 20
+**Requirements**: META-01, META-03
+**Success Criteria** (what must be TRUE):
+  1. Calling `search_codebase` from Claude Code returns a numbered ranked list with score, file path, line number, symbol name, and chunk type — not a JSON string
+  2. Calling `trace_flow` returns numbered hops with depth, file path, line, symbol name, and calls found — not a JSON string
+  3. Calling `build_context` and `explain_codebase` include a token savings footer (tokens sent, estimated without, reduction %) in plain `label: value` format with no `padEnd` column alignment
+  4. Calling `build_context`, `explain_codebase`, `search_codebase`, or `trace_flow` shows a pipeline label summarising local tasks performed (e.g. `embed -> search -> dedup -> compress`)
+  5. Updated assertions in `tests/mcp/server.test.ts` confirm formatted output shapes and no JSON bleed-through in any handler response
+**Plans**: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -160,12 +197,14 @@ Plans:
 | 12. Integration Gap Cleanup | v1.1 | 1/1 | Complete | 2026-04-01 |
 | 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete | 2026-04-02 |
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
-| 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
-| 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
-| 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete    | 2026-04-03 |
-| 18. File Watcher | v2.0 | 2/2 | Complete    | 2026-04-03 |
-| 19. CLAUDE.md Refinements | v2.0 | 2/2 | Complete   | 2026-04-03 |
+| 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete | 2026-04-02 |
+| 16. Retrieval Intelligence | v2.0 | 3/3 | Complete | 2026-04-03 |
+| 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete | 2026-04-03 |
+| 18. File Watcher | v2.0 | 2/2 | Complete | 2026-04-03 |
+| 19. CLAUDE.md Refinements | v2.0 | 2/2 | Complete | 2026-04-03 |
+| 20. Formatter Foundation | v2.1 | 1/2 | In Progress|  |
+| 21. MCP Handler Wiring and Metadata | v2.1 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 19 planned (2 plans in 2 waves)*
+*Last updated: 2026-04-03 — Phase 20 planned (2 plans)*

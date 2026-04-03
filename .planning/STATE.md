@@ -2,42 +2,42 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 19-02-PLAN.md
-last_updated: "2026-04-03T05:10:33.249Z"
+status: executing
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-04-03T08:57:08.306Z"
 last_activity: 2026-04-03
 progress:
-  total_phases: 5
+  total_phases: 7
   completed_phases: 5
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_plans: 14
+  completed_plans: 13
+  percent: 0
 ---
 
 # Project State: Brain-Cache
 
-**Last updated:** 2026-04-02
-**Updated by:** roadmapper (v2.0 roadmap created)
+**Last updated:** 2026-04-03
+**Updated by:** roadmapper (v2.1 roadmap created)
 
 ---
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-02)
+See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 19 — claude.md-refinements
+**Current focus:** Phase 20 — Formatter Foundation
 
 ---
 
 ## Current Position
 
-Phase: 19 (claude.md-refinements) — EXECUTING
+Phase: 20 (Formatter Foundation) — EXECUTING
 Plan: 2 of 2
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-04-03
 
-Progress: [██████████] 100% (Phase 17, Plan 01 complete)
+Progress: [█████████░] 93% (13/14 plans complete)
 
 ---
 
@@ -47,66 +47,49 @@ Progress: [██████████] 100% (Phase 17, Plan 01 complete)
 
 None.
 
-### Key Decisions (Phase 17, Plan 01 — FlowHop callsFound, compression, configLoader)
+### Key Decisions (v2.1 Roadmap — from research)
 
-- flowTracer always queries edges per hop (even at maxHops depth) for callsFound; only children-enqueue is gated by depth check
-- compressChunk threshold is <= 200 returns unchanged; 201+ triggers structural body stripping
-- resolveStrategy uses spread precedence: { ...base, ...userOverride, ...toolOverride }
-- loadUserConfig reads ~/.brain-cache/config.json per call (no caching), returns {} on any error
-
-### Key Decisions (Phase 16, Plan 01 — three-mode intent classifier)
-
-- TRACE_KEYWORDS use multi-word phrases only (not single token 'trace') to avoid false positives on phrases like 'trace the error'
-- Ambiguity guard: 'trace the architecture' -> explore (not trace) because broad architectural terms win over trace prefix
-- classifyQueryIntent kept as deprecated re-export alias for backward compatibility with external callers
-- DIAGNOSTIC_DISTANCE_THRESHOLD and DIAGNOSTIC_SEARCH_LIMIT removed from config — inlined in RETRIEVAL_STRATEGIES
-
-### Key Decisions (Phase 15, Plan 03 — chunker edge extraction and pipeline wiring)
-
-- Edge extraction positioned before `nodeTypes.has()` guard so call_expression/import_statement nodes run for all AST nodes (not just chunkable ones)
-- `currentChunkId` tracking is approximate — updates after chunk push, top-level call expressions fall back to `filePath:0`
-- `toFile` is `null` at index time for call edges — symbol resolution deferred to query time
-- Import edges use `filePath:0` as `fromChunkId` — imports are file-level constructs
-
-### Key Decisions (Phase 15, Plan 02 — .braincacheignore support)
-
-- opts object pattern for crawlSourceFiles (not positional arg) — keeps signature clean for future optional params
-- loadIgnorePatterns is a standalone service, not merged into crawler — single responsibility, testable in isolation
-
-### Key Decisions (Phase 15 prerequisites — from research)
-
-- LanceDB edges table uses no vector column: `from_chunk_id`, `from_file`, `from_symbol`, `to_symbol`, `to_file`, `edge_type`
-- Chunker return type changes from `CodeChunk[]` to `{ chunks, edges }` — single `walkNodes()` traversal, no double-parse
-- LanceDB write mutex (Promise-chain serialization) must be added before any concurrent writes are possible
-- Cross-encoder reranking DEFERRED to v2.x — Ollama has no native `/api/rerank` endpoint (PR #7219 closed Sept 2025)
-- Structural context compression only (strip bodies, preserve signatures + JSDoc) — no LLM-based summarization
+- Formatter layer is pure functions in `src/lib/format.ts` only — no workflow or service changes
+- `src/mcp/index.ts` is the only other file that changes — replaces 6 `JSON.stringify()` calls with formatter calls
+- No ANSI escape codes in any formatter — MCP text content is consumed by Claude, not displayed in a terminal; ANSI inflates token count by 50-80%
+- No markdown tables — pipe characters render as raw `|---|---|` in MCP tool panels
+- Token savings footer belongs only on `build_context` and `explain_codebase` for retrieval tools; META-01 scopes it to all 4 retrieval tools (search_codebase, build_context, trace_flow, explain_codebase)
+- Pipeline labels (META-03) appear on the same 4 retrieval tools as the savings footer
+- Zero-result responses must be a single clean sentence — not an empty structured frame
+- `dedent` 1.7.2 is the only new npm dependency (tagged template literal dedenting for clean formatter source)
+- Phase 20 is a hard dependency for Phase 21 — handlers cannot call formatters that do not exist
+- `formatTokenSavings` must be redesigned in Phase 20 to eliminate `padEnd(27)` column alignment before any handler calls it
 
 ### Key Decisions (Prior milestones)
 
-- Phase 14: Reverted DEFAULT_DISTANCE_THRESHOLD to 0.3 (comment/value mismatch)
-- Phase 14: Excluded tree-sitter chunker test via vitest.config.ts — ELF header arch issue, not code defect
+- Phase 19: 6-tool routing table added to CLAUDE_MD_SECTION and project CLAUDE.md
+- Phase 17: trace_flow and explain_codebase MCP tools registered; buildContext routes by intent
+- Phase 16: Three-mode intent classifier (lookup/trace/explore) with RETRIEVAL_STRATEGIES
+- Phase 15: LanceDB edges table, .braincacheignore, write mutex, chunker returns { chunks, edges }
+- Phase 14: Reverted DEFAULT_DISTANCE_THRESHOLD to 0.3; tree-sitter chunker test excluded via vitest.config.ts
 - Phase 13: MCP tool descriptions rewritten with directive tone and explicit cross-references
 
 ### Session Notes
 
-v2.0 MCP Magic roadmap defined: 5 phases (15-19), 10 requirements, all mapped.
-Phase ordering: 15 (data foundation) → 16 (retrieval intelligence) → 17 (MCP tools) → 18 (file watcher) → 19 (CLAUDE.md).
-Phase 18 (file watcher) depends only on Phase 15 (write mutex + edges schema) — independent of retrieval work.
-chokidar v5 is the only new npm dependency for v2.0.
+v2.1 Presentation Magic roadmap defined: 2 phases (20-21), 9 requirements, all mapped.
+Phase ordering: 20 (pure formatter functions, no MCP behavior change) → 21 (wire handlers, behavior visible to Claude).
+Phase 20 is a hard dependency for Phase 21.
+Only 2 files change across the entire milestone: src/lib/format.ts and src/mcp/index.ts.
+No workflow, service, or CLI changes — presentation layer only.
 
 ### Quick Tasks Completed
 
-See prior STATE.md entries for v1.x quick tasks (archived).
+See prior STATE.md entries for v1.x and v2.0 quick tasks (archived).
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T05:10:33.245Z
+**Last session:** 2026-04-03T08:57:08.302Z
 
-**Stopped at:** Completed 19-02-PLAN.md
+**Stopped at:** Completed 20-01-PLAN.md
 
-**Next action:** `/gsd:plan-phase 15`
+**Next action:** `/gsd:plan-phase 20`
 
 ---
 *State initialized: 2026-03-31*
