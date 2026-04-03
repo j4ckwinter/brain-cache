@@ -3,9 +3,29 @@
 **Defined:** 2026-04-03
 **Core Value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
 
-## v2.3 Requirements
+## v2.4 Requirements
 
-Requirements for Final Quality Pass milestone. Each maps to roadmap phases.
+Requirements for Status Line milestone. Each maps to roadmap phases.
+
+### Session Stats
+
+- [x] **STAT-01**: MCP retrieval handlers (build_context, trace_flow, explain_codebase, search_codebase) accumulate tokensSent and estimatedWithoutBraincache to a session stats file after each call, using atomic writes safe for concurrent handler execution
+- [x] **STAT-02**: Session stats file includes a lastUpdatedAt timestamp; stats older than a configurable TTL (default 2 hours) are treated as expired and reset on next accumulation
+
+### Status Line Rendering
+
+- [ ] **STAT-03**: A Node.js status line script reads the session stats file and renders `brain-cache  ↓{pct}%  {n} saved` showing cumulative reduction percentage and absolute token count
+- [ ] **STAT-04**: When no stats file exists or stats are expired, the status line script renders `brain-cache  idle` instead of showing stale or zero data
+
+### Installation
+
+- [ ] **STAT-05**: `brain-cache init` installs the status line script to `~/.brain-cache/statusline.mjs` and configures `~/.claude/settings.json` with the statusLine entry
+- [ ] **STAT-06**: `brain-cache init` reads existing `settings.json` before writing, merging the statusLine key without clobbering other user settings, and warns if a statusLine entry already exists
+
+## v2.3 Requirements (Complete)
+
+<details>
+<summary>All 9 requirements complete</summary>
 
 ### Search Precision
 
@@ -26,7 +46,9 @@ Requirements for Final Quality Pass milestone. Each maps to roadmap phases.
 
 ### Explain Quality
 
-- [ ] **EXPL-01**: explain_codebase includes behavioral summaries for key modules, prioritizing exports and cross-cutting wiring over internal helpers
+- [x] **EXPL-01**: explain_codebase includes behavioral summaries for key modules, prioritizing exports and cross-cutting wiring over internal helpers
+
+</details>
 
 ## v2.2 Requirements (Complete)
 
@@ -80,21 +102,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PREC-01 | Phase 26 | Complete |
-| PREC-02 | Phase 26 | Complete |
-| COMP-01 | Phase 27 | Complete |
-| COMP-02 | Phase 27 | Complete |
-| TRACE-01 | Phase 28 | Complete |
-| TRACE-02 | Phase 28 | Complete |
-| TRACE-03 | Phase 28 | Complete |
-| TRACE-04 | Phase 28 | Complete |
-| EXPL-01 | Phase 29 | Pending |
+| STAT-01 | Phase 30 | Complete |
+| STAT-02 | Phase 30 | Complete |
+| STAT-03 | Phase 31 | Pending |
+| STAT-04 | Phase 31 | Pending |
+| STAT-05 | Phase 32 | Pending |
+| STAT-06 | Phase 32 | Pending |
 
 **Coverage:**
-- v2.3 requirements: 9 total
-- Mapped to phases: 9
+- v2.4 requirements: 6 total
+- Mapped to phases: 6
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 — v2.3 traceability complete (all 9 requirements mapped to Phases 26-29)*
+*Last updated: 2026-04-03 — v2.4 traceability updated (all 6 requirements mapped to phases 30-32)*
