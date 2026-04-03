@@ -8,6 +8,7 @@ import {
   formatSearchResults,
   formatTraceFlow,
   formatContext,
+  formatPipelineLabel,
 } from '../../src/lib/format.js';
 import type { DoctorHealth, IndexResult } from '../../src/lib/format.js';
 import type { RetrievedChunk, ContextResult, ContextMetadata } from '../../src/lib/types.js';
@@ -457,5 +458,17 @@ describe('formatContext', () => {
     const ctx = makeContextResult('');
     const result = formatContext(ctx);
     expect(result).toBe('');
+  });
+});
+
+describe('formatPipelineLabel', () => {
+  it('joins tasks with arrow separator', () => {
+    expect(formatPipelineLabel(['embed', 'search', 'dedup'])).toBe('embed -> search -> dedup');
+  });
+  it('returns single task without separator', () => {
+    expect(formatPipelineLabel(['embed'])).toBe('embed');
+  });
+  it('returns empty string for empty array', () => {
+    expect(formatPipelineLabel([])).toBe('');
   });
 });

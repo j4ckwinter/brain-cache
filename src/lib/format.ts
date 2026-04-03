@@ -128,3 +128,7 @@ export function formatTraceFlow(result: TraceFlowResult): string {
 export function formatContext(result: ContextResult): string {
   return result.content;
 }
+
+export function formatPipelineLabel(tasks: string[]): string {
+  return tasks.join(' -> ');
+}
