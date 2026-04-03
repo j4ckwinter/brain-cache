@@ -361,22 +361,5 @@ export async function queryEdgesFrom(
   return edgesTable.query().where(`from_chunk_id = '${escaped}'`).toArray() as Promise<EdgeRow[]>;
 }
 
-// --- Edges table ---
-
-/**
- * Shape of a row stored in the LanceDB edges table.
- * Field names use snake_case to match the Arrow schema column names.
- */
-export interface EdgeRow {
-  from_chunk_id: string;
-  from_file: string;
-  from_symbol: string | null;
-  to_symbol: string;
-  to_file: string | null;
-  edge_type: 'call' | 'import';
-  /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
-  [key: string]: unknown;
-}
-
 // Re-export CodeChunk for consumers of this module that only import from lancedb.ts
 export type { CodeChunk };

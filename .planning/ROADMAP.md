@@ -59,7 +59,7 @@
 - [x] **Phase 16: Retrieval Intelligence** - Expand intent classifier to lookup/trace/explore modes, build flow tracer BFS service, add context cohesion grouping (completed 2026-04-03)
 - [x] **Phase 17: New MCP Tools and Workflows** - Ship `trace_flow` and `explain_codebase` MCP tools, configurable retrieval depth, and structural context compression (completed 2026-04-03)
 - [x] **Phase 18: File Watcher** - Live re-indexing via chokidar v5 with debounce and write-safe incremental updates (completed 2026-04-03)
-- [ ] **Phase 19: CLAUDE.md Refinements** - Guide Claude toward new MCP tools with accurate routing language for the full 6-tool suite
+- [x] **Phase 19: CLAUDE.md Refinements** - Guide Claude toward new MCP tools with accurate routing language for the full 6-tool suite (completed 2026-04-03)
 
 ## Phase Details
 
@@ -136,11 +136,11 @@ Plans:
   2. In a fresh Claude Code session, Claude calls `explain_codebase` (not `build_context` or file-read tools) when asked to explain the project architecture
   3. The CLAUDE.md routing table covers all 6 tools with clear trigger conditions and explicit "use X instead" cross-references
   4. Running `brain-cache init` on a new project produces a CLAUDE.md section that reflects the v2.0 tool set
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 19-01-PLAN.md — Update CLAUDE_MD_SECTION template and project CLAUDE.md with 6-tool routing table
-- [ ] 19-02-PLAN.md — Add MCP handler tests for trace_flow and explain_codebase, full regression check
+- [x] 19-02-PLAN.md — Add MCP handler tests for trace_flow and explain_codebase, full regression check
 
 ## Progress
 
@@ -164,7 +164,7 @@ Plans:
 | 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
 | 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete    | 2026-04-03 |
 | 18. File Watcher | v2.0 | 2/2 | Complete    | 2026-04-03 |
-| 19. CLAUDE.md Refinements | v2.0 | 1/2 | In Progress|  |
+| 19. CLAUDE.md Refinements | v2.0 | 2/2 | Complete   | 2026-04-03 |
 
 ---
 *Roadmap created: 2026-03-31*
