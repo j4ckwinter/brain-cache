@@ -306,7 +306,11 @@ Plans:
   2. Hop lists for any traced function exclude native Array/Promise/String methods (`map`, `filter`, `includes`, `resolve`, `push`, `has`) — only project-owned symbols appear as callees (debug.md: runBuildContext workflow trace scenario)
   3. Querying `trace_flow("nonexistentFunction")` with a top-match similarity below 0.5 produces a visible warning line — e.g. `No confident match for "nonexistentFunction" — tracing nearest match: resetState (watch.ts:13, similarity: 0.31)` — rather than a structurally identical-looking trace (debug.md: nonexistent symbol query scenario)
   4. Querying `trace_flow("index_repo CLI command to LanceDB storage")` resolves to a symbol in `src/cli/` or a file containing `program.command(...)` as the seed, not a mid-stack service function (debug.md: CLI-to-LanceDB indexing trace scenario)
-**Plans**: TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 28-01-PLAN.md — TDD: post-BFS test file hop exclusion and stdlib callsFound filtering
+- [ ] 28-02-PLAN.md — TDD: low-confidence seed warning and CLI seed bias
 
 ### Phase 29: Explain Codebase Depth
 **Goal**: explain_codebase describes what each key module does, not just that it exists — prioritizing exports and cross-cutting wiring over internal helpers
@@ -350,8 +354,8 @@ Plans:
 | 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete    | 2026-04-03 |
 | 25. Tool Routing Documentation | v2.2 | 2/2 | Complete    | 2026-04-03 |
 | 26. Search Precision | v2.3 | 1/1 | Complete    | 2026-04-03 |
-| 27. Compression Protection | v2.3 | 1/1 | Complete   | 2026-04-03 |
-| 28. Trace Output Quality | v2.3 | 0/? | Not started | - |
+| 27. Compression Protection | v2.3 | 1/1 | Complete    | 2026-04-03 |
+| 28. Trace Output Quality | v2.3 | 0/2 | Not started | - |
 | 29. Explain Codebase Depth | v2.3 | 0/? | Not started | - |
 
 ---
