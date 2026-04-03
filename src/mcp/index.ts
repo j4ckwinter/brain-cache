@@ -28,6 +28,7 @@ import { runSearch } from "../workflows/search.js";
 import { runBuildContext } from "../workflows/buildContext.js";
 import { runTraceFlow } from "../workflows/traceFlow.js";
 import { runExplainCodebase } from "../workflows/explainCodebase.js";
+import { accumulateStats } from "../services/sessionStats.js";
 
 declare const __BRAIN_CACHE_VERSION__: string | undefined;
 const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
@@ -186,6 +187,10 @@ server.registerTool(
     }
     try {
       const chunks = await runSearch(query, { limit, path });
+      const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
+      const estimatedWithoutBraincache = tokensSent * 3;
+      accumulateStats({ tokensSent, estimatedWithoutBraincache })
+        .catch(err => log.warn({ err }, 'stats accumulation failed'));
       return buildSearchResponse(chunks, query);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
@@ -193,6 +198,10 @@ server.registerTool(
         await runIndex(resolvedPath);
         try {
           const chunks = await runSearch(query, { limit, path });
+          const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
+          const estimatedWithoutBraincache = tokensSent * 3;
+          accumulateStats({ tokensSent, estimatedWithoutBraincache })
+            .catch(err => log.warn({ err }, 'stats accumulation failed'));
           return buildSearchResponse(chunks, query);
         } catch (retryErr) {
           return {
@@ -267,6 +276,10 @@ server.registerTool(
     }
     try {
       const result = await runBuildContext(query, { maxTokens, path });
+      accumulateStats({
+        tokensSent: result.metadata.tokensSent,
+        estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
+      }).catch(err => log.warn({ err }, 'stats accumulation failed'));
       return buildContextResponse(result, query);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
@@ -274,6 +287,10 @@ server.registerTool(
         await runIndex(resolvedPath);
         try {
           const result = await runBuildContext(query, { maxTokens, path });
+          accumulateStats({
+            tokensSent: result.metadata.tokensSent,
+            estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
+          }).catch(err => log.warn({ err }, 'stats accumulation failed'));
           return buildContextResponse(result, query);
         } catch (retryErr) {
           return {
@@ -384,6 +401,10 @@ server.registerTool(
     }
     try {
       const result = await runTraceFlow(entrypoint, { maxHops, path });
+      accumulateStats({
+        tokensSent: result.metadata.tokensSent,
+        estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
+      }).catch(err => log.warn({ err }, 'stats accumulation failed'));
       const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
       const savings = formatTokenSavings({
         tokensSent,
@@ -429,6 +450,10 @@ server.registerTool(
     }
     try {
       const result = await runExplainCodebase({ question, maxTokens, path });
+      accumulateStats({
+        tokensSent: result.metadata.tokensSent,
+        estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
+      }).catch(err => log.warn({ err }, 'stats accumulation failed'));
       const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext, localTasksPerformed } = result.metadata;
       const savings = formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext });
       const pipeline = formatPipelineLabel(localTasksPerformed);
