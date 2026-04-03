@@ -21,9 +21,9 @@ Requirements for Presentation Magic milestone. Each maps to roadmap phases.
 
 ### Metadata & Errors
 
-- [ ] **META-01**: Token savings metadata footer appears consistently on all 4 retrieval tools (search_codebase, build_context, trace_flow, explain_codebase)
+- [x] **META-01**: Token savings metadata footer appears consistently on all 4 retrieval tools (search_codebase, build_context, trace_flow, explain_codebase)
 - [x] **META-02**: All 6 tools use a consistent error envelope with Error label, message, and optional Suggestion line
-- [ ] **META-03**: Retrieval tools show a pipeline label in the metadata footer summarising local tasks performed
+- [x] **META-03**: Retrieval tools show a pipeline label in the metadata footer summarising local tasks performed
 
 ## v2.0 Requirements (Validated)
 
@@ -84,9 +84,9 @@ Requirements for Presentation Magic milestone. Each maps to roadmap phases.
 | REND-02 | Phase 20 | Complete |
 | REND-03 | Phase 20 | Complete |
 | REND-04 | Phase 20 | Complete |
-| META-01 | Phase 21 | Pending |
+| META-01 | Phase 21 | Complete |
 | META-02 | Phase 20 | Complete |
-| META-03 | Phase 21 | Pending |
+| META-03 | Phase 21 | Complete |
 
 **Coverage:**
 - v2.1 requirements: 9 total

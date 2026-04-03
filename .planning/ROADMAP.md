@@ -67,8 +67,8 @@
 
 **v2.1 Presentation Magic (Phases 20-21)**
 
-- [ ] **Phase 20: Formatter Foundation** - Pure-function formatter layer in src/lib/format.ts with shared envelope, summary lines, tool-specific body renderers, and consistent error envelope
-- [ ] **Phase 21: MCP Handler Wiring and Metadata** - Wire all 6 MCP handlers to call their formatters, add token savings footer and pipeline labels to retrieval tools
+- [x] **Phase 20: Formatter Foundation** - Pure-function formatter layer in src/lib/format.ts with shared envelope, summary lines, tool-specific body renderers, and consistent error envelope (completed 2026-04-03)
+- [x] **Phase 21: MCP Handler Wiring and Metadata** - Wire all 6 MCP handlers to call their formatters, add token savings footer and pipeline labels to retrieval tools (completed 2026-04-03)
 
 ## Phase Details
 
@@ -161,11 +161,11 @@ Plans:
   3. Passing zero results to `formatSearchResults` or `formatTraceFlow` produces a single clean sentence, not an empty structured frame
   4. Passing an error to `formatErrorEnvelope` produces a consistent block with `Error:`, the message, and an optional `Suggestion:` line across all 6 tools
   5. All formatter unit tests in `tests/lib/format.test.ts` pass, covering zero/one/many result cases per tool
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 20-01-PLAN.md — Core formatters: envelope, error, token savings redesign, doctor, index result
-- [ ] 20-02-PLAN.md — Result-list formatters: search results, trace flow, context
+- [x] 20-02-PLAN.md — Result-list formatters: search results, trace flow, context
 
 ### Phase 21: MCP Handler Wiring and Metadata
 **Goal**: All 6 MCP tool handlers return formatted text produced by the Phase 20 formatters, with token savings and pipeline labels visible in retrieval tool responses — making the presentation change live and observable in Claude Code
@@ -177,7 +177,11 @@ Plans:
   3. Calling `build_context` and `explain_codebase` include a token savings footer (tokens sent, estimated without, reduction %) in plain `label: value` format with no `padEnd` column alignment
   4. Calling `build_context`, `explain_codebase`, `search_codebase`, or `trace_flow` shows a pipeline label summarising local tasks performed (e.g. `embed -> search -> dedup -> compress`)
   5. Updated assertions in `tests/mcp/server.test.ts` confirm formatted output shapes and no JSON bleed-through in any handler response
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 21-01-PLAN.md — Add formatPipelineLabel to format.ts, wire all 6 MCP handlers to formatters
+- [x] 21-02-PLAN.md — Update server.test.ts assertions for formatted output, pipeline labels, and token savings
 
 ## Progress
 
@@ -202,9 +206,9 @@ Plans:
 | 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 18. File Watcher | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 19. CLAUDE.md Refinements | v2.0 | 2/2 | Complete | 2026-04-03 |
-| 20. Formatter Foundation | v2.1 | 1/2 | In Progress|  |
-| 21. MCP Handler Wiring and Metadata | v2.1 | 0/? | Not started | - |
+| 20. Formatter Foundation | v2.1 | 2/2 | Complete    | 2026-04-03 |
+| 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete   | 2026-04-03 |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 20 planned (2 plans)*
+*Last updated: 2026-04-03 — Phase 21 planned (2 plans)*
