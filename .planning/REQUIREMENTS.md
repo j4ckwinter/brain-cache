@@ -30,7 +30,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 
 ### Adoption
 
-- [ ] **ADOPT-01**: CLAUDE.md refinements to guide Claude toward new MCP tools (trace_flow, explain_codebase) with clear routing guidance
+- [x] **ADOPT-01**: CLAUDE.md refinements to guide Claude toward new MCP tools (trace_flow, explain_codebase) with clear routing guidance
 
 ## Future Requirements
 
@@ -65,7 +65,7 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 | ADV-01 | Phase 17 | Complete |
 | COMP-01 | Phase 17 | Complete |
 | INC-02 | Phase 18 | Complete |
-| ADOPT-01 | Phase 19 | Pending |
+| ADOPT-01 | Phase 19 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 10 total, mapped: 10, unmapped: 0
