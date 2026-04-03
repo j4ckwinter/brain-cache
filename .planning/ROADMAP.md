@@ -121,11 +121,11 @@ Plans:
   2. Saving multiple files in rapid succession (e.g. a formatter run) triggers a single debounced re-index pass, not one pass per file
   3. Files matching `.braincacheignore` patterns are not re-indexed when modified
   4. The file watcher and a concurrent `brain-cache index` command do not corrupt the LanceDB table
-**Plans:** 2 plans in 2 waves
+**Plans:** 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
-- [ ] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
+- [ ] 18-01-PLAN.md — fileWatcher service and watch workflow with debounce, cross-process lock, signal cleanup
+- [ ] 18-02-PLAN.md — CLI watch command wiring, chokidar install, end-to-end verification
 
 ### Phase 19: CLAUDE.md Refinements
 **Goal**: Claude naturally routes to the correct brain-cache tool for each query type without user guidance, across the full 6-tool suite
@@ -139,8 +139,8 @@ Plans:
 **Plans:** 2 plans in 2 waves
 
 Plans:
-- [ ] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
-- [ ] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
+- [ ] 19-01-PLAN.md — TBD
+- [ ] 19-02-PLAN.md — TBD
 
 ## Progress
 
@@ -162,10 +162,10 @@ Plans:
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
 | 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
-| 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete   | 2026-04-03 |
-| 18. File Watcher | v2.0 | 0/? | Not started | - |
+| 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete    | 2026-04-03 |
+| 18. File Watcher | v2.0 | 0/2 | Planned | - |
 | 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 17 planned (2 plans in 2 waves)*
+*Last updated: 2026-04-03 — Phase 18 planned (2 plans in 2 waves)*
