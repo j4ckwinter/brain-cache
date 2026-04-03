@@ -106,7 +106,11 @@ Plans:
   3. A user can set per-query-type retrieval depth in `~/.brain-cache/config.json` and have it honored without restarting the MCP server
   4. Chunks exceeding the compression threshold have their function/class body stripped and a structured `// [compressed]` manifest prepended, preserving signatures and JSDoc
   5. `build_context` routes trace queries to `runTraceFlow` and explore queries to `runExplainCodebase` automatically
-**Plans**: TBD
+**Plans:** 2 plans in 2 waves
+
+Plans:
+- [ ] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
+- [ ] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
 
 ### Phase 18: File Watcher
 **Goal**: Brain-cache keeps the index current automatically as files change, without requiring manual re-index
@@ -117,7 +121,11 @@ Plans:
   2. Saving multiple files in rapid succession (e.g. a formatter run) triggers a single debounced re-index pass, not one pass per file
   3. Files matching `.braincacheignore` patterns are not re-indexed when modified
   4. The file watcher and a concurrent `brain-cache index` command do not corrupt the LanceDB table
-**Plans**: TBD
+**Plans:** 2 plans in 2 waves
+
+Plans:
+- [ ] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
+- [ ] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
 
 ### Phase 19: CLAUDE.md Refinements
 **Goal**: Claude naturally routes to the correct brain-cache tool for each query type without user guidance, across the full 6-tool suite
@@ -128,7 +136,11 @@ Plans:
   2. In a fresh Claude Code session, Claude calls `explain_codebase` (not `build_context` or file-read tools) when asked to explain the project architecture
   3. The CLAUDE.md routing table covers all 6 tools with clear trigger conditions and explicit "use X instead" cross-references
   4. Running `brain-cache init` on a new project produces a CLAUDE.md section that reflects the v2.0 tool set
-**Plans**: TBD
+**Plans:** 2 plans in 2 waves
+
+Plans:
+- [ ] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
+- [ ] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
 
 ## Progress
 
@@ -149,11 +161,11 @@ Plans:
 | 13. MCP Tool Description Rewrite | v1.2 | 1/1 | Complete | 2026-04-02 |
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
-| 16. Retrieval Intelligence | v2.0 | 3/3 | Complete   | 2026-04-03 |
-| 17. New MCP Tools and Workflows | v2.0 | 0/? | Not started | - |
+| 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
+| 17. New MCP Tools and Workflows | v2.0 | 0/2 | Planned     | - |
 | 18. File Watcher | v2.0 | 0/? | Not started | - |
 | 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-02 — Phase 15 planned (3 plans in 2 waves)*
+*Last updated: 2026-04-03 — Phase 17 planned (2 plans in 2 waves)*
