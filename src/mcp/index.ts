@@ -143,7 +143,7 @@ server.registerTool(
   "search_codebase",
   {
     description:
-      "Locate specific code — functions, symbols, definitions, implementations, and type declarations — using semantic search that finds code by meaning, not just keyword match. This is a locator tool — it finds WHERE code lives. For understanding HOW code works or answering questions that span multiple files, use build_context instead. Requires index_repo to have been run first.",
+      "Locate specific code — functions, symbols, definitions, implementations, and type declarations — using semantic search that finds code by meaning, not just keyword match. This is a locator tool — it finds WHERE code lives. For understanding HOW code works or answering questions that span multiple files, use build_context instead. Requires index_repo to have been run first. Do NOT use this tool to understand how code works or answer behavioral questions — use build_context once you have located the symbol.",
     inputSchema: {
       query: z.string().describe("Natural language query string"),
       limit: z
@@ -224,7 +224,7 @@ server.registerTool(
   "build_context",
   {
     description:
-      "Prefer this tool when answering questions like 'how does X work', 'explain the architecture', 'what happens when Y', or any question requiring understanding across multiple files. Retrieves semantically relevant code across the entire repo, deduplicates, and assembles a token-budgeted context block — more accurate and efficient than reading files individually or relying on memory. Use this before answering to ensure your response is grounded in actual code rather than assumptions. Ideal for explaining how systems work, understanding workflows and data flow, answering architectural questions, multi-file reasoning, and debugging unfamiliar code paths. Requires index_repo to have been run first.",
+      "Use this tool when answering questions like 'how does X work', 'what does this function do', or any question requiring understanding of specific code behavior across multiple files. Retrieves semantically relevant code across the entire repo, deduplicates, and assembles a token-budgeted context block — more accurate and efficient than reading files individually or relying on memory. Use this before answering to ensure your response is grounded in actual code rather than assumptions. Ideal for explaining how systems work, understanding workflows and data flow, answering code behavior questions, multi-file reasoning, and debugging unfamiliar code paths. Do NOT use this tool when you need to trace a call path across files — use trace_flow instead. Do NOT use this tool for architecture overviews — use explain_codebase instead. Requires index_repo to have been run first.",
     inputSchema: {
       query: z.string().describe("Natural language query or question"),
       maxTokens: z
@@ -366,7 +366,7 @@ server.registerTool(
   'trace_flow',
   {
     description:
-      'Trace call paths from an entrypoint symbol. Returns a structured hops[] array showing which functions are called in sequence, their file locations, and what they call next. Use this instead of build_context when asked to trace how a function call propagates through the codebase, e.g. "how does indexing flow from CLI to LanceDB". Requires index_repo to have been run first.',
+      'Trace call paths from an entrypoint symbol. Returns a structured hops[] array showing which functions are called in sequence, their file locations, and what they call next. Use this instead of build_context when asked to trace how a function call propagates through the codebase, e.g. "how does indexing flow from CLI to LanceDB". Requires index_repo to have been run first. Do NOT use this tool when the question is about how code works or what a function does — use build_context instead.',
     inputSchema: {
       entrypoint: z.string().describe('Natural language description of the starting function or entry point to trace from, e.g. "runBuildContext workflow" or "how does indexing work"'),
       maxHops: z.number().int().min(1).max(10).optional().describe('Maximum call depth to follow (default 3)'),
@@ -408,7 +408,7 @@ server.registerTool(
   'explain_codebase',
   {
     description:
-      'Get a high-level architecture overview of the indexed codebase. Returns module-grouped summaries describing what each part of the repo does. Use this instead of build_context when asked to explain the project architecture, understand the overall structure, or get oriented in a new codebase. No follow-up question required — works with just a project path. Requires index_repo to have been run first.',
+      'Get a high-level architecture overview of the indexed codebase. Returns module-grouped summaries describing what each part of the repo does. Use this instead of build_context when asked to explain the project architecture, understand the overall structure, or get oriented in a new codebase. No follow-up question required — works with just a project path. Requires index_repo to have been run first. Do NOT use this tool for questions about specific code behavior or how a particular function works — use build_context instead.',
     inputSchema: {
       question: z.string().optional().describe('Optional focus question, e.g. "how is authentication structured". Defaults to a broad architecture overview.'),
       maxTokens: z.number().int().min(100).max(100000).optional().describe('Token budget for assembled context (default 4096)'),
