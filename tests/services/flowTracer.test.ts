@@ -328,6 +328,26 @@ describe('traceFlow — callsFound', () => {
     // queryEdgesFrom called for both seed and chunk-a
     expect(mockQueryEdgesFrom).toHaveBeenCalledTimes(2);
   });
+
+  it('deduplicates callsFound when edges table has duplicate to_symbol entries (OUT-01)', async () => {
+    const seedRow = makeChunkRow({ id: 'seed', name: 'seedFunc', file_path: 'src/a.ts' });
+
+    mockQueryEdgesFrom.mockResolvedValueOnce([
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcA', from_file: 'src/a.ts' }),
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcA', from_file: 'src/a.ts' }),
+      makeEdgeRow({ from_chunk_id: 'seed', to_symbol: 'funcB', from_file: 'src/a.ts' }),
+    ]);
+
+    const chunksTable = makeSequentialTable([
+      [seedRow], // lookup seed
+      [],        // resolve funcA -> not found
+      [],        // resolve funcB -> not found
+    ]);
+
+    const result = await traceFlow({} as Table, chunksTable, 'seed');
+
+    expect(result[0].callsFound).toEqual(['funcA', 'funcB']);
+  });
 });
 
 describe('resolveSymbolToChunkId', () => {
