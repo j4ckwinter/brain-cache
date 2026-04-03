@@ -1,3 +1,4 @@
+import { dirname, relative, basename } from 'node:path';
 import type { Table } from '@lancedb/lancedb';
 import type { RetrievedChunk } from '../lib/types.js';
 import { formatChunk, countChunkTokens } from './tokenCounter.js';
@@ -133,4 +134,121 @@ export function formatGroupedContext(groups: Map<string, RetrievedChunk[]>): str
   }
 
   return sections.join('\n\n---\n\n');
+}
+
+/**
+ * Extracts the first plain-text sentence from a JSDoc comment in chunk content.
+ * Skips compressed manifest lines (// [compressed], // Signature:, // [body stripped])
+ * before searching for JSDoc. Returns null if no JSDoc or no plain description found (D-05).
+ */
+export function extractBehavioralSummary(content: string): string | null {
+  const lines = content.split('\n');
+  const jsDocLines: string[] = [];
+  let inJsDoc = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (
+      trimmed.startsWith('// [compressed]') ||
+      trimmed.startsWith('// Signature:') ||
+      trimmed.startsWith('// [body stripped]')
+    ) continue;
+    if (trimmed.startsWith('/**')) {
+      inJsDoc = true;
+      jsDocLines.push(line);
+      if (trimmed.endsWith('*/')) break;
+      continue;
+    }
+    if (inJsDoc) {
+      jsDocLines.push(line);
+      if (trimmed.endsWith('*/')) break;
+      continue;
+    }
+  }
+  if (jsDocLines.length === 0) return null;
+  const descLines = jsDocLines
+    .map(l => l.replace(/^\s*\/?\*+\s?/, '').replace(/\s*\*\/.*$/, '').trim())
+    .filter(l => l.length > 0 && !l.startsWith('@') && l !== '/');
+  return descLines[0] ?? null;
+}
+
+/**
+ * Groups chunks by their parent directory (module) relative to rootDir.
+ * Within each group, chunks are sorted by startLine ascending.
+ */
+export function groupChunksByModule(
+  chunks: RetrievedChunk[],
+  rootDir: string,
+): Map<string, RetrievedChunk[]> {
+  const groups = new Map<string, RetrievedChunk[]>();
+  for (const chunk of chunks) {
+    const rel = relative(rootDir, chunk.filePath);
+    const moduleKey = dirname(rel) || '.';
+    const group = groups.get(moduleKey);
+    if (group === undefined) groups.set(moduleKey, [chunk]);
+    else group.push(chunk);
+  }
+  for (const [, group] of groups) {
+    group.sort((a, b) => a.startLine - b.startLine);
+  }
+  return groups;
+}
+
+/**
+ * Extracts internal dependency stems from relative imports in chunk content.
+ * Excludes external packages and Node.js builtins (D-10).
+ * Returns sorted, deduplicated module stems.
+ */
+export function extractWiringAnnotations(chunks: RetrievedChunk[]): string[] {
+  const importPattern = /from\s+['"](\.[^'"]+)['"]/g;
+  const internalDeps = new Set<string>();
+  for (const chunk of chunks) {
+    for (const match of chunk.content.matchAll(importPattern)) {
+      const importPath = match[1];
+      const stem = importPath.replace(/\.js$/, '').split('/').pop();
+      if (stem && stem.length > 1) {
+        internalDeps.add(stem);
+      }
+    }
+  }
+  return [...internalDeps].sort();
+}
+
+/**
+ * Formats module-grouped chunks into narrative prose with behavioral summaries
+ * and wiring annotations. Uses "### module:" headers (D-07).
+ */
+export function formatModuleNarratives(groups: Map<string, RetrievedChunk[]>): string {
+  const sections: string[] = [];
+
+  for (const [moduleKey, chunks] of groups) {
+    const lines: string[] = [`### module: ${moduleKey}`];
+
+    // Sub-group by file within the module
+    const byFile = new Map<string, RetrievedChunk[]>();
+    for (const chunk of chunks) {
+      const file = chunk.filePath;
+      const group = byFile.get(file);
+      if (group === undefined) byFile.set(file, [chunk]);
+      else group.push(chunk);
+    }
+
+    for (const [filePath, fileChunks] of byFile) {
+      const fileName = basename(filePath);
+      const summary = extractBehavioralSummary(fileChunks[0].content);
+      if (summary) {
+        lines.push(`\n**${fileName}** -- ${summary}`);
+      } else {
+        lines.push(`\n**${fileName}**`);
+      }
+
+      const wiring = extractWiringAnnotations(fileChunks);
+      if (wiring.length > 0) {
+        lines.push(`  imports: ${wiring.join(', ')}`);
+      }
+    }
+
+    sections.push(lines.join('\n'));
+  }
+
+  return sections.join('\n\n');
 }
