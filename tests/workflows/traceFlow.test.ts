@@ -41,6 +41,10 @@ vi.mock('../../src/services/configLoader.js', () => ({
   resolveStrategy: vi.fn(),
 }));
 
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn(),
+}));
+
 import { readProfile } from '../../src/services/capability.js';
 import { isOllamaRunning } from '../../src/services/ollama.js';
 import { openDatabase, readIndexState } from '../../src/services/lancedb.js';
@@ -49,8 +53,10 @@ import { searchChunks, deduplicateChunks } from '../../src/services/retriever.js
 import { traceFlow } from '../../src/services/flowTracer.js';
 import { compressChunk } from '../../src/services/compression.js';
 import { loadUserConfig, resolveStrategy } from '../../src/services/configLoader.js';
+import { readFile } from 'node:fs/promises';
 
 const mockReadProfile = vi.mocked(readProfile);
+const mockReadFile = vi.mocked(readFile);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
 const mockOpenDatabase = vi.mocked(openDatabase);
 const mockReadIndexState = vi.mocked(readIndexState);
@@ -268,5 +274,105 @@ describe('runTraceFlow', () => {
   it('throws when edges table is missing', async () => {
     mockDb.tableNames.mockResolvedValue(['chunks']);
     await expect(runTraceFlow('test')).rejects.toThrow('No edges table found');
+  });
+});
+
+describe('token savings computation (OUT-02)', () => {
+  beforeEach(async () => {
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockDb.openTable.mockImplementation(async (name: string) => {
+      if (name === 'edges') return mockEdgesTable;
+      return mockTable;
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockLoadUserConfig.mockResolvedValue({});
+    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.30 });
+    mockCompressChunk.mockImplementation((chunk) => chunk);
+
+    const mod = await import('../../src/workflows/traceFlow.js');
+    runTraceFlow = mod.runTraceFlow;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('zero hops — no seed found: returns tokensSent=0, estimatedWithoutBraincache=0, reductionPct=0, filesInContext=0', async () => {
+    mockSearchChunks.mockResolvedValue([]);
+    mockDeduplicateChunks.mockReturnValue([]);
+
+    const result = await runTraceFlow('nonexistent function');
+    expect(result.hops).toHaveLength(0);
+    expect(result.metadata.tokensSent).toBe(0);
+    expect(result.metadata.estimatedWithoutBraincache).toBe(0);
+    expect(result.metadata.reductionPct).toBe(0);
+    expect(result.metadata.filesInContext).toBe(0);
+  });
+
+  it('non-empty hops — real savings: tokensSent > 0 computed from hop content', async () => {
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockTraceFlow.mockResolvedValue(mockFlowHops);
+    mockReadFile.mockResolvedValue('function authenticate() { return db.findUser(); }\n// more file content here that makes file larger than chunk' as any);
+
+    const result = await runTraceFlow('authenticate function');
+    expect(result.hops.length).toBeGreaterThan(0);
+    expect(result.metadata.tokensSent).toBeGreaterThan(0);
+    expect(result.metadata.reductionPct).toBeGreaterThanOrEqual(0);
+    expect(result.metadata.reductionPct).toBeLessThanOrEqual(100);
+    expect(result.metadata.filesInContext).toBeGreaterThanOrEqual(1);
+    expect(result.metadata.estimatedWithoutBraincache).toBeGreaterThanOrEqual(0);
+  });
+
+  it('non-empty hops — filesInContext matches unique file count in hops', async () => {
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockTraceFlow.mockResolvedValue(mockFlowHops);
+    mockReadFile.mockResolvedValue('file content here' as any);
+
+    const result = await runTraceFlow('authenticate function');
+    const uniqueFiles = new Set(mockFlowHops.map(h => h.filePath)).size;
+    expect(result.metadata.filesInContext).toBe(uniqueFiles);
+  });
+
+  it('non-empty hops — estimatedWithoutBraincache > tokensSent when file is larger than chunk', async () => {
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockTraceFlow.mockResolvedValue(mockFlowHops);
+    // Return very large file content so estimated > tokensSent
+    const largeContent = 'x '.repeat(5000);
+    mockReadFile.mockResolvedValue(largeContent as any);
+
+    const result = await runTraceFlow('authenticate function');
+    expect(result.metadata.estimatedWithoutBraincache).toBeGreaterThan(result.metadata.tokensSent);
+  });
+
+  it('reductionPct is not hardcoded 67', async () => {
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockTraceFlow.mockResolvedValue(mockFlowHops);
+    // Small file content — reductionPct will be near 0 or even 0 (not 67)
+    mockReadFile.mockResolvedValue('tiny' as any);
+
+    const result = await runTraceFlow('authenticate function');
+    expect(result.metadata.reductionPct).not.toBe(67);
+  });
+
+  it('TraceFlowResult.metadata contains all savings fields', async () => {
+    mockSearchChunks.mockResolvedValue([seedChunk]);
+    mockDeduplicateChunks.mockReturnValue([seedChunk]);
+    mockTraceFlow.mockResolvedValue(mockFlowHops);
+    mockReadFile.mockResolvedValue('file content' as any);
+
+    const result = await runTraceFlow('authenticate function');
+    expect(result.metadata).toHaveProperty('tokensSent');
+    expect(result.metadata).toHaveProperty('estimatedWithoutBraincache');
+    expect(result.metadata).toHaveProperty('reductionPct');
+    expect(result.metadata).toHaveProperty('filesInContext');
   });
 });
