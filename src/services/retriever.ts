@@ -91,10 +91,77 @@ export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
   explore: { limit: 20, distanceThreshold: 0.6 },
 };
 
+/**
+ * Extracts meaningful tokens from a query for filename/name matching.
+ * Splits on whitespace and punctuation, lowercases, and filters short tokens.
+ */
+function extractQueryTokens(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/[\s.,;:!?'"()\[\]{}/\\]+/)
+    .filter(t => t.length >= 3);
+}
+
+/**
+ * Computes a keyword boost score [0, 1] based on how many query tokens appear
+ * in the chunk's file path or function name.
+ *
+ * Motivation: vector similarity alone can miss obvious filename matches
+ * (e.g. "compression test" should rank compression.test.ts above compression.ts).
+ * This boost reranks results within the filtered set without discarding any.
+ */
+function computeKeywordBoost(chunk: RetrievedChunk, queryTokens: string[]): number {
+  if (queryTokens.length === 0) return 0;
+
+  const fileName = chunk.filePath.split('/').pop()?.toLowerCase() ?? '';
+  const chunkName = (chunk.name ?? '').toLowerCase();
+  const target = `${fileName} ${chunkName}`;
+
+  const matchCount = queryTokens.filter(t => target.includes(t)).length;
+  return matchCount / queryTokens.length;
+}
+
+/** Build tool config file patterns with their corresponding tool name token. */
+const CONFIG_NOISE_PATTERNS: Array<{ pattern: RegExp; toolName: string }> = [
+  { pattern: /^vitest\.config\./,  toolName: 'vitest' },
+  { pattern: /^tsup\.config\./,    toolName: 'tsup' },
+  { pattern: /^tsconfig.*\.json$/, toolName: 'tsconfig' },
+  { pattern: /^jest\.config\./,    toolName: 'jest' },
+  { pattern: /^eslint\.config\./,  toolName: 'eslint' },
+  { pattern: /^\.eslintrc/,        toolName: 'eslint' },
+];
+
+/**
+ * Score penalty applied to build tool config files in blended search results.
+ * Prevents vitest.config.ts, tsup.config.ts, tsconfig.json, etc. from
+ * surfacing ahead of application code for generic queries.
+ * The penalty is not applied when the query explicitly names the tool
+ * (e.g. "how does tsup build the project" still surfaces tsup.config.ts).
+ */
+const CONFIG_FILE_NOISE_PENALTY = 0.15;
+
+/**
+ * Returns CONFIG_FILE_NOISE_PENALTY when the chunk is a build tool config file
+ * and the query does not explicitly name the corresponding tool; returns 0 otherwise.
+ */
+function computeNoisePenalty(chunk: RetrievedChunk, query: string): number {
+  const fileName = chunk.filePath.split('/').pop() ?? '';
+  const lowerQuery = query.toLowerCase();
+
+  for (const { pattern, toolName } of CONFIG_NOISE_PATTERNS) {
+    if (pattern.test(fileName)) {
+      if (lowerQuery.includes(toolName)) return 0;
+      return CONFIG_FILE_NOISE_PENALTY;
+    }
+  }
+  return 0;
+}
+
 export async function searchChunks(
   table: Table,
   queryVector: number[],
-  opts: SearchOptions
+  opts: SearchOptions,
+  query?: string
 ): Promise<RetrievedChunk[]> {
   log.debug({ limit: opts.limit, distanceThreshold: opts.distanceThreshold }, 'Searching chunks');
 
@@ -105,7 +172,9 @@ export async function searchChunks(
     .limit(opts.limit)
     .toArray();
 
-  return (rows as RawChunkRow[])
+  const queryTokens = query ? extractQueryTokens(query) : [];
+
+  const chunks = (rows as RawChunkRow[])
     .filter((r) => r._distance <= opts.distanceThreshold)
     .map((r) => ({
       id: r.id,
@@ -117,8 +186,26 @@ export async function searchChunks(
       startLine: r.start_line,
       endLine: r.end_line,
       similarity: 1 - r._distance,
-    }))
-    .sort((a: RetrievedChunk, b: RetrievedChunk) => b.similarity - a.similarity);
+    }));
+
+  if (queryTokens.length > 0) {
+    // Rerank: blend vector similarity (90%) with keyword boost (10%), minus config noise penalty.
+    // The 10% keyword weight is conservative — preserves vector ranking in general while
+    // surfacing obvious filename matches that embeddings miss.
+    // Config noise penalty prevents build tool config files from ranking above application code.
+    const KEYWORD_BOOST_WEIGHT = 0.10;
+    return chunks
+      .map(chunk => ({
+        chunk,
+        score: chunk.similarity * (1 - KEYWORD_BOOST_WEIGHT)
+          + computeKeywordBoost(chunk, queryTokens) * KEYWORD_BOOST_WEIGHT
+          - computeNoisePenalty(chunk, query!),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map(({ chunk }) => chunk);
+  }
+
+  return chunks.sort((a: RetrievedChunk, b: RetrievedChunk) => b.similarity - a.similarity);
 }
 
 export function deduplicateChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
