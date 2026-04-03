@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-04-03T05:07:47.481Z"
+status: verifying
+stopped_at: Completed 24-02-PLAN.md
+last_updated: "2026-04-03T13:50:04.730Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 11
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 10
   percent: 100
 ---
 
@@ -26,15 +26,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 19 — claude.md-refinements
+**Current focus:** Phase 24 — compression-and-savings-accuracy
 
 ---
 
 ## Current Position
 
-Phase: 19 (claude.md-refinements) — EXECUTING
+Phase: 24 (compression-and-savings-accuracy) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
 Progress: [██████████] 100% (Phase 17, Plan 01 complete)
@@ -46,6 +46,13 @@ Progress: [██████████] 100% (Phase 17, Plan 01 complete)
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 24, Plan 02 — real token savings in runTraceFlow)
+
+- computeHopSavings mirrors buildContext.ts pattern: BODY_STRIPPED_MARKER filter + readFile per unique file + TOOL_CALL_OVERHEAD_TOKENS
+- Token savings are workflow-layer concerns (computed in runTraceFlow), not MCP handler concerns
+- Zero-hop path short-circuits with inline zeros — no helper call needed
+- MCP trace_flow handler uses destructuring then formatTokenSavings — matches buildContext handler pattern
 
 ### Key Decisions (Phase 17, Plan 01 — FlowHop callsFound, compression, configLoader)
 
@@ -102,9 +109,9 @@ See prior STATE.md entries for v1.x quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T05:07:47.477Z
+**Last session:** 2026-04-03T13:50:04.727Z
 
-**Stopped at:** Completed 19-01-PLAN.md
+**Stopped at:** Completed 24-02-PLAN.md
 
 **Next action:** `/gsd:plan-phase 15`
 
