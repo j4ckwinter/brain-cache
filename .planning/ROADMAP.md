@@ -321,8 +321,11 @@ Plans:
   2. The output prioritizes chunks containing module-level exports and cross-cutting wiring (e.g. how services are composed in workflows) over internal helpers or rendering utilities — `logger.ts` does not lead the overview
   3. For modules where compression was applied, the output includes a one-sentence summary of what the module does so the architecture overview is meaningful without requiring a follow-up `build_context` call
   4. `explain_codebase` does not include internal helper functions (e.g. `childLogger` in `logger.ts`, layout renderers in `explainCodebase.ts`) as representative module-level content
-**Plans**: TBD
-**UI hint**: no
+**Plans:** 1/2 plans executed
+
+Plans:
+- [x] 29-01-PLAN.md — TDD: isExportedChunk, extractBehavioralSummary, groupChunksByModule, extractWiringAnnotations, formatModuleNarratives
+- [ ] 29-02-PLAN.md — Wire helpers into runExplainCodebase pipeline (export filter, module narratives)
 
 ## Progress
 
@@ -356,8 +359,8 @@ Plans:
 | 26. Search Precision | v2.3 | 1/1 | Complete    | 2026-04-03 |
 | 27. Compression Protection | v2.3 | 1/1 | Complete    | 2026-04-03 |
 | 28. Trace Output Quality | v2.3 | 1/2 | Complete    | 2026-04-03 |
-| 29. Explain Codebase Depth | v2.3 | 0/? | Not started | - |
+| 29. Explain Codebase Depth | v2.3 | 1/2 | In Progress|  |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — v2.3 Final Quality Pass roadmap added (Phases 26-29)*
+*Last updated: 2026-04-03 — Phase 29 planned (2 plans, 2 waves)*
