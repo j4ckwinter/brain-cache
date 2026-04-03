@@ -104,20 +104,60 @@ function extractQueryTokens(query: string): string[] {
 }
 
 /**
+ * Splits a camelCase or PascalCase identifier into lowercase sub-tokens.
+ * "compressChunk" -> ["compress", "chunk"]
+ * "runBuildContext" -> ["run", "build", "context"]
+ * Tokens shorter than 2 characters are filtered out.
+ */
+function splitCamelCase(name: string): string[] {
+  return name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(t => t.length >= 2);
+}
+
+/**
  * Computes a keyword boost score [0, 1] based on how many query tokens appear
  * in the chunk's file path or function name.
  *
  * Motivation: vector similarity alone can miss obvious filename matches
  * (e.g. "compression test" should rank compression.test.ts above compression.ts).
  * This boost reranks results within the filtered set without discarding any.
+ *
+ * Tiers (PREC-01, PREC-02):
+ * - 1.0: Exact symbol name match — any query token equals chunk.name
+ * - 1.0: Near-exact via camelCase sub-tokens — all sub-tokens of chunk name appear in query tokens
+ * - 0.8: Filename stem exact match — any query token equals the filename stem (without extension)
+ * - fallback: Original partial token presence (matchCount / queryTokens.length)
  */
 function computeKeywordBoost(chunk: RetrievedChunk, queryTokens: string[]): number {
   if (queryTokens.length === 0) return 0;
 
   const fileName = chunk.filePath.split('/').pop()?.toLowerCase() ?? '';
+  const fileNameStem = fileName.replace(/\.[^.]+$/, '');
   const chunkName = (chunk.name ?? '').toLowerCase();
-  const target = `${fileName} ${chunkName}`;
 
+  // Tier 1 (PREC-01): Exact symbol name match — any query token equals chunk.name
+  if (chunkName.length > 0 && queryTokens.some(t => t === chunkName)) {
+    return 1.0;
+  }
+
+  // Tier 2 (PREC-01): Near-exact via camelCase sub-token match
+  // All sub-tokens of chunk name must appear in query tokens
+  const subTokens = chunkName.length > 0 ? splitCamelCase(chunkName) : [];
+  if (subTokens.length > 1 && subTokens.every(sub => queryTokens.some(t => t.includes(sub) || sub.includes(t)))) {
+    return 1.0;
+  }
+
+  // Tier 3 (PREC-02): Filename stem exact match — any query token equals the stem
+  if (fileNameStem.length > 0 && queryTokens.some(t => t === fileNameStem)) {
+    return 0.6;
+  }
+
+  // Tier 4: Fallback — original partial token presence
+  const target = `${fileName} ${chunkName}`;
   const matchCount = queryTokens.filter(t => target.includes(t)).length;
   return matchCount / queryTokens.length;
 }
