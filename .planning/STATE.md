@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 16-03-PLAN.md
-last_updated: "2026-04-03T03:34:15.912Z"
-last_activity: 2026-04-03
+last_updated: "2026-04-03T03:52:24.851Z"
+last_activity: 2026-04-03 -- Phase 17 execution started
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
+  total_plans: 8
   completed_plans: 6
   percent: 83
 ---
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-02)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 16 — retrieval-intelligence
+**Current focus:** Phase 17 — new-mcp-tools-and-workflows
 
 ---
 
 ## Current Position
 
-Phase: 16 (retrieval-intelligence) — EXECUTING
-Plan: 2 of 3
-Status: Ready to execute
-Last activity: 2026-04-03
+Phase: 17 (new-mcp-tools-and-workflows) — EXECUTING
+Plan: 2 of 2
+Status: Executing Phase 17
+Last activity: 2026-04-02 -- Phase 17 Plan 01 complete
 
-Progress: [████████░░] 83% (Phase 16, Plan 01 complete)
+Progress: [██████████] 100% (Phase 17, Plan 01 complete)
 
 ---
 
@@ -46,6 +46,13 @@ Progress: [████████░░] 83% (Phase 16, Plan 01 complete)
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 17, Plan 01 — FlowHop callsFound, compression, configLoader)
+
+- flowTracer always queries edges per hop (even at maxHops depth) for callsFound; only children-enqueue is gated by depth check
+- compressChunk threshold is <= 200 returns unchanged; 201+ triggers structural body stripping
+- resolveStrategy uses spread precedence: { ...base, ...userOverride, ...toolOverride }
+- loadUserConfig reads ~/.brain-cache/config.json per call (no caching), returns {} on any error
 
 ### Key Decisions (Phase 16, Plan 01 — three-mode intent classifier)
 
@@ -97,7 +104,7 @@ See prior STATE.md entries for v1.x quick tasks (archived).
 
 **Last session:** 2026-04-03T03:34:15.909Z
 
-**Stopped at:** Completed 16-03-PLAN.md
+**Stopped at:** Completed 17-01-PLAN.md
 
 **Next action:** `/gsd:plan-phase 15`
 
