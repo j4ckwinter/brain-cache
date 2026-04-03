@@ -10,18 +10,18 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 ### Flow Tracing
 
 - [x] **FLOW-01**: Multi-hop flow tracing follows call/import paths across files via AST extraction with configurable hop depth (default 3)
-- [ ] **FLOW-02**: `trace_flow` MCP tool exposes flow tracing to Claude with structured hop output (filePath, name, startLine, content, callsFound per hop)
+- [x] **FLOW-02**: `trace_flow` MCP tool exposes flow tracing to Claude with structured hop output (filePath, name, startLine, content, callsFound per hop)
 
 ### Retrieval Intelligence
 
 - [x] **INTENT-01**: Intent-aware retrieval modes (lookup/trace/explore) with distinct k, distance threshold, and post-processing per mode
-- [ ] **ADV-01**: Configurable retrieval depth per query type via `~/.brain-cache/config.json` and MCP tool input overrides
+- [x] **ADV-01**: Configurable retrieval depth per query type via `~/.brain-cache/config.json` and MCP tool input overrides
 
 ### Context Quality
 
 - [x] **COH-01**: Context cohesion groups chunks by file/module, preserves source ordering, includes parent class when method chunk is selected
-- [ ] **COMP-01**: Context compression via structural truncation — keep function/class signatures, strip bodies for chunks exceeding compression threshold
-- [ ] **TOOL-02**: `explain_codebase` MCP tool returns module-grouped architecture summaries using explore mode + cohesion
+- [x] **COMP-01**: Context compression via structural truncation — keep function/class signatures, strip bodies for chunks exceeding compression threshold
+- [x] **TOOL-02**: `explain_codebase` MCP tool returns module-grouped architecture summaries using explore mode + cohesion
 
 ### Infrastructure
 
@@ -60,10 +60,10 @@ Requirements for MCP Magic milestone. Each maps to roadmap phases.
 | FLOW-01 | Phase 16 | Complete |
 | INTENT-01 | Phase 16 | Complete |
 | COH-01 | Phase 16 | Complete |
-| FLOW-02 | Phase 17 | Pending |
-| TOOL-02 | Phase 17 | Pending |
-| ADV-01 | Phase 17 | Pending |
-| COMP-01 | Phase 17 | Pending |
+| FLOW-02 | Phase 17 | Complete |
+| TOOL-02 | Phase 17 | Complete |
+| ADV-01 | Phase 17 | Complete |
+| COMP-01 | Phase 17 | Complete |
 | INC-02 | Phase 18 | Pending |
 | ADOPT-01 | Phase 19 | Pending |
 

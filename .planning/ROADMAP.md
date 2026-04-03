@@ -57,7 +57,7 @@
 
 - [x] **Phase 15: Storage Foundation and Index Pipeline** - Add LanceDB edges table, `.braincacheignore` support, and LanceDB write mutex; extend chunker to emit call edges (completed 2026-04-02)
 - [x] **Phase 16: Retrieval Intelligence** - Expand intent classifier to lookup/trace/explore modes, build flow tracer BFS service, add context cohesion grouping (completed 2026-04-03)
-- [ ] **Phase 17: New MCP Tools and Workflows** - Ship `trace_flow` and `explain_codebase` MCP tools, configurable retrieval depth, and structural context compression
+- [x] **Phase 17: New MCP Tools and Workflows** - Ship `trace_flow` and `explain_codebase` MCP tools, configurable retrieval depth, and structural context compression (completed 2026-04-03)
 - [ ] **Phase 18: File Watcher** - Live re-indexing via chokidar v5 with debounce and write-safe incremental updates
 - [ ] **Phase 19: CLAUDE.md Refinements** - Guide Claude toward new MCP tools with accurate routing language for the full 6-tool suite
 
@@ -106,11 +106,11 @@ Plans:
   3. A user can set per-query-type retrieval depth in `~/.brain-cache/config.json` and have it honored without restarting the MCP server
   4. Chunks exceeding the compression threshold have their function/class body stripped and a structured `// [compressed]` manifest prepended, preserving signatures and JSDoc
   5. `build_context` routes trace queries to `runTraceFlow` and explore queries to `runExplainCodebase` automatically
-**Plans:** 2 plans in 2 waves
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
-- [ ] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
+- [x] 17-01-PLAN.md — FlowHop type fix, callsFound population, config loader, and compression services
+- [x] 17-02-PLAN.md — runTraceFlow and runExplainCodebase workflows, MCP tool registration, buildContext routing
 
 ### Phase 18: File Watcher
 **Goal**: Brain-cache keeps the index current automatically as files change, without requiring manual re-index
@@ -162,7 +162,7 @@ Plans:
 | 14. Test Suite & Barrel Repair | v1.1.1 | 1/1 | Complete | 2026-04-02 |
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
 | 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
-| 17. New MCP Tools and Workflows | v2.0 | 0/2 | Planned     | - |
+| 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete   | 2026-04-03 |
 | 18. File Watcher | v2.0 | 0/? | Not started | - |
 | 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |
 
