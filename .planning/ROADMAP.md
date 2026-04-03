@@ -220,7 +220,7 @@ Plans:
   2. A search for "how does tsup build the project" still surfaces tsup.config.ts in results — the penalty does not apply when the tool name appears in the query
   3. The penalty is a score coefficient subtracted from the blended score, not a hard exclusion — penalized files remain reachable for explicit queries
   4. The penalty constant is named and documented in retriever.ts so its intent is clear without reading surrounding code
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
 - [x] 23-01-PLAN.md — TDD: config file noise penalty in searchChunks blended scoring
@@ -235,11 +235,11 @@ Plans:
   3. Calling `trace_flow` on a query that resolves to zero hops reports zero token savings, not a fabricated percentage
   4. Calling `trace_flow` on a query that resolves to the wrong entry point reports zero savings rather than an inflated number based on discarded results
   5. Token savings on successful trace_flow calls are computed from the actual content returned, not a hardcoded constant
-**Plans:** 1 plan
+**Plans:** 2 plans
 
 Plans:
-- [ ] 23-01-PLAN.md — TDD: config file noise penalty in searchChunks blended scoring
-**UI hint**: no
+- [ ] 24-01-PLAN.md — Per-mode keyword boost weights and similarity promotion for name-matched chunks (RET-01, RET-02)
+- [ ] 24-02-PLAN.md — Real token savings computation in runTraceFlow (OUT-02)
 
 ### Phase 25: Tool Routing Documentation
 **Goal**: Claude selects the correct brain-cache tool for all documented query patterns, guided by explicit negative examples in both MCP tool descriptions and CLAUDE.md
@@ -253,7 +253,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 23-01-PLAN.md — TDD: config file noise penalty in searchChunks blended scoring
+- [ ] 25-01-PLAN.md — MCP tool description negative examples and CLAUDE.md routing table update
 
 ## Progress
 
@@ -281,10 +281,10 @@ Plans:
 | 20. Formatter Foundation | v2.1 | 2/2 | Complete | 2026-04-03 |
 | 21. MCP Handler Wiring and Metadata | v2.1 | 2/2 | Complete | 2026-04-03 |
 | 22. Isolated Trace Fixes | v2.2 | 2/2 | Complete   | 2026-04-03 |
-| 23. Search Noise Reduction | v2.2 | 0/? | Not started | - |
-| 24. Compression and Savings Accuracy | v2.2 | 0/? | Not started | - |
+| 23. Search Noise Reduction | v2.2 | 1/1 | Complete    | 2026-04-03 |
+| 24. Compression and Savings Accuracy | v2.2 | 0/2 | Not started | - |
 | 25. Tool Routing Documentation | v2.2 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — v2.2 Retrieval Quality roadmap added (Phases 22-25)*
+*Last updated: 2026-04-03 — Phase 24 planned (2 plans, Wave 1 parallel)*
