@@ -15,7 +15,7 @@ vi.mock('../../src/services/tokenCounter.js', () => ({
   countChunkTokens: vi.fn(() => 10),
 }));
 
-import { groupChunksByFile, enrichWithParentClass, formatGroupedContext } from '../../src/services/cohesion.js';
+import { groupChunksByFile, enrichWithParentClass, formatGroupedContext, extractBehavioralSummary, groupChunksByModule, extractWiringAnnotations, formatModuleNarratives } from '../../src/services/cohesion.js';
 import type { RetrievedChunk } from '../../src/lib/types.js';
 
 function makeChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
@@ -233,5 +233,186 @@ describe('formatGroupedContext', () => {
     // Both chunks should appear in the output
     expect(result).toContain('lines 1-');
     expect(result).toContain('lines 20-');
+  });
+});
+
+describe('extractBehavioralSummary', () => {
+  it('returns first JSDoc description line from chunk content', () => {
+    const content = '/** Strips function bodies above 200 tokens */\nexport function compressChunk() {}';
+    expect(extractBehavioralSummary(content)).toBe('Strips function bodies above 200 tokens');
+  });
+
+  it('returns null when no JSDoc present', () => {
+    const content = 'export function foo() {}';
+    expect(extractBehavioralSummary(content)).toBeNull();
+  });
+
+  it('skips // [compressed] manifest lines before JSDoc', () => {
+    const content = '// [compressed] fn (lines 1-10)\n/** Does something cool */\n// Signature: export function fn()';
+    expect(extractBehavioralSummary(content)).toBe('Does something cool');
+  });
+
+  it('returns null when JSDoc has only @param/@returns tags and no plain text', () => {
+    const content = '/**\n * @param x - the input\n * @returns the result\n */\nexport function foo() {}';
+    expect(extractBehavioralSummary(content)).toBeNull();
+  });
+
+  it('handles inline single-line JSDoc', () => {
+    const content = '/** foo */ export function bar() {}';
+    expect(extractBehavioralSummary(content)).toBe('foo');
+  });
+});
+
+describe('groupChunksByModule', () => {
+  it('groups chunks by parent directory relative to rootDir', () => {
+    const chunks = [
+      makeChunk({ id: 'c1', filePath: '/project/src/services/a.ts' }),
+      makeChunk({ id: 'c2', filePath: '/project/src/services/b.ts' }),
+      makeChunk({ id: 'c3', filePath: '/project/src/cli/index.ts' }),
+    ];
+    const result = groupChunksByModule(chunks, '/project');
+    expect(result.size).toBe(2);
+    expect(result.get('src/services')).toHaveLength(2);
+    expect(result.get('src/cli')).toHaveLength(1);
+  });
+
+  it('root-level files get key "."', () => {
+    const chunks = [
+      makeChunk({ id: 'c1', filePath: '/project/index.ts' }),
+    ];
+    const result = groupChunksByModule(chunks, '/project');
+    expect(result.has('.')).toBe(true);
+    expect(result.get('.')![0].id).toBe('c1');
+  });
+
+  it('empty input returns empty Map', () => {
+    const result = groupChunksByModule([], '/project');
+    expect(result.size).toBe(0);
+  });
+
+  it('chunks within same directory are sorted by startLine ascending', () => {
+    const chunks = [
+      makeChunk({ id: 'c2', filePath: '/project/src/services/b.ts', startLine: 50 }),
+      makeChunk({ id: 'c1', filePath: '/project/src/services/a.ts', startLine: 10 }),
+    ];
+    const result = groupChunksByModule(chunks, '/project');
+    const group = result.get('src/services')!;
+    expect(group[0].startLine).toBe(10);
+    expect(group[1].startLine).toBe(50);
+  });
+});
+
+describe('extractWiringAnnotations', () => {
+  it('captures stems from relative imports', () => {
+    const chunks = [
+      makeChunk({ content: "import { foo } from '../services/tokenCounter.js'" }),
+    ];
+    expect(extractWiringAnnotations(chunks)).toEqual(['tokenCounter']);
+  });
+
+  it('excludes external packages (not starting with ./ or ../)', () => {
+    const chunks = [
+      makeChunk({ content: "import { Table } from '@lancedb/lancedb'" }),
+    ];
+    expect(extractWiringAnnotations(chunks)).toEqual([]);
+  });
+
+  it('excludes Node.js builtins', () => {
+    const chunks = [
+      makeChunk({ content: "import { readFile } from 'node:fs/promises'" }),
+    ];
+    expect(extractWiringAnnotations(chunks)).toEqual([]);
+  });
+
+  it('returns sorted, deduplicated stems from multiple imports', () => {
+    const chunks = [
+      makeChunk({
+        content: "import { a } from './config.js'\nimport { b } from '../lib/types.js'\nimport { c } from './config.js'",
+      }),
+    ];
+    expect(extractWiringAnnotations(chunks)).toEqual(['config', 'types']);
+  });
+
+  it('returns empty array when no imports present', () => {
+    const chunks = [
+      makeChunk({ content: 'export function foo() {}' }),
+    ];
+    expect(extractWiringAnnotations(chunks)).toEqual([]);
+  });
+});
+
+describe('formatModuleNarratives', () => {
+  it('produces "### module:" header per module group', () => {
+    const groups = new Map<string, RetrievedChunk[]>([
+      ['src/services', [makeChunk({ id: 'c1', filePath: '/project/src/services/a.ts' })]],
+      ['src/cli', [makeChunk({ id: 'c2', filePath: '/project/src/cli/index.ts' })]],
+    ]);
+    const result = formatModuleNarratives(groups);
+    expect(result).toContain('### module: src/services');
+    expect(result).toContain('### module: src/cli');
+  });
+
+  it('includes behavioral summary from JSDoc for chunks that have it', () => {
+    const groups = new Map<string, RetrievedChunk[]>([
+      ['src/services', [makeChunk({
+        id: 'c1',
+        filePath: '/project/src/services/a.ts',
+        content: '/** Handles authentication logic */\nexport function authHandler() {}',
+        name: 'authHandler',
+      })]],
+    ]);
+    const result = formatModuleNarratives(groups);
+    expect(result).toContain('Handles authentication logic');
+  });
+
+  it('shows filename without fabricated text for chunks without JSDoc', () => {
+    const groups = new Map<string, RetrievedChunk[]>([
+      ['src/services', [makeChunk({
+        id: 'c1',
+        filePath: '/project/src/services/a.ts',
+        content: 'export function foo() {}',
+        name: 'foo',
+      })]],
+    ]);
+    const result = formatModuleNarratives(groups);
+    expect(result).toContain('a.ts');
+    // Should NOT contain fabricated descriptions
+    expect(result).not.toContain('This function');
+    expect(result).not.toContain('undefined');
+  });
+
+  it('includes "imports:" wiring annotation when chunks have relative imports', () => {
+    const groups = new Map<string, RetrievedChunk[]>([
+      ['src/services', [makeChunk({
+        id: 'c1',
+        filePath: '/project/src/services/a.ts',
+        content: "import { x } from '../lib/types.js'\nexport function foo() {}",
+        name: 'foo',
+      })]],
+    ]);
+    const result = formatModuleNarratives(groups);
+    expect(result).toContain('imports:');
+    expect(result).toContain('types');
+  });
+
+  it('does NOT use "// ── filepath ──" format (that is formatGroupedContext format)', () => {
+    const groups = new Map<string, RetrievedChunk[]>([
+      ['src/services', [makeChunk({ id: 'c1', filePath: '/project/src/services/a.ts' })]],
+    ]);
+    const result = formatModuleNarratives(groups);
+    expect(result).not.toContain('// ──');
+  });
+
+  it('handles module where all chunks are internal helpers — still shows module', () => {
+    const groups = new Map<string, RetrievedChunk[]>([
+      ['src/services', [makeChunk({
+        id: 'c1',
+        filePath: '/project/src/services/a.ts',
+        content: 'function helperFn() {}',
+        name: 'helperFn',
+      })]],
+    ]);
+    const result = formatModuleNarratives(groups);
+    expect(result).toContain('### module: src/services');
   });
 });

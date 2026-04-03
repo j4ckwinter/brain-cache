@@ -66,6 +66,7 @@ import { groupChunksByFile, enrichWithParentClass, formatGroupedContext } from '
 import { compressChunk } from '../../src/services/compression.js';
 import { loadUserConfig, resolveStrategy } from '../../src/services/configLoader.js';
 import { readFile } from 'node:fs/promises';
+import { isExportedChunk } from '../../src/workflows/explainCodebase.js';
 
 const mockReadProfile = vi.mocked(readProfile);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
@@ -305,5 +306,66 @@ describe('runExplainCodebase', () => {
       dedupedChunks,
       { maxTokens: 8192 }
     );
+  });
+});
+
+function makeChunk(overrides: Partial<import('../../src/lib/types.js').RetrievedChunk> = {}): import('../../src/lib/types.js').RetrievedChunk {
+  return {
+    id: 'chunk-1',
+    filePath: '/project/src/foo.ts',
+    chunkType: 'function',
+    scope: null,
+    name: 'myFn',
+    content: 'function myFn() {}',
+    startLine: 10,
+    endLine: 20,
+    similarity: 0.9,
+    ...overrides,
+  };
+}
+
+describe('isExportedChunk', () => {
+  it('returns true for chunkType "file" regardless of content', () => {
+    const chunk = makeChunk({ chunkType: 'file', content: "import { x } from 'y'" });
+    expect(isExportedChunk(chunk)).toBe(true);
+  });
+
+  it('returns true when first non-JSDoc non-empty line starts with "export "', () => {
+    const chunk = makeChunk({ content: 'export function myFn() {}' });
+    expect(isExportedChunk(chunk)).toBe(true);
+  });
+
+  it('returns false when first non-JSDoc non-empty line does NOT start with "export "', () => {
+    const chunk = makeChunk({ content: 'function internal() {}' });
+    expect(isExportedChunk(chunk)).toBe(false);
+  });
+
+  it('skips JSDoc block and returns true when export follows JSDoc', () => {
+    const chunk = makeChunk({ content: '/** docs */\nexport function foo() {}' });
+    expect(isExportedChunk(chunk)).toBe(true);
+  });
+
+  it('skips multi-line JSDoc block and returns true when export follows', () => {
+    const chunk = makeChunk({
+      content: '/**\n * docs\n */\nexport function foo() {}',
+    });
+    expect(isExportedChunk(chunk)).toBe(true);
+  });
+
+  it('skips compressed manifest lines and returns true when export follows', () => {
+    const chunk = makeChunk({
+      content: '// [compressed] fn (lines 1-10)\n// Signature: export function fn()\n// [body stripped]\nexport function fn() {}',
+    });
+    expect(isExportedChunk(chunk)).toBe(true);
+  });
+
+  it('returns false for empty content', () => {
+    const chunk = makeChunk({ content: '' });
+    expect(isExportedChunk(chunk)).toBe(false);
+  });
+
+  it('returns false for JSDoc-only content (no code line after JSDoc)', () => {
+    const chunk = makeChunk({ content: '/**\n * Only a comment\n */' });
+    expect(isExportedChunk(chunk)).toBe(false);
   });
 });
