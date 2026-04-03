@@ -276,23 +276,123 @@ describe('classifyRetrievalMode', () => {
 
 describe('RETRIEVAL_STRATEGIES', () => {
   it('lookup strategy has limit=5 and distanceThreshold=0.4', () => {
-    expect(RETRIEVAL_STRATEGIES['lookup']).toEqual({
+    expect(RETRIEVAL_STRATEGIES['lookup']).toMatchObject({
       limit: 5,
       distanceThreshold: 0.4,
     });
   });
 
   it('trace strategy has limit=3 and distanceThreshold=0.5', () => {
-    expect(RETRIEVAL_STRATEGIES['trace']).toEqual({
+    expect(RETRIEVAL_STRATEGIES['trace']).toMatchObject({
       limit: 3,
       distanceThreshold: 0.5,
     });
   });
 
   it('explore strategy has limit=20 and distanceThreshold=0.6', () => {
-    expect(RETRIEVAL_STRATEGIES['explore']).toEqual({
+    expect(RETRIEVAL_STRATEGIES['explore']).toMatchObject({
       limit: 20,
       distanceThreshold: 0.6,
     });
+  });
+});
+
+describe('per-mode keyword boost weight (RET-01)', () => {
+  it('RETRIEVAL_STRATEGIES.lookup has keywordBoostWeight === 0.40', () => {
+    expect(RETRIEVAL_STRATEGIES['lookup'].keywordBoostWeight).toBe(0.40);
+  });
+
+  it('RETRIEVAL_STRATEGIES.trace has keywordBoostWeight === 0.20', () => {
+    expect(RETRIEVAL_STRATEGIES['trace'].keywordBoostWeight).toBe(0.20);
+  });
+
+  it('RETRIEVAL_STRATEGIES.explore has keywordBoostWeight === 0.10', () => {
+    expect(RETRIEVAL_STRATEGIES['explore'].keywordBoostWeight).toBe(0.10);
+  });
+
+  it('searchChunks applies 0.40 boost weight and promotes similarity for name-matched chunk (lookup)', async () => {
+    // buildContext.ts matches the filename 'buildContext' in the query
+    const row = makeRow({
+      id: 'ctx-chunk',
+      file_path: 'src/workflows/buildContext.ts',
+      name: 'runBuildContext',
+      _distance: 0.4, // raw similarity = 0.60
+    });
+    const table = makeMockTable([row]);
+
+    const results = await searchChunks(
+      table,
+      [0.1, 0.2],
+      { limit: 10, distanceThreshold: 0.4, keywordBoostWeight: 0.40 },
+      'buildContext'
+    );
+
+    expect(results).toHaveLength(1);
+    // RET-02: name-matched chunk similarity should be promoted to >= 0.85
+    expect(results[0].similarity).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('searchChunks with 0.10 boost and non-matching filename keeps original similarity', async () => {
+    const row = makeRow({
+      id: 'no-match',
+      file_path: 'src/foo/bar.ts',
+      name: 'someFunc',
+      _distance: 0.4, // raw similarity = 0.60
+    });
+    const table = makeMockTable([row]);
+
+    const results = await searchChunks(
+      table,
+      [0.1, 0.2],
+      { limit: 10, distanceThreshold: 0.4, keywordBoostWeight: 0.10 },
+      'buildContext'
+    );
+
+    expect(results).toHaveLength(1);
+    // No name match — similarity stays at raw value (0.60)
+    expect(results[0].similarity).toBeCloseTo(0.60, 5);
+  });
+});
+
+describe('similarity promotion (RET-02)', () => {
+  it('name-matched chunk (query="compression") with raw similarity 0.60 gets promoted to >= 0.85', async () => {
+    const row = makeRow({
+      id: 'comp-chunk',
+      file_path: 'src/services/compression.ts',
+      name: 'compressChunk',
+      _distance: 0.4, // raw similarity = 0.60
+    });
+    const table = makeMockTable([row]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.5 },
+      'compression'
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].similarity).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it('non-name-matched chunk keeps its original similarity', async () => {
+    const row = makeRow({
+      id: 'unrelated',
+      file_path: 'src/services/retriever.ts',
+      name: 'searchChunks',
+      _distance: 0.4, // raw similarity = 0.60
+    });
+    const table = makeMockTable([row]);
+
+    const results = await searchChunks(
+      table,
+      [0.1],
+      { limit: 10, distanceThreshold: 0.5 },
+      'compression'
+    );
+
+    expect(results).toHaveLength(1);
+    // 'compression' does not match 'retriever.ts' or 'searchChunks' — no promotion
+    expect(results[0].similarity).toBeCloseTo(0.60, 5);
   });
 });

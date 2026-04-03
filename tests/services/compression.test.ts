@@ -127,6 +127,33 @@ describe('compressChunk', () => {
     });
   });
 
+  describe('RET-02: promoted chunk protection', () => {
+    it('does NOT compress a similarity=0.85 chunk (promoted) with 600 tokens', () => {
+      mockCountChunkTokens.mockReturnValue(600);
+      const chunk = makeChunk({
+        similarity: 0.85, // promoted by RET-02 similarity promotion
+        content: 'function buildContext() {\n  // 600 token body\n  return {};\n}',
+      });
+
+      const result = compressChunk(chunk);
+
+      expect(result).toBe(chunk); // unchanged — high relevance, middle range
+    });
+
+    it('DOES compress a similarity=0.60 chunk (non-promoted) with 600 tokens', () => {
+      mockCountChunkTokens.mockReturnValue(600);
+      const chunk = makeChunk({
+        similarity: 0.60, // below 0.85 threshold — NOT promoted
+        content: 'function someFunc() {\n  // 600 token body\n  return {};\n}',
+      });
+
+      const result = compressChunk(chunk);
+
+      expect(result).not.toBe(chunk); // was compressed
+      expect(result.content).toContain('// [body stripped]');
+    });
+  });
+
   describe('compressed manifest format', () => {
     it('compressed content starts with // [compressed] header line', () => {
       mockCountChunkTokens.mockReturnValue(900);

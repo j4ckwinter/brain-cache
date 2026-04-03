@@ -1,6 +1,7 @@
 import type { Table } from '@lancedb/lancedb';
 import { childLogger } from './logger.js';
 import type { RetrievedChunk, SearchOptions, QueryIntent } from '../lib/types.js';
+import { HIGH_RELEVANCE_SIMILARITY_THRESHOLD } from '../lib/config.js';
 
 const log = childLogger('retriever');
 
@@ -86,9 +87,9 @@ export function classifyRetrievalMode(query: string): QueryIntent {
 export const classifyQueryIntent = classifyRetrievalMode;
 
 export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
-  lookup:  { limit: 5,  distanceThreshold: 0.4 },
-  trace:   { limit: 3,  distanceThreshold: 0.5 },
-  explore: { limit: 20, distanceThreshold: 0.6 },
+  lookup:  { limit: 5,  distanceThreshold: 0.4, keywordBoostWeight: 0.40 },
+  trace:   { limit: 3,  distanceThreshold: 0.5, keywordBoostWeight: 0.20 },
+  explore: { limit: 20, distanceThreshold: 0.6, keywordBoostWeight: 0.10 },
 };
 
 /**
@@ -189,18 +190,23 @@ export async function searchChunks(
     }));
 
   if (queryTokens.length > 0) {
-    // Rerank: blend vector similarity (90%) with keyword boost (10%), minus config noise penalty.
-    // The 10% keyword weight is conservative — preserves vector ranking in general while
-    // surfacing obvious filename matches that embeddings miss.
+    // Rerank: blend vector similarity with per-mode keyword boost weight, minus config noise penalty.
     // Config noise penalty prevents build tool config files from ranking above application code.
-    const KEYWORD_BOOST_WEIGHT = 0.10;
-    return chunks
-      .map(chunk => ({
-        chunk,
-        score: chunk.similarity * (1 - KEYWORD_BOOST_WEIGHT)
-          + computeKeywordBoost(chunk, queryTokens) * KEYWORD_BOOST_WEIGHT
-          - computeNoisePenalty(chunk, query!),
-      }))
+    // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact.
+    // IMPORTANT: compute sort score FIRST using original similarity, THEN apply promotion.
+    const boostWeight = opts.keywordBoostWeight ?? 0.10;
+    const scored = chunks.map(chunk => {
+      const boost = computeKeywordBoost(chunk, queryTokens);
+      const score = chunk.similarity * (1 - boostWeight)
+        + boost * boostWeight
+        - computeNoisePenalty(chunk, query!);
+      // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact
+      const promotedSimilarity = boost > 0
+        ? Math.max(chunk.similarity, HIGH_RELEVANCE_SIMILARITY_THRESHOLD)
+        : chunk.similarity;
+      return { chunk: { ...chunk, similarity: promotedSimilarity }, score };
+    });
+    return scored
       .sort((a, b) => b.score - a.score)
       .map(({ chunk }) => chunk);
   }

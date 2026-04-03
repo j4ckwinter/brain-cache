@@ -45,6 +45,7 @@ export type QueryIntent = 'lookup' | 'trace' | 'explore';
 export interface SearchOptions {
   limit: number;
   distanceThreshold: number; // cosine distance (0.3 = 0.7 similarity)
+  keywordBoostWeight?: number; // per-mode boost weight for keyword matching (RET-01)
 }
 
 // --- Phase 16: Flow tracing types ---
