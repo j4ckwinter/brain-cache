@@ -58,7 +58,7 @@
 - [x] **Phase 15: Storage Foundation and Index Pipeline** - Add LanceDB edges table, `.braincacheignore` support, and LanceDB write mutex; extend chunker to emit call edges (completed 2026-04-02)
 - [x] **Phase 16: Retrieval Intelligence** - Expand intent classifier to lookup/trace/explore modes, build flow tracer BFS service, add context cohesion grouping (completed 2026-04-03)
 - [x] **Phase 17: New MCP Tools and Workflows** - Ship `trace_flow` and `explain_codebase` MCP tools, configurable retrieval depth, and structural context compression (completed 2026-04-03)
-- [ ] **Phase 18: File Watcher** - Live re-indexing via chokidar v5 with debounce and write-safe incremental updates
+- [x] **Phase 18: File Watcher** - Live re-indexing via chokidar v5 with debounce and write-safe incremental updates (completed 2026-04-03)
 - [ ] **Phase 19: CLAUDE.md Refinements** - Guide Claude toward new MCP tools with accurate routing language for the full 6-tool suite
 
 ## Phase Details
@@ -121,11 +121,11 @@ Plans:
   2. Saving multiple files in rapid succession (e.g. a formatter run) triggers a single debounced re-index pass, not one pass per file
   3. Files matching `.braincacheignore` patterns are not re-indexed when modified
   4. The file watcher and a concurrent `brain-cache index` command do not corrupt the LanceDB table
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 18-01-PLAN.md — fileWatcher service and watch workflow with debounce, cross-process lock, signal cleanup
-- [ ] 18-02-PLAN.md — CLI watch command wiring, chokidar install, end-to-end verification
+- [x] 18-02-PLAN.md — CLI watch command wiring, chokidar install, end-to-end verification
 
 ### Phase 19: CLAUDE.md Refinements
 **Goal**: Claude naturally routes to the correct brain-cache tool for each query type without user guidance, across the full 6-tool suite
@@ -163,7 +163,7 @@ Plans:
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
 | 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
 | 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete    | 2026-04-03 |
-| 18. File Watcher | v2.0 | 1/2 | In Progress|  |
+| 18. File Watcher | v2.0 | 2/2 | Complete   | 2026-04-03 |
 | 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |
 
 ---
