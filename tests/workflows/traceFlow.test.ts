@@ -22,9 +22,9 @@ vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
   RETRIEVAL_STRATEGIES: {
-    lookup:  { limit: 5,  distanceThreshold: 0.25 },
-    trace:   { limit: 3,  distanceThreshold: 0.30 },
-    explore: { limit: 20, distanceThreshold: 0.45 },
+    lookup:  { limit: 5,  distanceThreshold: 0.4 },
+    trace:   { limit: 3,  distanceThreshold: 0.5 },
+    explore: { limit: 20, distanceThreshold: 0.6 },
   },
 }));
 
@@ -146,7 +146,7 @@ describe('runTraceFlow', () => {
     mockDeduplicateChunks.mockReturnValue([seedChunk]);
     mockTraceFlow.mockResolvedValue(mockFlowHops);
     mockLoadUserConfig.mockResolvedValue({});
-    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.30 });
+    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.5 });
     mockCompressChunk.mockImplementation((chunk) => chunk);
 
     const mod = await import('../../src/workflows/traceFlow.js');

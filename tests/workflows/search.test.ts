@@ -23,9 +23,9 @@ vi.mock('../../src/services/retriever.js', () => ({
   deduplicateChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
   RETRIEVAL_STRATEGIES: {
-    lookup:  { limit: 5,  distanceThreshold: 0.25 },
-    trace:   { limit: 3,  distanceThreshold: 0.30 },
-    explore: { limit: 20, distanceThreshold: 0.45 },
+    lookup:  { limit: 5,  distanceThreshold: 0.4 },
+    trace:   { limit: 3,  distanceThreshold: 0.5 },
+    explore: { limit: 20, distanceThreshold: 0.6 },
   },
 }));
 
@@ -158,7 +158,7 @@ describe('runSearch', () => {
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 20, distanceThreshold: 0.45 })
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.6 })
     );
   });
 
@@ -226,7 +226,7 @@ describe('runSearch', () => {
     expect(mockSearchChunks).toHaveBeenCalledWith(
       mockTable,
       queryVector,
-      expect.objectContaining({ limit: 20, distanceThreshold: 0.45 })
+      expect.objectContaining({ limit: 20, distanceThreshold: 0.6 })
     );
   });
 });

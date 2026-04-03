@@ -439,6 +439,7 @@ describe('MCP tool handlers', () => {
           tokensSent: 200,
           estimatedWithoutBraincache: 800,
           reductionPct: 75,
+          filesInContext: 3,
           localTasksPerformed: ['embed_query', 'vector_search'],
           cloudCallsMade: 0,
         },
@@ -448,8 +449,9 @@ describe('MCP tool handlers', () => {
       const result = await handler({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
 
       expect(result.isError).toBeUndefined();
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toHaveProperty('content');
+      // MCP handler returns plain-text markdown, not JSON
+      expect(result.content[0].text).toContain('# Codebase Architecture Overview');
+      expect(result.content[0].text).toContain('Architecture overview text');
       expect(mockRunExplainCodebase).toHaveBeenCalledWith({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
     });
 

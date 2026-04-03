@@ -230,24 +230,24 @@ describe('classifyRetrievalMode', () => {
 });
 
 describe('RETRIEVAL_STRATEGIES', () => {
-  it('lookup strategy has limit=5 and distanceThreshold=0.25', () => {
+  it('lookup strategy has limit=5 and distanceThreshold=0.4', () => {
     expect(RETRIEVAL_STRATEGIES['lookup']).toEqual({
       limit: 5,
-      distanceThreshold: 0.25,
+      distanceThreshold: 0.4,
     });
   });
 
-  it('trace strategy has limit=3 and distanceThreshold=0.30', () => {
+  it('trace strategy has limit=3 and distanceThreshold=0.5', () => {
     expect(RETRIEVAL_STRATEGIES['trace']).toEqual({
       limit: 3,
-      distanceThreshold: 0.30,
+      distanceThreshold: 0.5,
     });
   });
 
-  it('explore strategy has limit=20 and distanceThreshold=0.45', () => {
+  it('explore strategy has limit=20 and distanceThreshold=0.6', () => {
     expect(RETRIEVAL_STRATEGIES['explore']).toEqual({
       limit: 20,
-      distanceThreshold: 0.45,
+      distanceThreshold: 0.6,
     });
   });
 });

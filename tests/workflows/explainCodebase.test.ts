@@ -22,9 +22,9 @@ vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
   RETRIEVAL_STRATEGIES: {
-    lookup:  { limit: 5,  distanceThreshold: 0.25 },
-    trace:   { limit: 3,  distanceThreshold: 0.30 },
-    explore: { limit: 20, distanceThreshold: 0.45 },
+    lookup:  { limit: 5,  distanceThreshold: 0.4 },
+    trace:   { limit: 3,  distanceThreshold: 0.5 },
+    explore: { limit: 20, distanceThreshold: 0.6 },
   },
 }));
 
@@ -107,7 +107,24 @@ const mockIndexState = {
 
 const queryVector = new Array(768).fill(0.1);
 
-const mockTable = {} as any;
+// 4 embeddings — one per ARCHITECTURE_QUERIES entry used in the default (no-question) path
+const fourQueryVectors = [queryVector, queryVector, queryVector, queryVector];
+
+// Mock table supports both vector search (nearestTo) and full scan (toArray) for directory tree
+const mockQueryBuilder = {
+  nearestTo: vi.fn().mockReturnThis(),
+  distanceType: vi.fn().mockReturnThis(),
+  limit: vi.fn().mockReturnThis(),
+  where: vi.fn().mockReturnThis(),
+  toArray: vi.fn().mockResolvedValue([
+    { file_path: '/project/src/auth.ts' },
+    { file_path: '/project/src/router.ts' },
+  ]),
+};
+
+const mockTable = {
+  query: vi.fn(() => mockQueryBuilder),
+} as any;
 
 const mockDb = {
   tableNames: vi.fn(),
@@ -149,7 +166,8 @@ describe('runExplainCodebase', () => {
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    // Default: return 4 embeddings (matches the 4 ARCHITECTURE_QUERIES used in no-question path)
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: fourQueryVectors, skipped: 0 });
     mockSearchChunks.mockResolvedValue(dedupedChunks);
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     mockAssembleContext.mockReturnValue({
@@ -167,7 +185,12 @@ describe('runExplainCodebase', () => {
     mockCountChunkTokens.mockReturnValue(500);
     mockReadFile.mockResolvedValue('file content here' as any);
     mockLoadUserConfig.mockResolvedValue({});
-    mockResolveStrategy.mockReturnValue({ limit: 20, distanceThreshold: 0.45 });
+    mockResolveStrategy.mockReturnValue({ limit: 20, distanceThreshold: 0.6 });
+    // Reset query builder mock between tests
+    mockQueryBuilder.toArray.mockResolvedValue([
+      { file_path: '/project/src/auth.ts' },
+      { file_path: '/project/src/router.ts' },
+    ]);
 
     const mod = await import('../../src/workflows/explainCodebase.js');
     runExplainCodebase = mod.runExplainCodebase;
@@ -191,7 +214,7 @@ describe('runExplainCodebase', () => {
     expect(result.metadata).toHaveProperty('cloudCallsMade');
   });
 
-  it('uses explore mode strategy (limit:20, distanceThreshold:0.45 defaults)', async () => {
+  it('uses explore mode strategy (limit:20, distanceThreshold:0.6 defaults)', async () => {
     await runExplainCodebase();
     expect(mockResolveStrategy).toHaveBeenCalledWith('explore', {}, undefined);
   });
@@ -202,16 +225,30 @@ describe('runExplainCodebase', () => {
     expect(result.content).toContain('──');
   });
 
-  it('uses fallback query when no question provided', async () => {
+  it('content includes a directory structure preamble', async () => {
+    const result = await runExplainCodebase();
+    expect(result.content).toContain('## Directory Structure');
+  });
+
+  it('uses fallback query as first query in batch when no question provided', async () => {
     await runExplainCodebase();
     const embedCall = mockEmbedBatchWithRetry.mock.calls[0];
     expect(embedCall[1][0]).toBe('module structure and component responsibilities');
   });
 
+  it('sends 4 architecture queries in one batch when no question provided', async () => {
+    await runExplainCodebase();
+    const embedCall = mockEmbedBatchWithRetry.mock.calls[0];
+    expect(embedCall[1]).toHaveLength(4);
+  });
+
   it('uses provided question when given', async () => {
+    // Custom question → single query → only 1 embedding returned
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
     await runExplainCodebase({ question: 'how is authentication structured' });
     const embedCall = mockEmbedBatchWithRetry.mock.calls[0];
     expect(embedCall[1][0]).toBe('how is authentication structured');
+    expect(embedCall[1]).toHaveLength(1);
   });
 
   it('localTasksPerformed includes embed_query, vector_search, cohesion_group', async () => {
@@ -221,9 +258,15 @@ describe('runExplainCodebase', () => {
     expect(result.metadata.localTasksPerformed).toContain('cohesion_group');
   });
 
-  it('applies compressChunk to all retrieved chunks', async () => {
+  it('localTasksPerformed includes directory_tree', async () => {
+    const result = await runExplainCodebase();
+    expect(result.metadata.localTasksPerformed).toContain('directory_tree');
+  });
+
+  it('only compresses chunks exceeding 500 tokens', async () => {
+    // Mock chunks are small (<500 tokens), so compressChunk should not be called
     await runExplainCodebase();
-    expect(mockCompressChunk).toHaveBeenCalledTimes(dedupedChunks.length);
+    expect(mockCompressChunk).not.toHaveBeenCalled();
   });
 
   it('calls loadUserConfig to get user configuration', async () => {

@@ -1,8 +1,10 @@
 import { Command } from "commander";
 import { formatTokenSavings } from "../lib/format.js";
 
-declare const __BRAIN_CACHE_VERSION__: string;
-const version = __BRAIN_CACHE_VERSION__;
+declare const __BRAIN_CACHE_VERSION__: string | undefined;
+const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
+  ? __BRAIN_CACHE_VERSION__
+  : "dev";
 
 const program = new Command();
 

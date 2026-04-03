@@ -17,8 +17,10 @@ import { runBuildContext } from "../workflows/buildContext.js";
 import { runTraceFlow } from "../workflows/traceFlow.js";
 import { runExplainCodebase } from "../workflows/explainCodebase.js";
 
-declare const __BRAIN_CACHE_VERSION__: string;
-const version = __BRAIN_CACHE_VERSION__;
+declare const __BRAIN_CACHE_VERSION__: string | undefined;
+const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
+  ? __BRAIN_CACHE_VERSION__
+  : "dev";
 
 const log = childLogger("mcp");
 
@@ -389,7 +391,10 @@ server.registerTool(
     }
     try {
       const result = await runExplainCodebase({ question, maxTokens, path });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
+      const tokenSavings = formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext });
+      const text = `# Codebase Architecture Overview\n\n${result.content}\n\n---\n${tokenSavings}`;
+      return { content: [{ type: 'text' as const, text }] };
     } catch (err) {
       return { isError: true, content: [{ type: 'text' as const, text: `explain_codebase failed: ${err instanceof Error ? err.message : String(err)}` }] };
     }

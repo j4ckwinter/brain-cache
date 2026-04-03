@@ -86,9 +86,9 @@ export function classifyRetrievalMode(query: string): QueryIntent {
 export const classifyQueryIntent = classifyRetrievalMode;
 
 export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
-  lookup:  { limit: 5,  distanceThreshold: 0.25 },
-  trace:   { limit: 3,  distanceThreshold: 0.30 },
-  explore: { limit: 20, distanceThreshold: 0.45 },
+  lookup:  { limit: 5,  distanceThreshold: 0.4 },
+  trace:   { limit: 3,  distanceThreshold: 0.5 },
+  explore: { limit: 20, distanceThreshold: 0.6 },
 };
 
 export async function searchChunks(
