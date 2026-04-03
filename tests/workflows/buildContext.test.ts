@@ -77,6 +77,7 @@ import {
 } from '../../src/services/retriever.js';
 import { assembleContext, countChunkTokens } from '../../src/services/tokenCounter.js';
 import { groupChunksByFile, enrichWithParentClass, formatGroupedContext } from '../../src/services/cohesion.js';
+import { compressChunk } from '../../src/services/compression.js';
 import { loadUserConfig, resolveStrategy } from '../../src/services/configLoader.js';
 import { runTraceFlow } from '../../src/workflows/traceFlow.js';
 import { runExplainCodebase } from '../../src/workflows/explainCodebase.js';
@@ -95,6 +96,7 @@ const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockGroupChunksByFile = vi.mocked(groupChunksByFile);
 const mockEnrichWithParentClass = vi.mocked(enrichWithParentClass);
 const mockFormatGroupedContext = vi.mocked(formatGroupedContext);
+const mockCompressChunk = vi.mocked(compressChunk);
 const mockReadFile = vi.mocked(readFile);
 const mockLoadUserConfig = vi.mocked(loadUserConfig);
 const mockResolveStrategy = vi.mocked(resolveStrategy);
@@ -240,6 +242,7 @@ describe('runBuildContext', () => {
       'vector_search',
       'dedup',
       'parent_enrich',
+      'drop_peripheral',
       'compress',
       'cohesion_group',
       'token_budget',
@@ -488,6 +491,156 @@ describe('runBuildContext', () => {
     it('returns content from runExplainCodebase', async () => {
       const result = await runBuildContext('explain the architecture');
       expect(result.content).toBe('explore content');
+    });
+  });
+
+  describe('COMP-01: primary result protection', () => {
+    beforeEach(() => {
+      mockClassifyRetrievalMode.mockReturnValue('lookup');
+
+      // Primary chunk: name matches 'runBuildContext' tokens in query
+      const primaryChunk = fakeChunk('primary', '/project/src/workflows/buildContext.ts');
+      Object.assign(primaryChunk, { name: 'runBuildContext', content: 'function runBuildContext() { /* full body */ }' });
+
+      const peripheralChunk = fakeChunk('other', '/project/src/services/logger.ts');
+      Object.assign(peripheralChunk, { name: 'childLogger', content: 'function childLogger() { /* body */ }' });
+
+      // compressChunk mock marks chunks as compressed so we can detect which were passed through
+      mockCompressChunk.mockImplementation((chunk) => ({ ...chunk, content: 'COMPRESSED:' + chunk.name }));
+
+      mockEnrichWithParentClass.mockResolvedValue([primaryChunk, peripheralChunk]);
+      mockAssembleContext.mockReturnValue({
+        content: 'assembled content',
+        chunks: [primaryChunk, peripheralChunk],
+        tokenCount: 150,
+      });
+      mockGroupChunksByFile.mockReturnValue(new Map([
+        ['/project/src/workflows/buildContext.ts', [primaryChunk]],
+        ['/project/src/services/logger.ts', [peripheralChunk]],
+      ]));
+      mockFormatGroupedContext.mockReturnValue('grouped content');
+    });
+
+    it('does not pass primary chunk (exact name match) to compressChunk', async () => {
+      // Query contains 'runbuildcontext' which matches primaryChunk.name exactly
+      const result = await runBuildContext('how does runBuildContext work');
+      const primaryResult = result.chunks.find(c => c.name === 'runBuildContext');
+      expect(primaryResult).toBeDefined();
+      // Primary chunk should have its original content (not compressed)
+      expect(primaryResult!.content).toBe('function runBuildContext() { /* full body */ }');
+    });
+
+    it('does pass non-primary chunk to compressChunk', async () => {
+      const result = await runBuildContext('how does runBuildContext work');
+      const peripheralResult = result.chunks.find(c => c.name === 'childLogger');
+      expect(peripheralResult).toBeDefined();
+      // Non-primary chunk should have been compressed
+      expect(peripheralResult!.content).toBe('COMPRESSED:childLogger');
+    });
+
+    it('does not pass primary chunk to compressChunk for camelCase sub-token match', async () => {
+      // Query 'how does run build context work' — sub-tokens [run, build, context] all appear in query tokens
+      const result = await runBuildContext('how does run build context work');
+      const primaryResult = result.chunks.find(c => c.name === 'runBuildContext');
+      expect(primaryResult).toBeDefined();
+      expect(primaryResult!.content).toBe('function runBuildContext() { /* full body */ }');
+    });
+
+    it('does not pass primary chunk to compressChunk for filePath stem match', async () => {
+      // Query 'how does buildContext.ts work' — token 'buildcontext' matches filename stem
+      // Note: the query token will be 'buildcontext' (dot stripped) which equals the fileNameStem 'buildcontext'
+      const result = await runBuildContext('how does buildContext work');
+      const primaryResult = result.chunks.find(c => c.filePath.includes('buildContext.ts'));
+      expect(primaryResult).toBeDefined();
+      // Should not be compressed since filePath stem 'buildcontext' matches query token 'buildcontext'
+      expect(primaryResult!.content).toBe('function runBuildContext() { /* full body */ }');
+    });
+
+    it('primary protection works even when compressChunk mock would strip body', async () => {
+      // Ensures skipping is due to isPrimaryMatch logic, not compressChunk behavior
+      mockCompressChunk.mockImplementation((chunk) => ({ ...chunk, content: '// [body stripped]' }));
+      const result = await runBuildContext('how does runBuildContext work');
+      const primaryResult = result.chunks.find(c => c.name === 'runBuildContext');
+      expect(primaryResult!.content).toBe('function runBuildContext() { /* full body */ }');
+    });
+  });
+
+  describe('COMP-02: peripheral chunk drop', () => {
+    beforeEach(() => {
+      mockClassifyRetrievalMode.mockReturnValue('lookup');
+
+      const testChunk = fakeChunk('test1', '/project/tests/services/logger.test.ts');
+      const specChunk = fakeChunk('spec1', '/project/src/utils/helper.spec.ts');
+      const configChunk = fakeChunk('cfg1', '/project/vitest.config.ts');
+      const tsupConfigChunk = fakeChunk('cfg2', '/project/tsup.config.ts');
+      const prodChunk = fakeChunk('prod1', '/project/src/services/compression.ts');
+
+      mockEnrichWithParentClass.mockResolvedValue([testChunk, specChunk, configChunk, tsupConfigChunk, prodChunk]);
+      mockAssembleContext.mockReturnValue({
+        content: 'assembled content',
+        chunks: [testChunk, specChunk, configChunk, tsupConfigChunk, prodChunk],
+        tokenCount: 150,
+      });
+      mockGroupChunksByFile.mockReturnValue(new Map([
+        ['/project/src/services/compression.ts', [prodChunk]],
+      ]));
+      mockFormatGroupedContext.mockReturnValue('grouped content');
+    });
+
+    it('excludes chunks from .test. files before reaching compressChunk/grouping', async () => {
+      await runBuildContext('how does logging work');
+      // groupChunksByFile should only receive the production source chunk
+      const callArgs = mockGroupChunksByFile.mock.calls[0][0];
+      const filePaths = callArgs.map((c: { filePath: string }) => c.filePath);
+      expect(filePaths).not.toContain('/project/tests/services/logger.test.ts');
+    });
+
+    it('excludes chunks from .spec. files before reaching compressChunk/grouping', async () => {
+      await runBuildContext('how does logging work');
+      const callArgs = mockGroupChunksByFile.mock.calls[0][0];
+      const filePaths = callArgs.map((c: { filePath: string }) => c.filePath);
+      expect(filePaths).not.toContain('/project/src/utils/helper.spec.ts');
+    });
+
+    it('excludes chunks from /tests/ path segment before reaching compressChunk/grouping', async () => {
+      const testsPathChunk = fakeChunk('test2', '/project/tests/integration/flow.ts');
+      mockEnrichWithParentClass.mockResolvedValue([testsPathChunk, fakeChunk('prod2', '/project/src/services/compression.ts')]);
+      await runBuildContext('how does logging work');
+      const callArgs = mockGroupChunksByFile.mock.calls[0][0];
+      const filePaths = callArgs.map((c: { filePath: string }) => c.filePath);
+      expect(filePaths).not.toContain('/project/tests/integration/flow.ts');
+    });
+
+    it('excludes vitest.config.ts config file chunks', async () => {
+      await runBuildContext('how does logging work');
+      const callArgs = mockGroupChunksByFile.mock.calls[0][0];
+      const filePaths = callArgs.map((c: { filePath: string }) => c.filePath);
+      expect(filePaths).not.toContain('/project/vitest.config.ts');
+    });
+
+    it('excludes tsup.config.ts config file chunks', async () => {
+      await runBuildContext('how does logging work');
+      const callArgs = mockGroupChunksByFile.mock.calls[0][0];
+      const filePaths = callArgs.map((c: { filePath: string }) => c.filePath);
+      expect(filePaths).not.toContain('/project/tsup.config.ts');
+    });
+
+    it('does NOT exclude production source file chunks', async () => {
+      await runBuildContext('how does logging work');
+      const callArgs = mockGroupChunksByFile.mock.calls[0][0];
+      const filePaths = callArgs.map((c: { filePath: string }) => c.filePath);
+      expect(filePaths).toContain('/project/src/services/compression.ts');
+    });
+
+    it('localTasksPerformed includes drop_peripheral between parent_enrich and compress', async () => {
+      const result = await runBuildContext('how does logging work');
+      const tasks = result.metadata.localTasksPerformed;
+      const enrichIdx = tasks.indexOf('parent_enrich');
+      const dropIdx = tasks.indexOf('drop_peripheral');
+      const compressIdx = tasks.indexOf('compress');
+      expect(dropIdx).toBeGreaterThan(-1);
+      expect(dropIdx).toBeGreaterThan(enrichIdx);
+      expect(dropIdx).toBeLessThan(compressIdx);
     });
   });
 });
