@@ -601,3 +601,204 @@ describe('stdlib symbol filtering (TRACE-02)', () => {
     expect(result.hops[1].callsFound).toEqual(['query']);
   });
 });
+
+describe('low-confidence seed warning (TRACE-03)', () => {
+  const lowSeed = {
+    id: 'watch-seed-1',
+    filePath: '/project/src/services/watch.ts',
+    chunkType: 'function',
+    scope: null,
+    name: 'resetState',
+    content: 'function resetState() { ... }',
+    startLine: 13,
+    endLine: 30,
+    similarity: 0.31,
+  };
+
+  const highSeed = {
+    ...lowSeed,
+    id: 'watch-seed-high',
+    similarity: 0.7,
+  };
+
+  const prodHop = {
+    chunkId: 'watch-seed-1',
+    filePath: '/project/src/services/watch.ts',
+    name: 'resetState',
+    startLine: 13,
+    endLine: 30,
+    content: 'function resetState() { ... }',
+    hopDepth: 0,
+    callsFound: ['clearInterval'],
+  };
+
+  beforeEach(async () => {
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockDb.openTable.mockImplementation(async (name: string) => {
+      if (name === 'edges') return mockEdgesTable;
+      return mockTable;
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockSearchChunks.mockResolvedValue([lowSeed]);
+    mockDeduplicateChunks.mockReturnValue([lowSeed]);
+    mockTraceFlow.mockResolvedValue([prodHop]);
+    mockLoadUserConfig.mockResolvedValue({});
+    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.5 });
+    mockCompressChunk.mockImplementation((chunk) => chunk);
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+
+    const mod = await import('../../src/workflows/traceFlow.js');
+    runTraceFlow = mod.runTraceFlow;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('vector path with similarity 0.31 produces confidenceWarning containing "No confident match for"', async () => {
+    const result = await runTraceFlow('some vague query term');
+    expect(result.metadata.confidenceWarning).toContain('No confident match for');
+  });
+
+  it('vector path with similarity 0.31 produces confidenceWarning containing seed name and similarity value', async () => {
+    const result = await runTraceFlow('some vague query term');
+    expect(result.metadata.confidenceWarning).toContain('resetState');
+    expect(result.metadata.confidenceWarning).toContain('0.31');
+  });
+
+  it('vector path with similarity 0.7 produces confidenceWarning === null (high confidence)', async () => {
+    mockSearchChunks.mockResolvedValue([highSeed]);
+    mockDeduplicateChunks.mockReturnValue([highSeed]);
+    const result = await runTraceFlow('some query');
+    expect(result.metadata.confidenceWarning).toBeNull();
+  });
+
+  it('exact-name path always produces confidenceWarning === null', async () => {
+    mockResolveSymbolToChunkId.mockResolvedValue('prod-1');
+    mockTraceFlow.mockResolvedValue([prodHop]);
+    const result = await runTraceFlow('how does resetState work');
+    expect(result.metadata.confidenceWarning).toBeNull();
+  });
+
+  it('vector path with zero seeds returns no warning (hops empty, no seed to warn about)', async () => {
+    mockSearchChunks.mockResolvedValue([]);
+    mockDeduplicateChunks.mockReturnValue([]);
+    const result = await runTraceFlow('nonexistent thing');
+    // confidenceWarning should be absent or null/undefined on empty path
+    expect(result.metadata.confidenceWarning == null).toBe(true);
+  });
+});
+
+describe('CLI seed bias (TRACE-04)', () => {
+  const lancedbSeed = {
+    id: 'lancedb-seed-1',
+    filePath: '/project/src/services/lancedb.ts',
+    chunkType: 'function',
+    scope: null,
+    name: 'openDatabase',
+    content: 'function openDatabase() { ... }',
+    startLine: 5,
+    endLine: 25,
+    similarity: 0.8,
+  };
+
+  const cliSeed = {
+    id: 'cli-seed-1',
+    filePath: '/project/src/cli/index.ts',
+    chunkType: 'function',
+    scope: null,
+    name: 'indexCommand',
+    content: 'function indexCommand() { ... }',
+    startLine: 10,
+    endLine: 30,
+    similarity: 0.75,
+  };
+
+  const prodHopLancedb = {
+    chunkId: 'lancedb-seed-1',
+    filePath: '/project/src/services/lancedb.ts',
+    name: 'openDatabase',
+    startLine: 5,
+    endLine: 25,
+    content: 'function openDatabase() { ... }',
+    hopDepth: 0,
+    callsFound: ['connect'],
+  };
+
+  const prodHopCli = {
+    chunkId: 'cli-seed-1',
+    filePath: '/project/src/cli/index.ts',
+    name: 'indexCommand',
+    startLine: 10,
+    endLine: 30,
+    content: 'function indexCommand() { ... }',
+    hopDepth: 0,
+    callsFound: ['runIndex'],
+  };
+
+  beforeEach(async () => {
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadIndexState.mockResolvedValue({ ...mockIndexState });
+    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockDb.openTable.mockImplementation(async (name: string) => {
+      if (name === 'edges') return mockEdgesTable;
+      return mockTable;
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockSearchChunks.mockResolvedValue([lancedbSeed, cliSeed]);
+    mockDeduplicateChunks.mockReturnValue([lancedbSeed, cliSeed]);
+    mockTraceFlow.mockResolvedValue([prodHopCli]);
+    mockLoadUserConfig.mockResolvedValue({});
+    mockResolveStrategy.mockReturnValue({ limit: 3, distanceThreshold: 0.5 });
+    mockCompressChunk.mockImplementation((chunk) => chunk);
+    mockResolveSymbolToChunkId.mockResolvedValue(null);
+
+    const mod = await import('../../src/workflows/traceFlow.js');
+    runTraceFlow = mod.runTraceFlow;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('CLI query promotes src/cli/ seed to first position', async () => {
+    await runTraceFlow('index_repo CLI command to LanceDB storage');
+    expect(mockTraceFlow).toHaveBeenCalledWith(
+      mockEdgesTable,
+      mockTable,
+      cliSeed.id,
+      expect.objectContaining({ maxHops: 3 })
+    );
+  });
+
+  it('non-CLI query keeps original seed order (lancedb seed first)', async () => {
+    await runTraceFlow('how does openDatabase connect');
+    expect(mockTraceFlow).toHaveBeenCalledWith(
+      mockEdgesTable,
+      mockTable,
+      lancedbSeed.id,
+      expect.objectContaining({ maxHops: 3 })
+    );
+  });
+
+  it('CLI query with no CLI seeds in results leaves seed order unchanged', async () => {
+    mockSearchChunks.mockResolvedValue([lancedbSeed]);
+    mockDeduplicateChunks.mockReturnValue([lancedbSeed]);
+    mockTraceFlow.mockResolvedValue([prodHopLancedb]);
+    await runTraceFlow('index_repo CLI command');
+    expect(mockTraceFlow).toHaveBeenCalledWith(
+      mockEdgesTable,
+      mockTable,
+      lancedbSeed.id,
+      expect.objectContaining({ maxHops: 3 })
+    );
+  });
+});
