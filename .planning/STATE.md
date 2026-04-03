@@ -1,43 +1,43 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.2
-milestone_name: Retrieval Quality
+milestone: v2.3
+milestone_name: Final Quality Pass
 status: verifying
-stopped_at: Completed 25-02-PLAN.md
-last_updated: "2026-04-03T15:13:46.249Z"
+stopped_at: Completed 26-01-PLAN.md
+last_updated: "2026-04-03T18:06:43.265Z"
 last_activity: 2026-04-03
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 23
-  completed_plans: 23
-  percent: 96
+  total_phases: 15
+  completed_phases: 12
+  total_plans: 24
+  completed_plans: 24
+  percent: 0
 ---
 
 # Project State: Brain-Cache
 
-**Last updated:** 2026-04-02
-**Updated by:** roadmapper (v2.0 roadmap created)
+**Last updated:** 2026-04-03
+**Updated by:** roadmapper (v2.3 roadmap created)
 
 ---
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-02)
+See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 25 — tool-routing-documentation
+**Current focus:** Phase 26 — search-precision
 
 ---
 
 ## Current Position
 
-Phase: 25 (tool-routing-documentation) — EXECUTING
-Plan: 2 of 2
+Phase: 26 (search-precision) — EXECUTING
+Plan: 1 of 1
 Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
-Progress: [██████████] 96% (22 of 23 plans complete)
+Progress: [░░░░░░░░░░] 0% (0/4 phases complete)
 
 ---
 
@@ -46,6 +46,12 @@ Progress: [██████████] 96% (22 of 23 plans complete)
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 26, Plan 01 — tiered computeKeywordBoost for search precision)
+
+- Tier 3 (filename stem) uses return 0.6 not 0.8 as specced — 0.8 caused regression on tsup noise-penalty test; 0.6 satisfies all PREC tests at boost weight 0.40 while not overpowering at default 0.10
+- Tier 2 camelCase match requires ALL sub-tokens of chunk.name to appear in query tokens (not partial) — prevents spurious 1.0 boosts
+- splitCamelCase filters sub-tokens shorter than 2 chars to prevent single-char noise tokens
 
 ### Key Decisions (Phase 25, Plan 01 — MCP tool routing negative guards)
 
@@ -103,24 +109,27 @@ None.
 
 ### Session Notes
 
-v2.0 MCP Magic roadmap defined: 5 phases (15-19), 10 requirements, all mapped.
-Phase ordering: 15 (data foundation) → 16 (retrieval intelligence) → 17 (MCP tools) → 18 (file watcher) → 19 (CLAUDE.md).
-Phase 18 (file watcher) depends only on Phase 15 (write mutex + edges schema) — independent of retrieval work.
-chokidar v5 is the only new npm dependency for v2.0.
+v2.3 Final Quality Pass roadmap defined: 4 phases (26-29), 9 requirements, all mapped.
+Phase ordering: 26 (search precision) → 27 (compression protection) → 28 (trace output quality) → 29 (explain depth).
+Phase 27 depends on 26 (compression protection requires precision boosting logic to identify the primary result).
+Phase 28 depends on 26 (trace confidence signal requires same similarity threshold awareness as precision boosting).
+Phase 29 depends on 27 (explain depth depends on compression protection being in place for primary chunks).
+All 4 phases are quality-only — no new MCP tools, no schema changes.
+debug.md scenarios map directly to success criteria in each phase.
 
 ### Quick Tasks Completed
 
-See prior STATE.md entries for v1.x quick tasks (archived).
+See prior STATE.md entries for v1.x–v2.2 quick tasks (archived).
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T15:13:46.244Z
+**Last session:** 2026-04-03T18:06:43.259Z
 
-**Stopped at:** Completed 25-02-PLAN.md
+**Stopped at:** Completed 26-01-PLAN.md
 
-**Next action:** `/gsd:plan-phase 15`
+**Next action:** `/gsd:plan-phase 26`
 
 ---
 *State initialized: 2026-03-31*

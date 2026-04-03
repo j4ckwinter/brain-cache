@@ -11,9 +11,10 @@
 - ✅ **v1.1 Hardening** — Phases 6-12 (shipped 2026-04-01) — [archive](milestones/v1.1-ROADMAP.md)
 - ✅ **v1.1.1 Post-Ship Cleanup** — Phase 14 (shipped 2026-04-02)
 - ✅ **v1.2 MCP Tool Adoption** — Phase 13 (shipped 2026-04-02)
-- ✅ **v2.0 MCP Magic** — Phases 15-19 (shipped 2026-04-03)
+- ✅ **v2.0 MCP Magic** — Phases 15-19 (shipped 2026-04-03) — [archive](milestones/v2.1-ROADMAP.md)
 - ✅ **v2.1 Presentation Magic** — Phases 20-21 (shipped 2026-04-03) — [archive](milestones/v2.1-ROADMAP.md)
-- 🚧 **v2.2 Retrieval Quality** — Phases 22-25 (in progress)
+- ✅ **v2.2 Retrieval Quality** — Phases 22-25 (shipped 2026-04-03) — [archive](milestones/v2.2-ROADMAP.md)
+- 🔄 **v2.3 Final Quality Pass** — Phases 26-29 (in progress)
 
 ## Phases
 
@@ -74,16 +75,28 @@
 
 </details>
 
-### v2.2 Retrieval Quality (In Progress)
+<details>
+<summary>✅ v2.2 Retrieval Quality (Phases 22-25) — SHIPPED 2026-04-03</summary>
 
-**Milestone Goal:** Fix tool routing, retrieval accuracy, and output quality issues discovered during v2.1 testing — make brain-cache reliably return the right content via the right tool.
+- [x] Phase 22: Isolated Trace Fixes (2/2 plans) — completed 2026-04-03
+- [x] Phase 23: Search Noise Reduction (1/1 plans) — completed 2026-04-03
+- [x] Phase 24: Compression and Savings Accuracy (2/2 plans) — completed 2026-04-03
+- [x] Phase 25: Tool Routing Documentation (2/2 plans) — completed 2026-04-03
 
-- [x] **Phase 22: Isolated Trace Fixes** - Fix trace_flow entry point resolution for verbose queries and deduplicate callsFound per hop (completed 2026-04-03)
-- [x] **Phase 23: Search Noise Reduction** - Apply score penalty to build tool config files so application code ranks above config noise (completed 2026-04-03)
-- [x] **Phase 24: Compression and Savings Accuracy** - Protect name-matched chunks from compression via boosted similarity scoring; report honest token savings (completed 2026-04-03)
-- [x] **Phase 25: Tool Routing Documentation** - Sharpen MCP tool descriptions with negative examples and update CLAUDE.md routing table to reflect delivered behavior (completed 2026-04-03)
+</details>
+
+### v2.3 Final Quality Pass (Phases 26-29)
+
+- [x] **Phase 26: Search Precision** - Exact-match and filename-aware retrieval boosting in search_codebase (completed 2026-04-03)
+- [ ] **Phase 27: Compression Protection** - Protect primary results from body compression, drop noise before trimming production code
+- [ ] **Phase 28: Trace Output Quality** - Noise filtering, confidence warnings, and CLI entrypoint preference in trace_flow
+- [ ] **Phase 29: Explain Codebase Depth** - Behavioral summaries for key modules in explain_codebase
 
 ## Phase Details
+
+*All phases through v2.2 are archived. See [milestones/](milestones/) for full phase details.*
+
+<!-- Phase details for next milestone will appear below -->
 
 ### Phase 15: Storage Foundation and Index Pipeline
 **Goal**: LanceDB can store and query call edges, the index pipeline writes those edges and respects `.braincacheignore`, and concurrent writes are safe
@@ -256,6 +269,54 @@ Plans:
 - [x] 25-01-PLAN.md — MCP tool description negative examples and server.test.ts assertions
 - [x] 25-02-PLAN.md — CLAUDE.md and claude-md-section.ts routing table update with negative examples
 
+### Phase 26: Search Precision
+**Goal**: search_codebase returns the named symbol or file on the first attempt when the query contains an exact or near-exact symbol/filename match
+**Depends on**: Phase 25
+**Requirements**: PREC-01, PREC-02
+**Success Criteria** (what must be TRUE):
+  1. Querying `search_codebase("compressChunk function")` returns `compressChunk` from `compression.ts` in the top results — the exact symbol name match ranks above semantically similar but differently-named symbols (debug.md: exact symbol lookup scenario)
+  2. Querying `search_codebase("compression service")` surfaces `compression.ts` in top results — the filename token "compression" acts as a strong prior before semantic similarity scoring (debug.md: compression service lookup scenario)
+  3. A query that contains a camelCase symbol name (e.g. `searchChunks`) boosts chunks whose function/variable name field matches, even when the semantic similarity score is lower than adjacent symbols
+  4. A query that contains a filename stem (e.g. "chunker", "retriever") boosts chunks whose `filePath` field contains that stem
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 26-01-PLAN.md — TDD: tiered keyword boost for exact name and filename stem matching
+
+### Phase 27: Compression Protection
+**Goal**: build_context spends token budget on the chunk that directly answers the query, and peripheral chunks (test files, config files) are dropped or compressed before any production file loses its body
+**Depends on**: Phase 26
+**Requirements**: COMP-01, COMP-02
+**Success Criteria** (what must be TRUE):
+  1. Calling `build_context("how does buildContext.ts work")` returns `buildContext.ts` with its full function body — the primary result is never compressed while peripheral files remain in full (debug.md: workflow body query scenario)
+  2. Calling `build_context("how does chunkFile work")` returns `chunkFile` in full while test file chunks (`logger.test.ts`, `compression.test.ts`, `flowTracer.test.ts`) are excluded before any production file is compressed (debug.md: chunkFile lookup scenario)
+  3. When the token budget is tight, test file chunks are dropped first, config file chunks are dropped second, and production source files are compressed last
+  4. A chunk whose file path or symbol name is a close match to the query is marked as the primary result and exempt from compression regardless of chunk size
+**Plans**: TBD
+
+### Phase 28: Trace Output Quality
+**Goal**: trace_flow produces clean, trustworthy output — test files and stdlib methods are absent from hop lists, low-confidence seeds are surfaced explicitly, and CLI queries anchor to CLI entry files
+**Depends on**: Phase 26
+**Requirements**: TRACE-01, TRACE-02, TRACE-03, TRACE-04
+**Success Criteria** (what must be TRUE):
+  1. Tracing `runBuildContext` produces zero hops that resolve to test files — `tests/services/logger.test.ts` and similar test paths do not appear in any hop's filePath (debug.md: runBuildContext workflow trace scenario)
+  2. Hop lists for any traced function exclude native Array/Promise/String methods (`map`, `filter`, `includes`, `resolve`, `push`, `has`) — only project-owned symbols appear as callees (debug.md: runBuildContext workflow trace scenario)
+  3. Querying `trace_flow("nonexistentFunction")` with a top-match similarity below 0.5 produces a visible warning line — e.g. `No confident match for "nonexistentFunction" — tracing nearest match: resetState (watch.ts:13, similarity: 0.31)` — rather than a structurally identical-looking trace (debug.md: nonexistent symbol query scenario)
+  4. Querying `trace_flow("index_repo CLI command to LanceDB storage")` resolves to a symbol in `src/cli/` or a file containing `program.command(...)` as the seed, not a mid-stack service function (debug.md: CLI-to-LanceDB indexing trace scenario)
+**Plans**: TBD
+
+### Phase 29: Explain Codebase Depth
+**Goal**: explain_codebase describes what each key module does, not just that it exists — prioritizing exports and cross-cutting wiring over internal helpers
+**Depends on**: Phase 27
+**Requirements**: EXPL-01
+**Success Criteria** (what must be TRUE):
+  1. An `explain_codebase` call includes at least one behavioral sentence per key module (e.g. "compression.ts strips function bodies above 200 tokens, preserving signatures and JSDoc") rather than listing filenames with no description (debug.md: architecture query scenario)
+  2. The output prioritizes chunks containing module-level exports and cross-cutting wiring (e.g. how services are composed in workflows) over internal helpers or rendering utilities — `logger.ts` does not lead the overview
+  3. For modules where compression was applied, the output includes a one-sentence summary of what the module does so the architecture overview is meaningful without requiring a follow-up `build_context` call
+  4. `explain_codebase` does not include internal helper functions (e.g. `childLogger` in `logger.ts`, layout renderers in `explainCodebase.ts`) as representative module-level content
+**Plans**: TBD
+**UI hint**: no
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -284,8 +345,12 @@ Plans:
 | 22. Isolated Trace Fixes | v2.2 | 2/2 | Complete   | 2026-04-03 |
 | 23. Search Noise Reduction | v2.2 | 1/1 | Complete    | 2026-04-03 |
 | 24. Compression and Savings Accuracy | v2.2 | 2/2 | Complete    | 2026-04-03 |
-| 25. Tool Routing Documentation | v2.2 | 2/2 | Complete   | 2026-04-03 |
+| 25. Tool Routing Documentation | v2.2 | 2/2 | Complete    | 2026-04-03 |
+| 26. Search Precision | v2.3 | 1/1 | Complete   | 2026-04-03 |
+| 27. Compression Protection | v2.3 | 0/? | Not started | - |
+| 28. Trace Output Quality | v2.3 | 0/? | Not started | - |
+| 29. Explain Codebase Depth | v2.3 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 25 planned (2 plans, 2 waves sequential)*
+*Last updated: 2026-04-03 — v2.3 Final Quality Pass roadmap added (Phases 26-29)*
