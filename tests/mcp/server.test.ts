@@ -44,6 +44,14 @@ vi.mock('../../src/workflows/buildContext.js', () => ({
   runBuildContext: vi.fn(),
 }));
 
+vi.mock('../../src/workflows/traceFlow.js', () => ({
+  runTraceFlow: vi.fn(),
+}));
+
+vi.mock('../../src/workflows/explainCodebase.js', () => ({
+  runExplainCodebase: vi.fn(),
+}));
+
 vi.mock('../../src/services/logger.js', () => ({
   childLogger: vi.fn(() => ({
     info: vi.fn(),
@@ -63,6 +71,8 @@ import { readIndexState } from '../../src/services/lancedb.js';
 import { runIndex } from '../../src/workflows/index.js';
 import { runSearch } from '../../src/workflows/search.js';
 import { runBuildContext } from '../../src/workflows/buildContext.js';
+import { runTraceFlow } from '../../src/workflows/traceFlow.js';
+import { runExplainCodebase } from '../../src/workflows/explainCodebase.js';
 
 const mockReadProfile = vi.mocked(readProfile);
 const mockDetectCapabilities = vi.mocked(detectCapabilities);
@@ -73,6 +83,8 @@ const mockReadIndexState = vi.mocked(readIndexState);
 const mockRunIndex = vi.mocked(runIndex);
 const mockRunSearch = vi.mocked(runSearch);
 const mockRunBuildContext = vi.mocked(runBuildContext);
+const mockRunTraceFlow = vi.mocked(runTraceFlow);
+const mockRunExplainCodebase = vi.mocked(runExplainCodebase);
 
 const mockProfile = {
   version: 1 as const,
@@ -328,6 +340,130 @@ describe('MCP tool handlers', () => {
       expect(parsed.tokenSavings).toContain('150');
       expect(parsed.tokenSavings).toContain('~1,000');
       expect(parsed.tokenSavings).toContain('85%');
+    });
+  });
+
+  // ---- trace_flow ----
+
+  describe('trace_flow', () => {
+    it('returns isError when no profile exists', async () => {
+      mockReadProfile.mockResolvedValue(null);
+
+      const { handler } = registeredTools.get('trace_flow')!;
+      const result = await handler({ entrypoint: 'runBuildContext' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('brain-cache init');
+    });
+
+    it('returns isError when Ollama is not running', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(false);
+
+      const { handler } = registeredTools.get('trace_flow')!;
+      const result = await handler({ entrypoint: 'runBuildContext' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Ollama is not running');
+    });
+
+    it('returns hop results on success', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunTraceFlow.mockResolvedValue({
+        hops: [
+          {
+            filePath: 'src/test.ts',
+            name: 'testFn',
+            startLine: 1,
+            content: 'function testFn() {}',
+            callsFound: ['otherFn'],
+          },
+        ],
+      } as any);
+
+      const { handler } = registeredTools.get('trace_flow')!;
+      const result = await handler({ entrypoint: 'testFn', maxHops: 5, path: '/my/project' });
+
+      expect(result.isError).toBeUndefined();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.hops).toHaveLength(1);
+      expect(mockRunTraceFlow).toHaveBeenCalledWith('testFn', { maxHops: 5, path: '/my/project' });
+    });
+
+    it('returns isError when runTraceFlow throws', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunTraceFlow.mockRejectedValue(new Error('Symbol not found'));
+
+      const { handler } = registeredTools.get('trace_flow')!;
+      const result = await handler({ entrypoint: 'testFn' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('trace_flow failed');
+      expect(result.content[0].text).toContain('Symbol not found');
+    });
+  });
+
+  // ---- explain_codebase ----
+
+  describe('explain_codebase', () => {
+    it('returns isError when no profile exists', async () => {
+      mockReadProfile.mockResolvedValue(null);
+
+      const { handler } = registeredTools.get('explain_codebase')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('brain-cache init');
+    });
+
+    it('returns isError when Ollama is not running', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(false);
+
+      const { handler } = registeredTools.get('explain_codebase')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Ollama is not running');
+    });
+
+    it('returns architecture overview on success', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunExplainCodebase.mockResolvedValue({
+        content: 'Architecture overview text',
+        chunks: [],
+        metadata: {
+          tokensSent: 200,
+          estimatedWithoutBraincache: 800,
+          reductionPct: 75,
+          localTasksPerformed: ['embed_query', 'vector_search'],
+          cloudCallsMade: 0,
+        },
+      } as any);
+
+      const { handler } = registeredTools.get('explain_codebase')!;
+      const result = await handler({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
+
+      expect(result.isError).toBeUndefined();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed).toHaveProperty('content');
+      expect(mockRunExplainCodebase).toHaveBeenCalledWith({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
+    });
+
+    it('returns isError when runExplainCodebase throws', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunExplainCodebase.mockRejectedValue(new Error('No index found'));
+
+      const { handler } = registeredTools.get('explain_codebase')!;
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('explain_codebase failed');
+      expect(result.content[0].text).toContain('No index found');
     });
   });
 
