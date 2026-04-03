@@ -40,6 +40,31 @@ export interface TraceFlowResult {
 
 const BODY_STRIPPED_MARKER = '// [body stripped]';
 
+const TEST_FILE_PATTERNS = ['.test.', '.spec.', '/__tests__/', '/tests/'];
+
+function isTestFile(filePath: string): boolean {
+  return TEST_FILE_PATTERNS.some(p => filePath.includes(p));
+}
+
+const STDLIB_SYMBOLS = new Set([
+  // Array
+  'map', 'filter', 'reduce', 'forEach', 'find', 'findIndex', 'some', 'every',
+  'includes', 'push', 'pop', 'shift', 'unshift', 'splice', 'slice', 'concat',
+  'join', 'sort', 'reverse', 'flat', 'flatMap', 'fill', 'indexOf', 'lastIndexOf',
+  // Set/Map
+  'keys', 'values', 'entries', 'has', 'get', 'set', 'delete', 'add', 'clear',
+  // Promise
+  'resolve', 'reject', 'then', 'catch', 'finally', 'all', 'race', 'allSettled',
+  // Object
+  'toString', 'valueOf', 'hasOwnProperty', 'assign', 'freeze', 'create',
+  // String
+  'split', 'replace', 'replaceAll', 'match', 'matchAll', 'trim', 'trimStart',
+  'trimEnd', 'startsWith', 'endsWith', 'padStart', 'padEnd', 'repeat', 'charAt',
+  'charCodeAt', 'substring', 'toLowerCase', 'toUpperCase',
+  // Property-like
+  'length',
+]);
+
 /**
  * Computes token savings for a set of hops, mirroring the buildContext.ts savings pattern.
  * Returns zeros when hops is empty (no seed found).
@@ -166,7 +191,10 @@ export async function runTraceFlow(
     const maxHops = opts?.maxHops ?? 3;
     const flowHops = await traceFlow(edgesTable, table, seedChunkId, { maxHops });
 
-    const hops = flowHops.map(hop => {
+    // TRACE-01: exclude test file hops
+    const productionHops = flowHops.filter(hop => !isTestFile(hop.filePath));
+
+    const hops = productionHops.map(hop => {
       const asChunk = {
         id: hop.chunkId,
         filePath: hop.filePath,
@@ -184,7 +212,7 @@ export async function runTraceFlow(
         name: hop.name,
         startLine: hop.startLine,
         content: compressed.content,
-        callsFound: hop.callsFound,
+        callsFound: hop.callsFound.filter(s => !STDLIB_SYMBOLS.has(s)),  // TRACE-02
         hopDepth: hop.hopDepth,
       };
     });
@@ -225,8 +253,11 @@ export async function runTraceFlow(
   const maxHops = opts?.maxHops ?? 3;
   const flowHops = await traceFlow(edgesTable, table, seeds[0].id, { maxHops });
 
+  // TRACE-01: exclude test file hops
+  const productionHops = flowHops.filter(hop => !isTestFile(hop.filePath));
+
   // 7. Apply compression and map to output format
-  const hops = flowHops.map(hop => {
+  const hops = productionHops.map(hop => {
     const asChunk = {
       id: hop.chunkId,
       filePath: hop.filePath,
@@ -244,7 +275,7 @@ export async function runTraceFlow(
       name: hop.name,
       startLine: hop.startLine,
       content: compressed.content,
-      callsFound: hop.callsFound,
+      callsFound: hop.callsFound.filter(s => !STDLIB_SYMBOLS.has(s)),  // TRACE-02
       hopDepth: hop.hopDepth,
     };
   });
