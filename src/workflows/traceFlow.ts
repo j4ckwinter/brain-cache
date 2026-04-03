@@ -35,6 +35,7 @@ export interface TraceFlowResult {
     estimatedWithoutBraincache: number;
     reductionPct: number;
     filesInContext: number;
+    confidenceWarning?: string | null;
   };
 }
 
@@ -64,6 +65,17 @@ const STDLIB_SYMBOLS = new Set([
   // Property-like
   'length',
 ]);
+
+const LOW_CONFIDENCE_THRESHOLD = 0.5;
+
+function isCLIQuery(query: string): boolean {
+  const lower = query.toLowerCase();
+  return lower.includes(' cli ') || lower.startsWith('cli ') || lower.includes('command');
+}
+
+function isCLIFile(filePath: string): boolean {
+  return filePath.includes('/cli/');
+}
 
 /**
  * Computes token savings for a set of hops, mirroring the buildContext.ts savings pattern.
@@ -225,6 +237,7 @@ export async function runTraceFlow(
         totalHops: hops.length,
         localTasksPerformed: ['exact_name_lookup', 'bfs_trace', 'compress'],
         ...exactSavings,
+        confidenceWarning: null,
       },
     };
   }
@@ -249,14 +262,29 @@ export async function runTraceFlow(
     };
   }
 
-  // 6. BFS trace from first seed
+  // 6. TRACE-04: CLI seed bias — prefer src/cli/ seeds for CLI-flavored queries
+  let selectedSeed = seeds[0];
+  if (isCLIQuery(entrypoint)) {
+    const cliSeed = seeds.find(s => isCLIFile(s.filePath));
+    if (cliSeed) selectedSeed = cliSeed;
+  }
+
+  // TRACE-03: confidence warning for low-similarity seeds
+  let confidenceWarning: string | null = null;
+  if (selectedSeed.similarity < LOW_CONFIDENCE_THRESHOLD) {
+    const seedName = selectedSeed.name ?? 'unknown';
+    const seedFile = selectedSeed.filePath.split('/').pop() ?? selectedSeed.filePath;
+    confidenceWarning = `No confident match for "${entrypoint}" — tracing nearest match: ${seedName} (${seedFile}:${selectedSeed.startLine}, similarity: ${selectedSeed.similarity.toFixed(2)})`;
+  }
+
+  // 7. BFS trace from selected seed
   const maxHops = opts?.maxHops ?? 3;
-  const flowHops = await traceFlow(edgesTable, table, seeds[0].id, { maxHops });
+  const flowHops = await traceFlow(edgesTable, table, selectedSeed.id, { maxHops });
 
   // TRACE-01: exclude test file hops
   const productionHops = flowHops.filter(hop => !isTestFile(hop.filePath));
 
-  // 7. Apply compression and map to output format
+  // 8. Apply compression and map to output format
   const hops = productionHops.map(hop => {
     const asChunk = {
       id: hop.chunkId,
@@ -285,10 +313,11 @@ export async function runTraceFlow(
   return {
     hops,
     metadata: {
-      seedChunkId: seeds[0].id,
+      seedChunkId: selectedSeed.id,
       totalHops: hops.length,
       localTasksPerformed: ['embed_query', 'seed_search', 'bfs_trace', 'compress'],
       ...savings,
+      confidenceWarning,
     },
   };
 }

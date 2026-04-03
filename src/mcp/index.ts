@@ -394,8 +394,11 @@ server.registerTool(
       const pipeline = formatPipelineLabel(result.metadata.localTasksPerformed);
       const footer = `---\n${savings}\nPipeline: ${pipeline}`;
       const summary = `Traced ${result.hops.length} hop${result.hops.length !== 1 ? 's' : ''} from "${entrypoint}".`;
+      const warningLine = result.metadata.confidenceWarning
+        ? `Warning: ${result.metadata.confidenceWarning}\n\n`
+        : '';
       return {
-        content: [{ type: 'text' as const, text: formatToolResponse(summary, `${formatTraceFlow(result)}\n\n${footer}`) }],
+        content: [{ type: 'text' as const, text: formatToolResponse(summary, `${warningLine}${formatTraceFlow(result)}\n\n${footer}`) }],
       };
     } catch (err) {
       return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope(`trace_flow failed: ${err instanceof Error ? err.message : String(err)}`) }] };
