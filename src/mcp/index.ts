@@ -65,7 +65,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: "No capability profile found. Run 'brain-cache init' first.",
+            text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first."),
           },
         ],
       };
@@ -78,7 +78,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: "Ollama is not running. Start it with 'ollama serve'.",
+            text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'."),
           },
         ],
       };
@@ -105,7 +105,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: `Indexing failed: ${err instanceof Error ? err.message : String(err)}`,
+            text: formatErrorEnvelope(`Indexing failed: ${err instanceof Error ? err.message : String(err)}`),
           },
         ],
       };
@@ -167,7 +167,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: "No capability profile found. Run 'brain-cache init' first.",
+            text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first."),
           },
         ],
       };
@@ -179,7 +179,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: "Ollama is not running. Start it with 'ollama serve'.",
+            text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'."),
           },
         ],
       };
@@ -200,7 +200,7 @@ server.registerTool(
             content: [
               {
                 type: "text" as const,
-                text: `Search failed after auto-index: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+                text: formatErrorEnvelope(`Search failed after auto-index: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`),
               },
             ],
           };
@@ -211,7 +211,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: `Search failed: ${err instanceof Error ? err.message : String(err)}`,
+            text: formatErrorEnvelope(`Search failed: ${err instanceof Error ? err.message : String(err)}`),
           },
         ],
       };
@@ -248,7 +248,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: "No capability profile found. Run 'brain-cache init' first.",
+            text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first."),
           },
         ],
       };
@@ -260,7 +260,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: "Ollama is not running. Start it with 'ollama serve'.",
+            text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'."),
           },
         ],
       };
@@ -281,7 +281,7 @@ server.registerTool(
             content: [
               {
                 type: "text" as const,
-                text: `Context build failed after auto-index: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+                text: formatErrorEnvelope(`Context build failed after auto-index: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`),
               },
             ],
           };
@@ -292,7 +292,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: `Context build failed: ${err instanceof Error ? err.message : String(err)}`,
+            text: formatErrorEnvelope(`Context build failed: ${err instanceof Error ? err.message : String(err)}`),
           },
         ],
       };
@@ -353,7 +353,7 @@ server.registerTool(
         content: [
           {
             type: "text" as const,
-            text: `Doctor failed: ${err instanceof Error ? err.message : String(err)}`,
+            text: formatErrorEnvelope(`Doctor failed: ${err instanceof Error ? err.message : String(err)}`),
           },
         ],
       };
@@ -376,11 +376,11 @@ server.registerTool(
   async ({ entrypoint, maxHops, path }) => {
     const profile = await readProfile();
     if (!profile) {
-      return { isError: true, content: [{ type: 'text' as const, text: "No capability profile found. Run 'brain-cache init' first." }] };
+      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first.") }] };
     }
     const running = await isOllamaRunning();
     if (!running) {
-      return { isError: true, content: [{ type: 'text' as const, text: "Ollama is not running. Start it with 'ollama serve'." }] };
+      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'.") }] };
     }
     try {
       const result = await runTraceFlow(entrypoint, { maxHops, path });
@@ -398,7 +398,7 @@ server.registerTool(
         content: [{ type: 'text' as const, text: formatToolResponse(summary, `${formatTraceFlow(result)}\n\n${footer}`) }],
       };
     } catch (err) {
-      return { isError: true, content: [{ type: 'text' as const, text: `trace_flow failed: ${err instanceof Error ? err.message : String(err)}` }] };
+      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope(`trace_flow failed: ${err instanceof Error ? err.message : String(err)}`) }] };
     }
   }
 );
@@ -418,11 +418,11 @@ server.registerTool(
   async ({ question, maxTokens, path }) => {
     const profile = await readProfile();
     if (!profile) {
-      return { isError: true, content: [{ type: 'text' as const, text: "No capability profile found. Run 'brain-cache init' first." }] };
+      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first.") }] };
     }
     const running = await isOllamaRunning();
     if (!running) {
-      return { isError: true, content: [{ type: 'text' as const, text: "Ollama is not running. Start it with 'ollama serve'." }] };
+      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'.") }] };
     }
     try {
       const result = await runExplainCodebase({ question, maxTokens, path });
@@ -434,7 +434,7 @@ server.registerTool(
       const text = formatToolResponse(summary, `${formatContext(result)}\n\n${footer}`);
       return { content: [{ type: 'text' as const, text }] };
     } catch (err) {
-      return { isError: true, content: [{ type: 'text' as const, text: `explain_codebase failed: ${err instanceof Error ? err.message : String(err)}` }] };
+      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope(`explain_codebase failed: ${err instanceof Error ? err.message : String(err)}`) }] };
     }
   }
 );
