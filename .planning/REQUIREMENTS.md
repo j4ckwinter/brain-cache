@@ -14,8 +14,8 @@ Requirements for Presentation Magic milestone. Each maps to roadmap phases.
 
 ### Tool Renderers
 
-- [ ] **REND-01**: `search_codebase` returns a numbered ranked list with score, file path, line number, symbol name, and chunk type instead of raw JSON
-- [ ] **REND-02**: `trace_flow` returns numbered hops showing hop depth, file path, line number, symbol name, and calls-found list instead of raw JSON
+- [x] **REND-01**: `search_codebase` returns a numbered ranked list with score, file path, line number, symbol name, and chunk type instead of raw JSON
+- [x] **REND-02**: `trace_flow` returns numbered hops showing hop depth, file path, line number, symbol name, and calls-found list instead of raw JSON
 - [x] **REND-03**: `doctor` returns a fixed-width health dashboard showing service status instead of raw JSON
 - [x] **REND-04**: `index_repo` returns a single-line completion summary instead of raw JSON
 
@@ -80,8 +80,8 @@ Requirements for Presentation Magic milestone. Each maps to roadmap phases.
 |-------------|-------|--------|
 | FMT-01 | Phase 20 | Complete |
 | FMT-02 | Phase 20 | Complete |
-| REND-01 | Phase 20 | Pending |
-| REND-02 | Phase 20 | Pending |
+| REND-01 | Phase 20 | Complete |
+| REND-02 | Phase 20 | Complete |
 | REND-03 | Phase 20 | Complete |
 | REND-04 | Phase 20 | Complete |
 | META-01 | Phase 21 | Pending |
