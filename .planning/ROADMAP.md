@@ -136,11 +136,11 @@ Plans:
   2. In a fresh Claude Code session, Claude calls `explain_codebase` (not `build_context` or file-read tools) when asked to explain the project architecture
   3. The CLAUDE.md routing table covers all 6 tools with clear trigger conditions and explicit "use X instead" cross-references
   4. Running `brain-cache init` on a new project produces a CLAUDE.md section that reflects the v2.0 tool set
-**Plans:** 2 plans in 2 waves
+**Plans:** 2 plans
 
 Plans:
-- [ ] 19-01-PLAN.md — TBD
-- [ ] 19-02-PLAN.md — TBD
+- [ ] 19-01-PLAN.md — Update CLAUDE_MD_SECTION template and project CLAUDE.md with 6-tool routing table
+- [ ] 19-02-PLAN.md — Add MCP handler tests for trace_flow and explain_codebase, full regression check
 
 ## Progress
 
@@ -163,9 +163,9 @@ Plans:
 | 15. Storage Foundation and Index Pipeline | v2.0 | 3/3 | Complete    | 2026-04-02 |
 | 16. Retrieval Intelligence | v2.0 | 3/3 | Complete    | 2026-04-03 |
 | 17. New MCP Tools and Workflows | v2.0 | 2/2 | Complete    | 2026-04-03 |
-| 18. File Watcher | v2.0 | 2/2 | Complete   | 2026-04-03 |
-| 19. CLAUDE.md Refinements | v2.0 | 0/? | Not started | - |
+| 18. File Watcher | v2.0 | 2/2 | Complete    | 2026-04-03 |
+| 19. CLAUDE.md Refinements | v2.0 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — Phase 18 planned (2 plans in 2 waves)*
+*Last updated: 2026-04-03 — Phase 19 planned (2 plans in 2 waves)*
