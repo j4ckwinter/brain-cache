@@ -98,7 +98,7 @@
 
 ### v2.4 Status Line (Phases 30-32)
 
-- [ ] **Phase 30: Stats Infrastructure** - Session stats service with atomic writes, TTL-based reset, and config constants
+- [x] **Phase 30: Stats Infrastructure** - Session stats service with atomic writes, TTL-based reset, and config constants (completed 2026-04-03)
 - [ ] **Phase 31: Status Line Rendering** - Node.js status line script reading session stats, cumulative display, and idle fallback
 - [ ] **Phase 32: Init Integration** - brain-cache init installs status line script and merges settings.json without clobbering
 
@@ -120,7 +120,7 @@
 **Plans**: 2 plans
 Plans:
 - [x] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
-- [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
+- [x] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
 
 ### Phase 31: Status Line Rendering
 **Goal**: Claude Code displays brain-cache's cumulative token savings after every prompt via a Node.js status line script that gracefully handles missing or expired stats
@@ -134,7 +134,7 @@ Plans:
   5. The script completes under 100ms cold-start — it does only synchronous file reads and string formatting with no subprocess spawning or network calls
 **Plans**: 2 plans
 Plans:
-- [ ] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
+- [x] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
 - [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
 **UI hint**: yes
 
@@ -185,7 +185,7 @@ Plans:
 | 27. Compression Protection | v2.3 | 1/1 | Complete | 2026-04-03 |
 | 28. Trace Output Quality | v2.3 | 2/2 | Complete | 2026-04-03 |
 | 29. Explain Codebase Depth | v2.3 | 2/2 | Complete    | 2026-04-03 |
-| 30. Stats Infrastructure | v2.4 | 1/2 | In Progress|  |
+| 30. Stats Infrastructure | v2.4 | 2/2 | Complete   | 2026-04-03 |
 | 31. Status Line Rendering | v2.4 | 0/? | Not started | - |
 | 32. Init Integration | v2.4 | 0/? | Not started | - |
 

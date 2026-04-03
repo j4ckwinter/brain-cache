@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Status Line
-status: executing
-stopped_at: Completed 30-01-PLAN.md
-last_updated: "2026-04-03T20:16:19.547Z"
+status: verifying
+stopped_at: Completed 30-02-PLAN.md
+last_updated: "2026-04-03T20:32:04.308Z"
 last_activity: 2026-04-03
 progress:
   total_phases: 3
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 0
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State: Brain-Cache
@@ -34,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 
 Phase: 30 (stats-infrastructure) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-03
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ---
 
@@ -46,6 +46,13 @@ Progress: [░░░░░░░░░░] 0%
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 30, Plan 02 — MCP stats wiring)
+
+- Fire-and-forget pattern for stats: never await accumulateStats — handler returns before accumulation completes, stats failure is isolated via .catch
+- search_codebase computes delta inline from chunks array (Math.round(reduce(length)/4)); build_context/trace_flow/explain_codebase extract from result.metadata
+- Both auto-index retry success paths in search_codebase and build_context also accumulate stats — they represent real successful retrievals
+- accumulateStats called only on success paths; error paths (isError: true returns) never call it
 
 ### Key Decisions (v2.4 roadmap — phase structure)
 
@@ -83,9 +90,9 @@ See prior STATE.md entries for v1.x–v2.3 quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T20:16:19.544Z
+**Last session:** 2026-04-03T20:32:04.306Z
 
-**Stopped at:** Completed 30-01-PLAN.md
+**Stopped at:** Completed 30-02-PLAN.md
 
 **Next action:** `/gsd:plan-phase 30`
 
