@@ -67,8 +67,8 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 - ✓ Session-level token savings accumulation in MCP retrieval handlers (STAT-01) — Validated in Phase 30: stats-infrastructure
 - ✓ Configurable TTL-based session stats reset (STAT-02) — Validated in Phase 30: stats-infrastructure
+- ✓ Standalone statusline.mjs script renders savings or idle fallback for Claude Code status line (STAT-03, STAT-04) — Validated in Phase 31: status-line-rendering
 - [ ] `brain-cache init` installs and configures status line into Claude Code settings (STAT-03)
-- [ ] Session stats reset on new session or TTL-based expiry (STAT-04)
 
 ## Current Milestone: v2.4 Status Line
 
@@ -82,7 +82,7 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 ## Current State
 
-Phase 30 stats-infrastructure complete (2026-04-04). Session stats service (`sessionStats.ts`) accumulates token savings across MCP tool calls with atomic writes, mutex concurrency safety, and TTL-based reset. All 4 retrieval handlers wired with fire-and-forget `accumulateStats`. 563 tests across 27 test files.
+Phase 31 status-line-rendering complete (2026-04-04). Standalone `statusline.mjs` ESM script reads `~/.brain-cache/session-stats.json`, formats token savings with k/M suffixes, and renders `brain-cache  ↓{pct}%  {n} saved` or `brain-cache  idle` fallback. Pure functions exported for testability, stdin/stdout protocol guarded by `import.meta.url`. 588 tests across 29 test files.
 
 ### Out of Scope
 
@@ -163,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after Phase 30 stats-infrastructure complete*
+*Last updated: 2026-04-04 after Phase 31 status-line-rendering complete*
