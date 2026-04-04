@@ -6,6 +6,13 @@ vi.mock('node:fs', () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   appendFileSync: vi.fn(),
+  chmodSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
+
+// Mock statusline-script module
+vi.mock('../../src/lib/statusline-script.js', () => ({
+  STATUSLINE_SCRIPT_CONTENT: '#!/usr/bin/env node\n// mock statusline content\n',
 }));
 
 import * as nodeFsMock from 'node:fs';
@@ -74,6 +81,8 @@ const mockExistsSync = vi.mocked(nodeFsMock.existsSync);
 const mockReadFileSync = vi.mocked(nodeFsMock.readFileSync);
 const mockWriteFileSync = vi.mocked(nodeFsMock.writeFileSync);
 const mockAppendFileSync = vi.mocked(nodeFsMock.appendFileSync);
+const mockChmodSync = vi.mocked(nodeFsMock.chmodSync);
+const mockMkdirSync = vi.mocked(nodeFsMock.mkdirSync);
 
 const mockProfile = {
   version: 1 as const,
@@ -120,13 +129,20 @@ describe('runInit', () => {
     mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
 
     // Default fs mocks: CLAUDE.md already contains section (idempotent), no .mcp.json
+    // statusline.mjs already installed (idempotent), settings.json already has statusLine
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return false;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
     });
     mockReadFileSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
       return '';
     });
     mockWriteFileSync.mockImplementation(() => undefined);
@@ -293,13 +309,20 @@ describe('.mcp.json management', () => {
     mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
 
     // CLAUDE.md: already has section (idempotent)
+    // statusline.mjs already installed (idempotent), settings.json already has statusLine
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return false;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
     });
     mockReadFileSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
       return '';
     });
     mockWriteFileSync.mockImplementation(() => undefined);
@@ -316,9 +339,19 @@ describe('.mcp.json management', () => {
 
   it('creates .mcp.json with brain-cache entry when file does not exist', async () => {
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return false;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
+      return '';
     });
 
     await runInit();
@@ -345,13 +378,19 @@ describe('.mcp.json management', () => {
       },
     };
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return true;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return true;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
     });
     mockReadFileSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
-      if (p === '.mcp.json') return JSON.stringify(existing);
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps === '.mcp.json') return JSON.stringify(existing);
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
       return '';
     });
 
@@ -379,13 +418,19 @@ describe('.mcp.json management', () => {
       },
     };
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return true;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return true;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
     });
     mockReadFileSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
-      if (p === '.mcp.json') return JSON.stringify(existing);
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps === '.mcp.json') return JSON.stringify(existing);
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
       return '';
     });
 
@@ -399,9 +444,19 @@ describe('.mcp.json management', () => {
 
   it('prints stderr message indicating .mcp.json was created', async () => {
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return false;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
+      return '';
     });
 
     await runInit();
@@ -418,13 +473,19 @@ describe('.mcp.json management', () => {
       },
     };
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return true;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return true;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
     });
     mockReadFileSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
-      if (p === '.mcp.json') return JSON.stringify(existing);
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps === '.mcp.json') return JSON.stringify(existing);
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
       return '';
     });
 
@@ -444,13 +505,19 @@ describe('.mcp.json management', () => {
       },
     };
     mockExistsSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return true;
-      if (p === '.mcp.json') return true;
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return true;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
       return false;
     });
     mockReadFileSync.mockImplementation((p: unknown) => {
-      if (p === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
-      if (p === '.mcp.json') return JSON.stringify(existing);
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps === '.mcp.json') return JSON.stringify(existing);
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
       return '';
     });
 
@@ -459,6 +526,339 @@ describe('.mcp.json management', () => {
     const combined = stderrOutput.join('');
     expect(combined).toContain('already');
     expect(combined).toContain('.mcp.json');
+  });
+});
+
+describe('statusline installation', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    vi.spyOn(process, 'exit').mockImplementation((_code?: unknown) => {
+      throw new Error(`process.exit(${_code})`);
+    });
+
+    // Service mocks
+    mockDetectCapabilities.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaInstalled.mockResolvedValue(true);
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockStartOllama.mockResolvedValue(true);
+    mockPullModelIfMissing.mockResolvedValue(undefined);
+    mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
+    mockWriteProfile.mockResolvedValue(undefined);
+    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+
+    mockWriteFileSync.mockImplementation(() => undefined);
+    mockAppendFileSync.mockImplementation(() => undefined);
+
+    const mod = await import('../../src/workflows/init.js');
+    runInit = mod.runInit;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('installs statusline.mjs when it does not exist', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return false;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('statusline.mjs')
+    );
+    expect(writeCall).toBeDefined();
+    expect(writeCall![1]).toBe('#!/usr/bin/env node\n// mock statusline content\n');
+    expect(mockChmodSync).toHaveBeenCalledWith(
+      expect.stringContaining('statusline.mjs'),
+      0o755
+    );
+  });
+
+  it('skips statusline.mjs when already installed with identical content', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('statusline.mjs')
+    );
+    expect(writeCall).toBeUndefined();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('already installed');
+  });
+
+  it('warns and skips when statusline.mjs has custom content', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// custom user content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('statusline.mjs')
+    );
+    expect(writeCall).toBeUndefined();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('custom content');
+  });
+});
+
+describe('settings.json management', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    vi.spyOn(process, 'exit').mockImplementation((_code?: unknown) => {
+      throw new Error(`process.exit(${_code})`);
+    });
+
+    // Service mocks
+    mockDetectCapabilities.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaInstalled.mockResolvedValue(true);
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockStartOllama.mockResolvedValue(true);
+    mockPullModelIfMissing.mockResolvedValue(undefined);
+    mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
+    mockWriteProfile.mockResolvedValue(undefined);
+    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+
+    mockWriteFileSync.mockImplementation(() => undefined);
+    mockAppendFileSync.mockImplementation(() => undefined);
+
+    const mod = await import('../../src/workflows/init.js');
+    runInit = mod.runInit;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it('creates settings.json with statusLine entry when file does not exist', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return false;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    expect(mockMkdirSync).toHaveBeenCalledWith(
+      expect.stringContaining('.claude'),
+      { recursive: true }
+    );
+    const written = JSON.parse(writeCall![1] as string);
+    expect(written.statusLine).toBeDefined();
+    expect(written.statusLine.type).toBe('command');
+    expect(written.statusLine.command).toBe('node "~/.brain-cache/statusline.mjs"');
+  });
+
+  it('merges statusLine into existing settings.json preserving other keys', async () => {
+    const existingSettings = { hooks: { 'pre-tool-use': [] }, skipDangerousModePermissionPrompt: true };
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify(existingSettings);
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    expect(written.hooks).toEqual({ 'pre-tool-use': [] });
+    expect(written.skipDangerousModePermissionPrompt).toBe(true);
+    expect(written.statusLine).toBeDefined();
+    expect(written.statusLine.type).toBe('command');
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('added statusLine');
+  });
+
+  it('warns and skips when settings.json already has statusLine entry', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'other' } });
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeUndefined();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('already has a statusLine');
+  });
+
+  it('handles invalid JSON in settings.json gracefully', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return '{invalid json';
+      return '';
+    });
+
+    await expect(runInit()).resolves.toBeUndefined();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('Could not configure');
+  });
+
+  it('uses tilde in command path, not absolute homedir', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return false;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      return '';
+    });
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    expect(written.statusLine.command).toContain('~/.brain-cache/statusline.mjs');
+    expect(written.statusLine.command).not.toContain('/home/');
+    expect(written.statusLine.command).not.toMatch(/\/Users\//);
+  });
+
+  it('is idempotent: second run produces no additional writes for statusline or settings', async () => {
+    // Simulate first run: statusline already identical, settings already has statusLine
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return JSON.stringify({ statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' } });
+      return '';
+    });
+
+    await runInit();
+
+    const statuslineWrite = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('statusline.mjs')
+    );
+    const settingsWrite = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(statuslineWrite).toBeUndefined();
+    expect(settingsWrite).toBeUndefined();
   });
 });
 

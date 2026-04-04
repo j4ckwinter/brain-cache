@@ -1,4 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, chmodSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import {
   detectCapabilities,
   writeProfile,
@@ -130,5 +132,60 @@ export async function runInit(): Promise<void> {
   } else {
     writeFileSync(claudeMdPath, brainCacheSection.trimStart());
     process.stderr.write('brain-cache: created CLAUDE.md with Brain-Cache MCP Tools section.\n');
+  }
+
+  // Step 12: Install statusline.mjs to ~/.brain-cache/ (idempotent)
+  const { STATUSLINE_SCRIPT_CONTENT } = await import('../lib/statusline-script.js');
+  const statuslinePath = join(homedir(), '.brain-cache', 'statusline.mjs');
+
+  if (existsSync(statuslinePath)) {
+    const existingScript = readFileSync(statuslinePath, 'utf-8');
+    if (existingScript === STATUSLINE_SCRIPT_CONTENT) {
+      process.stderr.write('brain-cache: statusline.mjs already installed, skipping.\n');
+    } else {
+      process.stderr.write(
+        'brain-cache: Warning: ~/.brain-cache/statusline.mjs already exists with custom content. Skipping to preserve user changes.\n'
+      );
+    }
+  } else {
+    writeFileSync(statuslinePath, STATUSLINE_SCRIPT_CONTENT, 'utf-8');
+    chmodSync(statuslinePath, 0o755);
+    process.stderr.write('brain-cache: installed statusline.mjs to ~/.brain-cache/statusline.mjs\n');
+  }
+
+  // Step 13: Add statusLine entry to ~/.claude/settings.json (idempotent, safe merge per STAT-06)
+  const claudeDir = join(homedir(), '.claude');
+  const settingsPath = join(claudeDir, 'settings.json');
+  const statusLineEntry = {
+    type: 'command' as const,
+    command: 'node "~/.brain-cache/statusline.mjs"',
+  };
+
+  try {
+    if (existsSync(settingsPath)) {
+      const rawSettings = readFileSync(settingsPath, 'utf-8');
+      const parsed = JSON.parse(rawSettings) as Record<string, unknown>;
+      if (parsed['statusLine']) {
+        process.stderr.write(
+          'brain-cache: Warning: ~/.claude/settings.json already has a statusLine entry. ' +
+          'Skipping to preserve existing configuration.\n'
+        );
+      } else {
+        parsed['statusLine'] = statusLineEntry;
+        writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
+        process.stderr.write('brain-cache: added statusLine to ~/.claude/settings.json\n');
+      }
+    } else {
+      mkdirSync(claudeDir, { recursive: true });
+      const newSettings = { statusLine: statusLineEntry };
+      writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2) + '\n');
+      process.stderr.write('brain-cache: created ~/.claude/settings.json with statusLine entry.\n');
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `brain-cache: Warning: Could not configure ~/.claude/settings.json: ${msg}. ` +
+      'Status line will not appear in Claude Code until settings.json is configured manually.\n'
+    );
   }
 }
