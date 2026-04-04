@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Status Line
 status: verifying
-stopped_at: Completed 34-02-PLAN.md — accumulateStats wired, statusline init installed, all 259 tests passing
-last_updated: "2026-04-04T10:35:55.775Z"
+stopped_at: Completed 35-02-PLAN.md — README and CLAUDE.md rewritten for 3-tool surface area
+last_updated: "2026-04-04T10:54:38.274Z"
 last_activity: 2026-04-04
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 7
+  completed_plans: 7
   percent: 100
 ---
 
@@ -26,13 +26,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Reduce Claude token usage by running embeddings locally — save money, not features.
-**Current focus:** Phase 34 — cherry-pick-status-line
+**Current focus:** Phase 35 — skill-packaging
 
 ---
 
 ## Current Position
 
-Phase: 34 (cherry-pick-status-line) — EXECUTING
+Phase: 35 (skill-packaging) — EXECUTING
 Plan: 2 of 2
 Status: Phase complete — ready for verification
 Last activity: 2026-04-04
@@ -77,9 +77,9 @@ v1.0 README had the right pitch: "your API bill stops looking like a mortgage pa
 
 ## Session Continuity
 
-**Last session:** 2026-04-04T10:35:55.772Z
+**Last session:** 2026-04-04T10:54:38.270Z
 
-**Stopped at:** Completed 34-02-PLAN.md — accumulateStats wired, statusline init installed, all 259 tests passing
+**Stopped at:** Completed 35-02-PLAN.md — README and CLAUDE.md rewritten for 3-tool surface area
 
 **Next action:** `/gsd:plan-phase 33`
 

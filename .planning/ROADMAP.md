@@ -152,49 +152,21 @@ Plans:
 Plans:
 - [x] 32-01-PLAN.md — Statusline script constant, init install step, settings.json merge, unit tests
 
-### v3.0 Skill Reshape (Phases 33-35)
+<!-- Phase details for v3.0 — Phases 33-34 completed, see milestone list above -->
 
-- [x] **Phase 33: Reset to v1.0 Core** - Create fresh branch from v1.0 tag, cherry-pick incremental indexing (phase 10) and hardening fixes (phases 6-12) that apply to core services only (completed 2026-04-04)
-  **Goal**: A clean codebase containing only the 5 core services (embedder, chunker, crawler, lancedb, retriever, tokenCounter) plus MCP tools (index_repo, search_codebase, build_context) with incremental indexing — no trace_flow, explain_codebase, compression, file watcher, or cohesion code
-  **Depends on**: None
-  **Requirements**: SKILL-01, SKILL-02
-  **Success Criteria**:
-    1. Branch exists with only v1.0 services + incremental indexing (no flowTracer, cohesion, compression, fileWatcher, explainCodebase, traceFlow, watch, configLoader)
-    2. `npm run build` succeeds
-    3. All surviving tests pass
-    4. MCP server registers exactly 3 tools: index_repo, search_codebase, build_context
-  **Plans**: 2 plans
-  Plans:
-  - [x] 33-01-PLAN.md — Create branch from v1.0 tag, port hardening + incremental indexing to core services
-  - [x] 33-02-PLAN.md — Fix compilation, pass tests, validate 3-tool MCP server
-
-- [x] **Phase 34: Cherry-pick Status Line** - Port sessionStats service, statusline.mjs script, and init integration from v2.4 onto the reset branch (completed 2026-04-04)
-  **Goal**: The status line UX (token savings display in Claude Code) works on the stripped-down codebase, with sessionStats wired into the 3 remaining MCP handlers
-  **Depends on**: Phase 33
-  **Requirements**: SKILL-03, SKILL-04
-  **Success Criteria**:
-    1. sessionStats.ts exists and accumulates stats from build_context and search_codebase handlers
-    2. statusline.mjs renders savings or idle state
-    3. `brain-cache init` installs status line into Claude Code settings
-    4. All status line tests pass
-  **Plans**: 2 plans
-  Plans:
-  - [x] 34-01-PLAN.md — Port sessionStats service, statusline script, and all tests
-  - [x] 34-02-PLAN.md — Wire accumulateStats into MCP handlers and add status line to init
-
-- [ ] **Phase 35: Skill Packaging** - Create `.claude/skills/brain-cache/SKILL.md` that teaches Claude when and how to use the MCP tools, rewrite README to focused pitch, simplify install
-  **Goal**: brain-cache is distributable as a Claude Code skill — users drop in the skill folder, run `brain-cache init`, and Claude automatically uses local embeddings to save tokens
-  **Depends on**: Phase 34
-  **Requirements**: SKILL-05, SKILL-06
-  **Success Criteria**:
-    1. `.claude/skills/brain-cache/SKILL.md` exists with valid frontmatter and tool routing instructions
-    2. README matches v1.0 focused pitch ("local embeddings to save money") with updated install instructions
-    3. CLAUDE.md simplified to match 3-tool surface area
-    4. `/brain-cache` appears in Claude Code skill menu when skill directory is present
-  **Plans**: 2 plans
-  Plans:
-  - [ ] 35-01-PLAN.md — Create SKILL.md with tool routing, negative examples, status line reference
-  - [ ] 35-02-PLAN.md — Rewrite README and simplify CLAUDE.md to 3-tool surface area
+### Phase 35: Skill Packaging
+**Goal**: brain-cache is distributable as a Claude Code skill — users drop in the skill folder, run `brain-cache init`, and Claude automatically uses local embeddings to save tokens
+**Depends on**: Phase 34
+**Requirements**: SKILL-05, SKILL-06
+**Success Criteria** (what must be TRUE):
+  1. `.claude/skills/brain-cache/SKILL.md` exists with valid frontmatter and tool routing instructions
+  2. README matches v1.0 focused pitch ("local embeddings to save money") with updated install instructions
+  3. CLAUDE.md simplified to match 3-tool surface area
+  4. `/brain-cache` appears in Claude Code skill menu when skill directory is present
+**Plans**: 2 plans
+Plans:
+- [x] 35-01-PLAN.md — Create SKILL.md with tool routing, negative examples, status line reference
+- [x] 35-02-PLAN.md — Rewrite README and simplify CLAUDE.md to 3-tool surface area
 
 ## Progress
 

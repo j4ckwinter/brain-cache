@@ -92,8 +92,8 @@ Requirements for Skill Reshape milestone. Each maps to roadmap phases.
 
 ### Skill Distribution
 
-- [ ] **SKILL-05**: A `.claude/skills/brain-cache/SKILL.md` file with valid frontmatter teaches Claude when/how to use the 3 MCP tools, including routing guidance and negative examples
-- [ ] **SKILL-06**: README and CLAUDE.md reflect the simplified 3-tool surface area with a focused "local embeddings to save money" pitch
+- [x] **SKILL-05**: A `.claude/skills/brain-cache/SKILL.md` file with valid frontmatter teaches Claude when/how to use the 3 MCP tools, including routing guidance and negative examples
+- [x] **SKILL-06**: README and CLAUDE.md reflect the simplified 3-tool surface area with a focused "local embeddings to save money" pitch
 
 ## Future Requirements
 
