@@ -20,6 +20,8 @@ Claude then has access to:
 
 - **`build_context`** — Assembles relevant context for any question. Use this instead of reading files.
 - **`search_codebase`** — Finds functions, types, and symbols by meaning, not keyword. Use this instead of grep.
+- **`trace_flow`** — Traces how a function call propagates across files. Use for call-path questions.
+- **`explain_codebase`** — Returns a module-grouped architecture overview of the project.
 - **`index_repo`** — Rebuilds the local vector index.
 - **`doctor`** — Diagnoses index health and Ollama connectivity.
 
@@ -48,7 +50,7 @@ Result:
 brain-cache is the layer between your codebase and Claude.
 
 1. Your code is indexed locally using Ollama embeddings — nothing leaves your machine
-2. When you ask Claude a question, it calls `build_context` or `search_codebase` automatically
+2. When you ask Claude a question, it calls `build_context`, `search_codebase`, `trace_flow`, or `explain_codebase` automatically — intent classification routes queries to the right retrieval strategy
 3. brain-cache retrieves only the relevant files, trims duplicates, and fits them to a token budget
 4. Claude gets tight, useful context — not your entire repo
 
@@ -87,11 +89,11 @@ brain-cache init
 brain-cache index
 ```
 
-`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, and appends MCP tool instructions to `CLAUDE.md`. Runs once; idempotent.
+`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, appends MCP tool instructions to `CLAUDE.md`, and installs a status line in Claude Code that shows cumulative token savings. Runs once; idempotent.
 
 **Step 3: Use Claude normally**
 
-brain-cache tools are called automatically. You don’t change how you work — the context just gets better.
+brain-cache tools are called automatically. You don't change how you work — the context just gets better.
 
 > **Advanced:** `init` creates `.mcp.json` automatically. If you need to customise it manually, the expected shape is:
 > ```json
@@ -138,14 +140,21 @@ Or soften it if you prefer Claude to decide on its own. It's your `CLAUDE.md` �
 
 - 🧠 Local embeddings via Ollama — no API calls, no data sent out
 - 🔍 Semantic vector search over your codebase
-- ✂️ Context trimming and deduplication
-- 🎯 Token budget optimisation
+- 🌲 AST-aware chunking via tree-sitter (TypeScript, Python, Go, Rust)
+- 🔗 Multi-hop call-graph tracing across files
+- 🎯 Intent classification (lookup / trace / explore) for smart retrieval routing
+- ✂️ Structural compression — signatures and JSDoc preserved, bodies stripped for non-primary results
+- 👁️ Live file watching for automatic re-indexing
+- 🔄 Incremental indexing — SHA-256 content hashing, only re-embeds changed files
+- 📊 Status line showing cumulative token savings in Claude Code
+- 🚫 `.braincacheignore` for custom exclusion patterns
+- 🎯 Token budget optimisation and context deduplication
 - 🤖 MCP server for Claude Code integration
 - ⚡ CLI for setup, debugging, and admin
 
 ---
 
-## 🧠 Why it’s different
+## 🧠 Why it's different
 
 Most AI coding tools:
 
@@ -171,9 +180,11 @@ The CLI is the setup and admin interface. Use it to init, index, debug, and diag
 ```
 brain-cache init                      Initialize brain-cache in a project
 brain-cache index                     Build/rebuild the vector index
+brain-cache watch                     Live re-indexing (watches for file changes)
 brain-cache search "auth middleware"  Manual search (useful for debugging)
 brain-cache context "auth flow"       Manual context building (useful for debugging)
 brain-cache ask "how does auth work?" Direct Claude query via CLI
+brain-cache status                    Show index and system status
 brain-cache doctor                    Check system health
 ```
 
@@ -199,18 +210,19 @@ This project uses the GSD (Get Shit Done) framework — an AI-driven workflow fo
 
 ## ⚠️ Status
 
-Early stage — actively improving:
+Actively maintained with substantial shipped features:
 
-- ⏳ reranking (planned)
-- ⏳ context compression
-- ⏳ live indexing (watch mode)
+- 6 MCP tools with full retrieval routing
+- AST-aware chunking, structural compression, incremental indexing
+- Live file watching and status line
+- Multi-hop call-graph tracing and architecture overview
 
 ---
 
 ## 🛠 Requirements
 
-- Node.js 22+
-- Ollama running locally (`nomic-embed-text` model)
+- Node.js >= 20
+- Ollama running locally (`nomic-embed-text` model recommended)
 - Anthropic API key (for `ask` command only)
 
 ---
