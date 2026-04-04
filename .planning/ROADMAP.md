@@ -163,10 +163,11 @@ Plans:
   2. README matches v1.0 focused pitch ("local embeddings to save money") with updated install instructions
   3. CLAUDE.md simplified to match 3-tool surface area
   4. `/brain-cache` appears in Claude Code skill menu when skill directory is present
-**Plans**: 2 plans
+**Plans**: 3 plans
 Plans:
 - [x] 35-01-PLAN.md — Create SKILL.md with tool routing, negative examples, status line reference
 - [x] 35-02-PLAN.md — Rewrite README and simplify CLAUDE.md to 3-tool surface area
+- [x] 35-03-PLAN.md — Gap closure: skill install in init.ts + npm package distribution
 
 ## Progress
 
@@ -207,4 +208,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-04 — Phase 34 plans created*
+*Last updated: 2026-04-04 — Phase 35 gap closure plan added*
