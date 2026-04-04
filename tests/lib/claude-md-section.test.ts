@@ -15,14 +15,6 @@ describe('CLAUDE_MD_SECTION template', () => {
     expect(CLAUDE_MD_SECTION).toContain('build_context');
   });
 
-  it('contains trace_flow', () => {
-    expect(CLAUDE_MD_SECTION).toContain('trace_flow');
-  });
-
-  it('contains explain_codebase', () => {
-    expect(CLAUDE_MD_SECTION).toContain('explain_codebase');
-  });
-
   it('contains doctor', () => {
     expect(CLAUDE_MD_SECTION).toContain('doctor');
   });
@@ -31,19 +23,19 @@ describe('CLAUDE_MD_SECTION template', () => {
     expect(CLAUDE_MD_SECTION).toContain('index_repo');
   });
 
+  it('does not contain removed tools (trace_flow, explain_codebase)', () => {
+    expect(CLAUDE_MD_SECTION).not.toContain('trace_flow');
+    expect(CLAUDE_MD_SECTION).not.toContain('explain_codebase');
+  });
+
   it('contains ## Brain-Cache MCP Tools heading (idempotency check)', () => {
     expect(CLAUDE_MD_SECTION).toContain('## Brain-Cache MCP Tools');
   });
 
-  it('contains cross-reference directing trace queries away from build_context', () => {
-    expect(CLAUDE_MD_SECTION).toContain('instead of build_context');
-  });
-
   it('contains "Do NOT use" negative routing examples', () => {
-    // At least one negative example per query-routing tool section
     const doNotUseMatches = CLAUDE_MD_SECTION.match(/Do NOT use/g);
     expect(doNotUseMatches).not.toBeNull();
-    expect(doNotUseMatches!.length).toBeGreaterThanOrEqual(4);
+    expect(doNotUseMatches!.length).toBeGreaterThanOrEqual(1);
   });
 
   it('CLAUDE_MD_SECTION content matches CLAUDE.md Brain-Cache MCP Tools section', () => {
