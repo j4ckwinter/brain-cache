@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/",
+    ".claude/skills/",
     "README.md",
     "LICENSE"
   ],
