@@ -179,7 +179,7 @@ Plans:
     4. All status line tests pass
   **Plans**: 2 plans
   Plans:
-  - [ ] 34-01-PLAN.md — Port sessionStats service, statusline script, and all tests
+  - [x] 34-01-PLAN.md — Port sessionStats service, statusline script, and all tests
   - [ ] 34-02-PLAN.md — Wire accumulateStats into MCP handlers and add status line to init
 
 - [ ] **Phase 35: Skill Packaging** - Create `.claude/skills/brain-cache/SKILL.md` that teaches Claude when and how to use the MCP tools, rewrite README to focused pitch, simplify install
