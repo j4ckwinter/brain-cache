@@ -186,7 +186,7 @@ Plans:
 | 29. Explain Codebase Depth | v2.3 | 2/2 | Complete    | 2026-04-03 |
 | 30. Stats Infrastructure | v2.4 | 2/2 | Complete    | 2026-04-04 |
 | 31. Status Line Rendering | v2.4 | 2/2 | Complete    | 2026-04-04 |
-| 32. Init Integration | v2.4 | 1/1 | Complete   | 2026-04-04 |
+| 32. Init Integration | v2.4 | 1/1 | Complete    | 2026-04-04 |
 
 ---
 *Roadmap created: 2026-03-31*
