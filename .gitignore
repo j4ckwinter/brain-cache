@@ -2,7 +2,8 @@
 node_modules/
 dist/
 .brain-cache/
-.claude/
+.claude/*
+!.claude/skills/
 .devcontainer/
 .work
 .DS_Store
