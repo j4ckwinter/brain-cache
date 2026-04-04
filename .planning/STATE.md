@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Status Line
-status: verifying
-stopped_at: Completed 30-02-PLAN.md
-last_updated: "2026-04-04T02:39:30.468Z"
+status: executing
+stopped_at: Completed 31-01-PLAN.md
+last_updated: "2026-04-04T03:51:31.657Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 3
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 100
 ---
 
@@ -26,15 +26,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 30 — stats-infrastructure
+**Current focus:** Phase 31 — status-line-rendering
 
 ---
 
 ## Current Position
 
-Phase: 31
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 31 (status-line-rendering) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-04
 
 Progress: [██████████] 100%
@@ -46,6 +46,13 @@ Progress: [██████████] 100%
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 31, Plan 01 — statusline.mjs TDD)
+
+- _readStatsFromPath(filePath) exported as test helper — tests inject temp paths directly instead of mocking os.homedir
+- Unicode arrow is down-arrow U+2193 (↓), not left-arrow U+2190 (←) — confirmed from plan spec
+- STATS_TTL_MS duplicated inline in statusline.mjs (not imported from sessionStats.ts) to maintain standalone-no-project-imports constraint
+- Stdin/stdout protocol guarded with import.meta.url === file://${process.argv[1]} — script is importable by vitest without executing I/O
 
 ### Key Decisions (Phase 30, Plan 02 — MCP stats wiring)
 
@@ -90,9 +97,9 @@ See prior STATE.md entries for v1.x–v2.3 quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-03T20:32:04.306Z
+**Last session:** 2026-04-04T03:51:31.653Z
 
-**Stopped at:** Completed 30-02-PLAN.md
+**Stopped at:** Completed 31-01-PLAN.md
 
 **Next action:** `/gsd:plan-phase 30`
 

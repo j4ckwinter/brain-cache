@@ -14,8 +14,8 @@ Requirements for Status Line milestone. Each maps to roadmap phases.
 
 ### Status Line Rendering
 
-- [ ] **STAT-03**: A Node.js status line script reads the session stats file and renders `brain-cache  ↓{pct}%  {n} saved` showing cumulative reduction percentage and absolute token count
-- [ ] **STAT-04**: When no stats file exists or stats are expired, the status line script renders `brain-cache  idle` instead of showing stale or zero data
+- [x] **STAT-03**: A Node.js status line script reads the session stats file and renders `brain-cache  ↓{pct}%  {n} saved` showing cumulative reduction percentage and absolute token count
+- [x] **STAT-04**: When no stats file exists or stats are expired, the status line script renders `brain-cache  idle` instead of showing stale or zero data
 
 ### Installation
 
@@ -104,8 +104,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | STAT-01 | Phase 30 | Complete |
 | STAT-02 | Phase 30 | Complete |
-| STAT-03 | Phase 31 | Pending |
-| STAT-04 | Phase 31 | Pending |
+| STAT-03 | Phase 31 | Complete |
+| STAT-04 | Phase 31 | Complete |
 | STAT-05 | Phase 32 | Pending |
 | STAT-06 | Phase 32 | Pending |
 

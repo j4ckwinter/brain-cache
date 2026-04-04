@@ -134,8 +134,8 @@ Plans:
   5. The script completes under 100ms cold-start — it does only synchronous file reads and string formatting with no subprocess spawning or network calls
 **Plans**: 2 plans
 Plans:
-- [x] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
-- [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
+- [x] 31-01-PLAN.md — TDD: statusline.mjs pure functions (formatTokenCount, readStats, renderOutput) with unit tests
+- [ ] 31-02-PLAN.md — Integration tests (subprocess stdin/stdout pipeline) and human verification
 **UI hint**: yes
 
 ### Phase 32: Init Integration
@@ -147,10 +147,7 @@ Plans:
   2. Running `brain-cache init` on a machine where `~/.claude/settings.json` already has other keys (env vars, keybindings, other hooks) leaves all existing keys intact — only the `statusLine` key is added
   3. Running `brain-cache init` on a machine where `~/.claude/settings.json` already has a `statusLine` entry prints a visible warning and skips overwriting — the existing entry is preserved
   4. Running `brain-cache init` twice on a clean machine produces identical results both times — the operation is idempotent
-**Plans**: 2 plans
-Plans:
-- [ ] 30-01-PLAN.md — Session stats service with TDD (accumulateStats, mutex, TTL, atomic write)
-- [ ] 30-02-PLAN.md — Wire fire-and-forget accumulateStats into MCP handlers
+**Plans**: [To be planned]
 
 ## Progress
 
@@ -186,9 +183,9 @@ Plans:
 | 28. Trace Output Quality | v2.3 | 2/2 | Complete | 2026-04-03 |
 | 29. Explain Codebase Depth | v2.3 | 2/2 | Complete    | 2026-04-03 |
 | 30. Stats Infrastructure | v2.4 | 2/2 | Complete    | 2026-04-04 |
-| 31. Status Line Rendering | v2.4 | 0/? | Not started | - |
+| 31. Status Line Rendering | v2.4 | 1/2 | In Progress|  |
 | 32. Init Integration | v2.4 | 0/? | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-03 — v2.4 Status Line phases 30-32 added*
+*Last updated: 2026-04-04 — Phase 31 plans created*
