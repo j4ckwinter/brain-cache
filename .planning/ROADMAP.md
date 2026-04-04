@@ -168,7 +168,7 @@ Plans:
   - [x] 33-01-PLAN.md — Create branch from v1.0 tag, port hardening + incremental indexing to core services
   - [x] 33-02-PLAN.md — Fix compilation, pass tests, validate 3-tool MCP server
 
-- [ ] **Phase 34: Cherry-pick Status Line** - Port sessionStats service, statusline.mjs script, and init integration from v2.4 onto the reset branch
+- [x] **Phase 34: Cherry-pick Status Line** - Port sessionStats service, statusline.mjs script, and init integration from v2.4 onto the reset branch (completed 2026-04-04)
   **Goal**: The status line UX (token savings display in Claude Code) works on the stripped-down codebase, with sessionStats wired into the 3 remaining MCP handlers
   **Depends on**: Phase 33
   **Requirements**: SKILL-03, SKILL-04
@@ -180,7 +180,7 @@ Plans:
   **Plans**: 2 plans
   Plans:
   - [x] 34-01-PLAN.md — Port sessionStats service, statusline script, and all tests
-  - [ ] 34-02-PLAN.md — Wire accumulateStats into MCP handlers and add status line to init
+  - [x] 34-02-PLAN.md — Wire accumulateStats into MCP handlers and add status line to init
 
 - [ ] **Phase 35: Skill Packaging** - Create `.claude/skills/brain-cache/SKILL.md` that teaches Claude when and how to use the MCP tools, rewrite README to focused pitch, simplify install
   **Goal**: brain-cache is distributable as a Claude Code skill — users drop in the skill folder, run `brain-cache init`, and Claude automatically uses local embeddings to save tokens

@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Status Line
-status: executing
-stopped_at: Completed 34-01-PLAN.md — sessionStats + statusline ported, 33 tests passing
-last_updated: "2026-04-04T10:29:04.525Z"
+status: verifying
+stopped_at: Completed 34-02-PLAN.md — accumulateStats wired, statusline init installed, all 259 tests passing
+last_updated: "2026-04-04T10:35:55.775Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 3
@@ -34,7 +34,7 @@ See: .planning/PROJECT.md (updated 2026-04-04)
 
 Phase: 34 (cherry-pick-status-line) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-04
 
 Progress: [██████████] 100%
@@ -62,6 +62,11 @@ None.
 - Replaced loadUserConfig import with inline readFile for config.json — removes configLoader dependency on v3.0 branch
 - Test 8 uses real config.json on disk in temp dir rather than mocking configLoader — simpler, more realistic
 
+### Key Decisions (34-02 — MCP wiring + init statusline)
+
+- Used static import for STATUSLINE_SCRIPT_CONTENT in init.ts — dynamic import caused esbuild to encounter escaped backticks in template literal, producing parse error
+- Replaced escaped backticks (`\``) with unicode escapes (`\u0060`) in statusline-script.ts — esbuild treats `\`` as template terminator; `\u0060` is the correct workaround with identical runtime output
+
 ### Session Notes
 
 Direction pivot: project refocused from "full codebase intelligence" to "local embeddings to save money."
@@ -72,11 +77,19 @@ v1.0 README had the right pitch: "your API bill stops looking like a mortgage pa
 
 ## Session Continuity
 
-**Last session:** 2026-04-04T10:29:04.522Z
+**Last session:** 2026-04-04T10:35:55.772Z
 
-**Stopped at:** Completed 34-01-PLAN.md — sessionStats + statusline ported, 33 tests passing
+**Stopped at:** Completed 34-02-PLAN.md — accumulateStats wired, statusline init installed, all 259 tests passing
 
 **Next action:** `/gsd:plan-phase 33`
+
+---
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260404-4u7 | Update README | 2026-04-04 | 5f74829 | [260404-4u7-update-readme](./quick/260404-4u7-update-readme/) |
 
 ---
 *State initialized: 2026-03-31*

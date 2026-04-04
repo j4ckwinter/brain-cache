@@ -88,7 +88,7 @@ Requirements for Skill Reshape milestone. Each maps to roadmap phases.
 ### Status Line Preservation
 
 - [x] **SKILL-03**: sessionStats service accumulates token savings from the 3 MCP retrieval handlers (search_codebase, build_context, index_repo) on the stripped codebase
-- [ ] **SKILL-04**: Status line script and init integration work identically to v2.4 — `brain-cache init` installs statusline.mjs and configures settings.json
+- [x] **SKILL-04**: Status line script and init integration work identically to v2.4 — `brain-cache init` installs statusline.mjs and configures settings.json
 
 ### Skill Distribution
 
