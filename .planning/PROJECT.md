@@ -65,8 +65,8 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 ### Active
 
-- [ ] Session-level token savings accumulation in MCP retrieval handlers (STAT-01)
-- [ ] Status line script rendering cumulative savings for Claude Code (STAT-02)
+- ✓ Session-level token savings accumulation in MCP retrieval handlers (STAT-01) — Validated in Phase 30: stats-infrastructure
+- ✓ Configurable TTL-based session stats reset (STAT-02) — Validated in Phase 30: stats-infrastructure
 - [ ] `brain-cache init` installs and configures status line into Claude Code settings (STAT-03)
 - [ ] Session stats reset on new session or TTL-based expiry (STAT-04)
 
@@ -82,7 +82,7 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 ## Current State
 
-v2.4 Status Line starting (2026-04-03). v2.3 Final Quality Pass complete — all 9 quality requirements shipped. 549 tests across 26 test files. 6 MCP tools with formatted text output, token savings footers, pipeline labels, negative routing examples, and consistent error envelopes. Retrieval pipeline features per-mode keyword boost weights, similarity promotion, compression protection, trace output filtering, and explain_codebase module-grouped behavioral narratives with wiring annotations.
+Phase 30 stats-infrastructure complete (2026-04-04). Session stats service (`sessionStats.ts`) accumulates token savings across MCP tool calls with atomic writes, mutex concurrency safety, and TTL-based reset. All 4 retrieval handlers wired with fire-and-forget `accumulateStats`. 563 tests across 27 test files.
 
 ### Out of Scope
 
@@ -163,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 after Phase 29 explain-codebase-depth complete*
+*Last updated: 2026-04-04 after Phase 30 stats-infrastructure complete*
