@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.4
 milestone_name: Status Line
-status: executing
-stopped_at: Completed 31-01-PLAN.md
-last_updated: "2026-04-04T04:03:39.108Z"
+status: verifying
+stopped_at: Completed 32-01-PLAN.md
+last_updated: "2026-04-04T04:24:26.601Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 3
-  completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  completed_phases: 3
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -26,15 +26,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 31 — status-line-rendering
+**Current focus:** Phase 32 — init-integration
 
 ---
 
 ## Current Position
 
-Phase: 32
-Plan: Not started
-Status: Ready to execute
+Phase: 32 (init-integration) — EXECUTING
+Plan: 1 of 1
+Status: Phase complete — ready for verification
 Last activity: 2026-04-04
 
 Progress: [██████████] 100%
@@ -46,6 +46,13 @@ Progress: [██████████] 100%
 ### Active Blockers
 
 None.
+
+### Key Decisions (Phase 32, Plan 01 — init integration)
+
+- Tilde notation in statusLine command path: Claude Code expands ~ at runtime, preserving cross-user portability (not hardcoded /home/user)
+- Warn-and-skip for custom statusline.mjs content: preserve user modifications, never silently overwrite
+- Try/catch wraps settings.json block: invalid JSON or FS errors warn to stderr, init continues (status line is a convenience, not hard requirement)
+- STATUSLINE_SCRIPT_CONTENT embedded as TypeScript string constant with escaped backticks and ${} sequences — no runtime FS reads
 
 ### Key Decisions (Phase 31, Plan 01 — statusline.mjs TDD)
 
@@ -97,9 +104,9 @@ See prior STATE.md entries for v1.x–v2.3 quick tasks (archived).
 
 ## Session Continuity
 
-**Last session:** 2026-04-04T03:51:31.653Z
+**Last session:** 2026-04-04T04:24:26.597Z
 
-**Stopped at:** Completed 31-01-PLAN.md
+**Stopped at:** Completed 32-01-PLAN.md
 
 **Next action:** `/gsd:plan-phase 30`
 

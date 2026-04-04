@@ -100,7 +100,7 @@
 
 - [x] **Phase 30: Stats Infrastructure** - Session stats service with atomic writes, TTL-based reset, and config constants (completed 2026-04-03)
 - [x] **Phase 31: Status Line Rendering** - Node.js status line script reading session stats, cumulative display, and idle fallback (completed 2026-04-04)
-- [ ] **Phase 32: Init Integration** - brain-cache init installs status line script and merges settings.json without clobbering
+- [x] **Phase 32: Init Integration** - brain-cache init installs status line script and merges settings.json without clobbering (completed 2026-04-04)
 
 ## Phase Details
 
@@ -147,7 +147,9 @@ Plans:
   2. Running `brain-cache init` on a machine where `~/.claude/settings.json` already has other keys (env vars, keybindings, other hooks) leaves all existing keys intact — only the `statusLine` key is added
   3. Running `brain-cache init` on a machine where `~/.claude/settings.json` already has a `statusLine` entry prints a visible warning and skips overwriting — the existing entry is preserved
   4. Running `brain-cache init` twice on a clean machine produces identical results both times — the operation is idempotent
-**Plans**: [To be planned]
+**Plans**: 1 plan
+Plans:
+- [x] 32-01-PLAN.md — Statusline script constant, init install step, settings.json merge, unit tests
 
 ## Progress
 
@@ -184,7 +186,7 @@ Plans:
 | 29. Explain Codebase Depth | v2.3 | 2/2 | Complete    | 2026-04-03 |
 | 30. Stats Infrastructure | v2.4 | 2/2 | Complete    | 2026-04-04 |
 | 31. Status Line Rendering | v2.4 | 2/2 | Complete    | 2026-04-04 |
-| 32. Init Integration | v2.4 | 0/? | Not started | - |
+| 32. Init Integration | v2.4 | 1/1 | Complete   | 2026-04-04 |
 
 ---
 *Roadmap created: 2026-03-31*
