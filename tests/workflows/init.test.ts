@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 // Mock node:fs so init.ts file operations don't touch disk
 vi.mock('node:fs', () => ({
@@ -718,7 +720,8 @@ describe('settings.json management', () => {
     const written = JSON.parse(writeCall![1] as string);
     expect(written.statusLine).toBeDefined();
     expect(written.statusLine.type).toBe('command');
-    expect(written.statusLine.command).toBe('node "~/.brain-cache/statusline.mjs"');
+    expect(written.statusLine.command).toBe(`node "${join(homedir(), '.brain-cache', 'statusline.mjs')}"`);
+
   });
 
   it('merges statusLine into existing settings.json preserving other keys', async () => {
@@ -803,7 +806,7 @@ describe('settings.json management', () => {
     expect(combined).toContain('Could not configure');
   });
 
-  it('uses tilde in command path, not absolute homedir', async () => {
+  it('uses absolute homedir in command path for reliable resolution', async () => {
     mockExistsSync.mockImplementation((p: unknown) => {
       const ps = String(p);
       if (ps === 'CLAUDE.md') return true;
@@ -826,9 +829,9 @@ describe('settings.json management', () => {
     );
     expect(writeCall).toBeDefined();
     const written = JSON.parse(writeCall![1] as string);
-    expect(written.statusLine.command).toContain('~/.brain-cache/statusline.mjs');
-    expect(written.statusLine.command).not.toContain('/home/');
-    expect(written.statusLine.command).not.toMatch(/\/Users\//);
+    const expected = join(homedir(), '.brain-cache', 'statusline.mjs');
+    expect(written.statusLine.command).toContain(expected);
+    expect(written.statusLine.command).not.toContain('~');
   });
 
   it('is idempotent: second run produces no additional writes for statusline or settings', async () => {
