@@ -154,7 +154,7 @@ Plans:
 
 ### v3.0 Skill Reshape (Phases 33-35)
 
-- [ ] **Phase 33: Reset to v1.0 Core** - Create fresh branch from v1.0 tag, cherry-pick incremental indexing (phase 10) and hardening fixes (phases 6-12) that apply to core services only
+- [x] **Phase 33: Reset to v1.0 Core** - Create fresh branch from v1.0 tag, cherry-pick incremental indexing (phase 10) and hardening fixes (phases 6-12) that apply to core services only (completed 2026-04-04)
   **Goal**: A clean codebase containing only the 5 core services (embedder, chunker, crawler, lancedb, retriever, tokenCounter) plus MCP tools (index_repo, search_codebase, build_context) with incremental indexing — no trace_flow, explain_codebase, compression, file watcher, or cohesion code
   **Depends on**: None
   **Requirements**: SKILL-01, SKILL-02
@@ -165,8 +165,8 @@ Plans:
     4. MCP server registers exactly 3 tools: index_repo, search_codebase, build_context
   **Plans**: 2 plans
   Plans:
-  - [ ] 33-01-PLAN.md — Create branch from v1.0 tag, port hardening + incremental indexing to core services
-  - [ ] 33-02-PLAN.md — Fix compilation, pass tests, validate 3-tool MCP server
+  - [x] 33-01-PLAN.md — Create branch from v1.0 tag, port hardening + incremental indexing to core services
+  - [x] 33-02-PLAN.md — Fix compilation, pass tests, validate 3-tool MCP server
 
 - [ ] **Phase 34: Cherry-pick Status Line** - Port sessionStats service, statusline.mjs script, and init integration from v2.4 onto the reset branch
   **Goal**: The status line UX (token savings display in Claude Code) works on the stripped-down codebase, with sessionStats wired into the 3 remaining MCP handlers
@@ -177,6 +177,10 @@ Plans:
     2. statusline.mjs renders savings or idle state
     3. `brain-cache init` installs status line into Claude Code settings
     4. All status line tests pass
+  **Plans**: 2 plans
+  Plans:
+  - [ ] 34-01-PLAN.md — Port sessionStats service, statusline script, and all tests
+  - [ ] 34-02-PLAN.md — Wire accumulateStats into MCP handlers and add status line to init
 
 - [ ] **Phase 35: Skill Packaging** - Create `.claude/skills/brain-cache/SKILL.md` that teaches Claude when and how to use the MCP tools, rewrite README to focused pitch, simplify install
   **Goal**: brain-cache is distributable as a Claude Code skill — users drop in the skill folder, run `brain-cache init`, and Claude automatically uses local embeddings to save tokens
@@ -187,6 +191,10 @@ Plans:
     2. README matches v1.0 focused pitch ("local embeddings to save money") with updated install instructions
     3. CLAUDE.md simplified to match 3-tool surface area
     4. `/brain-cache` appears in Claude Code skill menu when skill directory is present
+  **Plans**: 2 plans
+  Plans:
+  - [ ] 35-01-PLAN.md — Create SKILL.md with tool routing, negative examples, status line reference
+  - [ ] 35-02-PLAN.md — Rewrite README and simplify CLAUDE.md to 3-tool surface area
 
 ## Progress
 
@@ -227,4 +235,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-04 — Phase 33 plans created*
+*Last updated: 2026-04-04 — Phase 34 plans created*
