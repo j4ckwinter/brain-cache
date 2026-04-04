@@ -1,14 +1,19 @@
 # brain-cache
 
-> Stop sending your entire repo to Claude.
+> Your local GPU finally has a job.
 
-brain-cache is an MCP server that gives Claude local, indexed access to your codebase — so it finds what matters instead of reading everything.
-
-→ ~90% fewer tokens sent to Claude
-→ Sharper, grounded answers
-→ No data leaves your machine
+brain-cache is a local AI runtime that sits between your codebase and Claude. It runs embeddings and retrieval on your machine — so Claude only sees what actually matters. Fewer tokens. Better answers. Your API bill stops looking like a mortgage payment.
 
 ![brain-cache only sends the parts of your codebase that matter — not everything.](assets/brain-cache.svg)
+
+---
+
+## How it works
+
+1. Embeds your query locally via Ollama (fast, free, no API calls)
+2. Retrieves the most relevant code chunks from its local vector index
+3. Trims and deduplicates the context to fit a tight token budget
+4. Hands Claude a clean, minimal context — not your entire repo
 
 ---
 
@@ -18,50 +23,20 @@ The primary way to use brain-cache is as an MCP server. Run `brain-cache init` o
 
 Claude then has access to:
 
-- **`build_context`** — Assembles relevant context for any question. Use this instead of reading files.
-- **`search_codebase`** — Finds functions, types, and symbols by meaning, not keyword. Use this instead of grep.
-- **`trace_flow`** — Traces how a function call propagates across files. Use for call-path questions.
-- **`explain_codebase`** — Returns a module-grouped architecture overview of the project.
+- **`build_context`** — Assembles relevant context for any question. Use instead of reading files.
+- **`search_codebase`** — Finds functions, types, and symbols by meaning, not keyword. Use instead of grep.
 - **`index_repo`** — Rebuilds the local vector index.
-- **`doctor`** — Diagnoses index health and Ollama connectivity.
+
+Also included: **`doctor`** — diagnoses index health and Ollama connectivity.
 
 No copy/pasting code into prompts. No manual file opens. Claude knows where to look.
 
 ---
 
-## ⚡ The problem
-
-When you ask Claude about your codebase, you either:
-
-- paste huge chunks of code ❌
-- rely on vague context ❌
-- or let tools send way too much ❌
-
-Result:
-
-- worse answers
-- hallucinations
-- massive token usage
-
----
-
-## 🧠 How it works
-
-brain-cache is the layer between your codebase and Claude.
-
-1. Your code is indexed locally using Ollama embeddings — nothing leaves your machine
-2. When you ask Claude a question, it calls `build_context`, `search_codebase`, `trace_flow`, or `explain_codebase` automatically — intent classification routes queries to the right retrieval strategy
-3. brain-cache retrieves only the relevant files, trims duplicates, and fits them to a token budget
-4. Claude gets tight, useful context — not your entire repo
-
-AI should read the right parts — and nothing else. brain-cache is the layer that makes that possible.
-
----
-
-## 🔥 Example
+## Example
 
 ```
-> "Explain the overall architecture of this project"
+> "How does the auth middleware work?"
 
 brain-cache: context assembled (74 tokens, 97% reduction)
 
@@ -70,11 +45,11 @@ Estimated without:         ~2,795
 Reduction:                 97%
 ```
 
-Claude gets only what matters → answers are sharper and grounded.
+Claude gets only what matters — answers are sharper and grounded.
 
 ---
 
-## ⚡ Quick start
+## Quick start
 
 **Step 1: Install**
 
@@ -109,7 +84,24 @@ brain-cache tools are called automatically. You don't change how you work — th
 
 ---
 
-## 📊 Optional: Token savings footer
+## Install as Claude Code skill
+
+brain-cache ships as a Claude Code skill. After `brain-cache init`, the skill is
+installed at `.claude/skills/brain-cache/SKILL.md` in your project. Claude
+automatically learns when and how to use brain-cache tools.
+
+To install manually, copy the `.claude/skills/brain-cache/` directory into your
+project root.
+
+---
+
+## Status line
+
+After `brain-cache init`, the status line in Claude Code's bottom bar shows your cumulative token savings session by session. You see the reduction without doing anything different.
+
+---
+
+## Optional: Token savings footer
 
 brain-cache returns token usage stats in its tool responses (tokens sent, estimated without, reduction %). By default, Claude decides whether to surface these — no footer is forced.
 
@@ -121,7 +113,7 @@ When using brain-cache build_context, include the token savings summary from the
 
 This keeps it transparent and under your control.
 
-## 🎛 Tuning how much Claude uses brain-cache
+## Tuning how much Claude uses brain-cache
 
 `brain-cache init` adds a section to your project's `CLAUDE.md` with clear instructions to use brain-cache tools first. This works well for most users.
 
@@ -136,51 +128,13 @@ Or soften it if you prefer Claude to decide on its own. It's your `CLAUDE.md` �
 
 ---
 
-## 🧩 Core capabilities
-
-- 🧠 Local embeddings via Ollama — no API calls, no data sent out
-- 🔍 Semantic vector search over your codebase
-- 🌲 AST-aware chunking via tree-sitter (TypeScript, Python, Go, Rust)
-- 🔗 Multi-hop call-graph tracing across files
-- 🎯 Intent classification (lookup / trace / explore) for smart retrieval routing
-- ✂️ Structural compression — signatures and JSDoc preserved, bodies stripped for non-primary results
-- 👁️ Live file watching for automatic re-indexing
-- 🔄 Incremental indexing — SHA-256 content hashing, only re-embeds changed files
-- 📊 Status line showing cumulative token savings in Claude Code
-- 🚫 `.braincacheignore` for custom exclusion patterns
-- 🎯 Token budget optimisation and context deduplication
-- 🤖 MCP server for Claude Code integration
-- ⚡ CLI for setup, debugging, and admin
-
----
-
-## 🧠 Why it's different
-
-Most AI coding tools:
-
-- send too much context
-- hide retrieval behind hosted services
-- require you to prompt-engineer your way to good answers
-
-brain-cache is:
-
-- 🏠 Local-first — embeddings run on your machine
-- 🔍 Transparent — you can inspect exactly what context gets sent
-- 🎯 Token-aware — every call shows the reduction
-- ⚙️ Developer-controlled — no vendor lock-in, no cloud dependency
-
-Think: **Vite, but for LLM context.**
-
----
-
-## 🧪 CLI commands
+## CLI commands
 
 The CLI is the setup and admin interface. Use it to init, index, debug, and diagnose — not as the primary interface.
 
 ```
 brain-cache init                      Initialize brain-cache in a project
 brain-cache index                     Build/rebuild the vector index
-brain-cache watch                     Live re-indexing (watches for file changes)
 brain-cache search "auth middleware"  Manual search (useful for debugging)
 brain-cache context "auth flow"       Manual context building (useful for debugging)
 brain-cache ask "how does auth work?" Direct Claude query via CLI
@@ -190,7 +144,7 @@ brain-cache doctor                    Check system health
 
 ---
 
-## 📊 Token savings
+## Token savings
 
 Every call shows exactly what was saved:
 
@@ -198,42 +152,25 @@ Every call shows exactly what was saved:
 context: 1,240 tokens (93% reduction)
 ```
 
-Less noise → better reasoning → cheaper usage.
+Less noise — better reasoning — cheaper usage.
 
 ---
 
-## 🧠 Built with GSD
+## Requirements
 
-This project uses the GSD (Get Shit Done) framework — an AI-driven workflow for going from idea → research → plan → execution. brain-cache is both a product of that philosophy and a tool that makes it work better: tight context, better outcomes.
-
----
-
-## ⚠️ Status
-
-Actively maintained with substantial shipped features:
-
-- 6 MCP tools with full retrieval routing
-- AST-aware chunking, structural compression, incremental indexing
-- Live file watching and status line
-- Multi-hop call-graph tracing and architecture overview
-
----
-
-## 🛠 Requirements
-
-- Node.js >= 20
+- Node.js >= 22
 - Ollama running locally (`nomic-embed-text` model recommended)
 - Anthropic API key (for `ask` command only)
 
 ---
 
-## ⭐️ If this is useful
+## If this is useful
 
 Give it a star — or try it on your repo and let me know what breaks.
 
 ---
 
-## 📄 License
+## License
 
 MIT — see LICENSE for details.
 
