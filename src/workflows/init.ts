@@ -158,7 +158,7 @@ export async function runInit(): Promise<void> {
   const settingsPath = join(claudeDir, 'settings.json');
   const statusLineEntry = {
     type: 'command' as const,
-    command: 'node "~/.brain-cache/statusline.mjs"',
+    command: `node "${join(homedir(), '.brain-cache', 'statusline.mjs')}"`,
   };
 
   try {
