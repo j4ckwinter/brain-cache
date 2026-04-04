@@ -99,7 +99,7 @@
 ### v2.4 Status Line (Phases 30-32)
 
 - [x] **Phase 30: Stats Infrastructure** - Session stats service with atomic writes, TTL-based reset, and config constants (completed 2026-04-03)
-- [ ] **Phase 31: Status Line Rendering** - Node.js status line script reading session stats, cumulative display, and idle fallback
+- [x] **Phase 31: Status Line Rendering** - Node.js status line script reading session stats, cumulative display, and idle fallback (completed 2026-04-04)
 - [ ] **Phase 32: Init Integration** - brain-cache init installs status line script and merges settings.json without clobbering
 
 ## Phase Details
@@ -135,7 +135,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 31-01-PLAN.md — TDD: statusline.mjs pure functions (formatTokenCount, readStats, renderOutput) with unit tests
-- [ ] 31-02-PLAN.md — Integration tests (subprocess stdin/stdout pipeline) and human verification
+- [x] 31-02-PLAN.md — Integration tests (subprocess stdin/stdout pipeline) and human verification
 **UI hint**: yes
 
 ### Phase 32: Init Integration
@@ -183,7 +183,7 @@ Plans:
 | 28. Trace Output Quality | v2.3 | 2/2 | Complete | 2026-04-03 |
 | 29. Explain Codebase Depth | v2.3 | 2/2 | Complete    | 2026-04-03 |
 | 30. Stats Infrastructure | v2.4 | 2/2 | Complete    | 2026-04-04 |
-| 31. Status Line Rendering | v2.4 | 1/2 | In Progress|  |
+| 31. Status Line Rendering | v2.4 | 2/2 | Complete    | 2026-04-04 |
 | 32. Init Integration | v2.4 | 0/? | Not started | - |
 
 ---
