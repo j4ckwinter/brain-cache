@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Brain-cache is a local AI runtime and tool layer for Claude that uses the developer's local GPU as a cache layer. It indexes codebases with AST-aware chunking and call-graph edge extraction, embeds queries locally via Ollama, classifies intent (lookup/trace/explore) to route through specialized retrieval workflows, traces multi-hop call paths across files, compresses results structurally, and sends only minimal, token-budgeted, file-grouped context to Claude for reasoning. Exposes 6 tools via MCP stdio and a polished CLI, with live file watching for automatic re-indexing.
+Brain-cache is a local AI runtime and tool layer for Claude that uses the developer's local GPU as a cache layer. It indexes codebases with AST-aware chunking, embeds queries locally via Ollama, and sends only minimal, token-budgeted context to Claude for reasoning. Exposes 3 MCP tools (search_codebase, build_context, index_repo) via stdio, a CLI for setup and diagnostics, and a Claude Code skill definition that teaches Claude when and how to use the tools. Shows cumulative token savings in Claude Code's status line.
 
 ## Core Value
 
@@ -76,21 +76,13 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 (None — defining next milestone requirements)
 
-## Current Milestone: v2.5 Retrieval Quality
+## Current Milestone
 
-**Goal:** Fix retrieval pipeline so tools return actual code instead of directory trees — validated against real-world 9-query diagnostic session.
-
-**Target features:**
-- Fix build_context parent_enrich collapsing chunks to file-level metadata — return function bodies
-- Give explain_codebase its own index-time module summary layer instead of reusing vector search
-- Fix trace_flow BFS direction — trace callees (forward) not callers (backward)
-- Fix AST parser to extract names from `export const Foo: React.FC = ...` declarations
-- Add confidence floor to search_codebase — signal low confidence when max score < 0.70
-- Boost structural signals (onSubmit, <form>) in search ranking for handler/form queries
+No active milestone. All milestones through v3.0 shipped.
 
 ## Current State
 
-Phase 35 complete (2026-04-04) — brain-cache ships as a Claude Code skill. SKILL.md teaches Claude 3-tool routing (search_codebase, build_context, index_repo + doctor diagnostic). `brain-cache init` copies SKILL.md from package to user's `.claude/skills/brain-cache/`. npm package includes `.claude/skills/` in files array. README and CLAUDE.md simplified to match 3-tool surface area.
+v3.0 Skill Reshape shipped (2026-04-04). Codebase stripped to v1.0 core (3 MCP tools: search_codebase, build_context, index_repo + doctor diagnostic). Status line ported from v2.4. Ships as a Claude Code skill — `brain-cache init` copies SKILL.md to user's project, npm package includes `.claude/skills/`. README and CLAUDE.md simplified to 3-tool surface area.
 
 ### Out of Scope
 
@@ -108,12 +100,12 @@ Phase 35 complete (2026-04-04) — brain-cache ships as a Claude Code skill. SKI
 
 ## Context
 
-Shipped v2.3 Final Quality Pass with TypeScript across 29 phases.
-Tech stack: Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, chokidar v5, tree-sitter, pino, zod v4, dedent.
-518+ tests passing across 26 test files.
+Shipped v3.0 Skill Reshape across 35 phases (10 milestones).
+Tech stack: Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, tree-sitter, pino, zod v4.
 Architecture: workflows-first (workflows > services > commands), strict folder layout.
-MCP server discoverable via `.mcp.json` with stdio transport — 6 tools with formatted output, negative routing examples.
-v2.3 delivered: search precision boosting, compression protection, trace output quality (test file/stdlib filtering, confidence warnings, CLI seed bias), explain_codebase behavioral summaries.
+MCP server discoverable via `.mcp.json` with stdio transport — 3 tools (search_codebase, build_context, index_repo) + doctor diagnostic.
+Claude Code skill at `.claude/skills/brain-cache/SKILL.md` teaches Claude tool routing with negative examples.
+Status line shows cumulative token savings in Claude Code.
 
 ## Constraints
 
@@ -171,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-04 after Phase 35 (Skill Packaging) completed*
+*Last updated: 2026-04-04 after v3.0 Skill Reshape milestone*
