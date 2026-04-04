@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, appendFileSync, chmodSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, appendFileSync, chmodSync, mkdirSync, copyFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   detectCapabilities,
   writeProfile,
@@ -132,6 +133,23 @@ export async function runInit(): Promise<void> {
   } else {
     writeFileSync(claudeMdPath, brainCacheSection.trimStart());
     process.stderr.write('brain-cache: created CLAUDE.md with Brain-Cache MCP Tools section.\n');
+  }
+
+  // Step 11b: Install skill to user's project (idempotent)
+  const currentFile = fileURLToPath(import.meta.url);
+  const packageRoot = join(dirname(currentFile), '..', '..');
+  const skillSource = join(packageRoot, '.claude', 'skills', 'brain-cache', 'SKILL.md');
+  const skillTargetDir = join(process.cwd(), '.claude', 'skills', 'brain-cache');
+  const skillTarget = join(skillTargetDir, 'SKILL.md');
+
+  if (existsSync(skillTarget)) {
+    process.stderr.write('brain-cache: skill already installed at .claude/skills/brain-cache/SKILL.md, skipping.\n');
+  } else if (!existsSync(skillSource)) {
+    process.stderr.write('brain-cache: Warning: skill source not found in package. Copy .claude/skills/brain-cache/ manually from the repo.\n');
+  } else {
+    mkdirSync(skillTargetDir, { recursive: true });
+    copyFileSync(skillSource, skillTarget);
+    process.stderr.write('brain-cache: installed skill to .claude/skills/brain-cache/SKILL.md\n');
   }
 
   // Step 12: Install statusline.mjs to ~/.brain-cache/ (idempotent)

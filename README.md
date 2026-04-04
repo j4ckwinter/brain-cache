@@ -64,7 +64,7 @@ brain-cache init
 brain-cache index
 ```
 
-`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, appends MCP tool instructions to `CLAUDE.md`, and installs a status line in Claude Code that shows cumulative token savings. Runs once; idempotent.
+`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, appends MCP tool instructions to `CLAUDE.md`, installs the brain-cache skill to `.claude/skills/brain-cache/SKILL.md`, and installs a status line in Claude Code that shows cumulative token savings. Runs once; idempotent.
 
 **Step 3: Use Claude normally**
 
