@@ -1,48 +1,67 @@
-import { createRequire } from 'node:module';
-import { extname, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, extname, resolve } from 'node:path';
+import { Parser, Language, type Node } from 'web-tree-sitter';
 import { childLogger } from './logger.js';
 import type { CodeChunk, CallEdge, ChunkResult } from '../lib/types.js';
-import type TreeSitter from 'tree-sitter';
-type SyntaxNode = TreeSitter.SyntaxNode;
 
-// CJS require workaround for tree-sitter packages.
-//
-// tree-sitter and its language grammars (tree-sitter-typescript, tree-sitter-python,
-// etc.) are CommonJS packages that use module.exports. They do not provide ESM entry
-// points, so a standard `import` fails at runtime in this ESM project.
-//
-// createRequire() creates a CJS require() function anchored to this file's URL,
-// which is the official Node.js interop pattern for loading CJS from ESM.
-//
-// This workaround can be removed when:
-//   - tree-sitter ships an ESM entry point (tracked in tree-sitter >= 0.24.0), OR
-//   - the project migrates to web-tree-sitter (WASM-based, ships as ESM natively)
-//     — currently out of scope per REQUIREMENTS.md
-const _require = createRequire(import.meta.url);
-const Parser = _require('tree-sitter');
-const { typescript: tsLang, tsx: tsxLang } = _require('tree-sitter-typescript');
-const pythonLang = _require('tree-sitter-python');
-const goLang = _require('tree-sitter-go');
-const rustLang = _require('tree-sitter-rust');
+// Captured at module scope — esbuild rewrites import.meta.url inside callbacks.
+const __dir = dirname(fileURLToPath(import.meta.url));
 
 const log = childLogger('chunker');
 
-// Maps file extensions to tree-sitter language objects.
-// TypeScript grammar is used for JS files — it is a superset and parses JS correctly.
-export const LANGUAGE_MAP: Record<string, object> = {
-  '.ts':  tsLang,
-  '.tsx': tsxLang,
-  '.mts': tsLang,
-  '.cts': tsLang,
-  '.js':  tsLang,
-  '.jsx': tsxLang,
-  '.mjs': tsLang,
-  '.cjs': tsLang,
-  '.py':  pythonLang,
-  '.pyi': pythonLang,
-  '.go':  goLang,
-  '.rs':  rustLang,
+// Singleton init guard — Parser.init() must run exactly once per process (PARSE-01).
+let initPromise: Promise<void> | null = null;
+
+async function ensureInit(): Promise<void> {
+  if (initPromise === null) {
+    initPromise = Parser.init({
+      locateFile(scriptName: string) {
+        return join(__dir, 'wasm', scriptName);
+      },
+    });
+  }
+  return initPromise;
+}
+
+// Maps file extensions to WASM grammar filenames bundled in dist/wasm/ (PARSE-02).
+export const GRAMMAR_WASM: Partial<Record<string, string>> = {
+  '.ts':  'tree-sitter-typescript.wasm',
+  '.tsx': 'tree-sitter-tsx.wasm',
+  '.mts': 'tree-sitter-typescript.wasm',
+  '.cts': 'tree-sitter-typescript.wasm',
+  '.js':  'tree-sitter-typescript.wasm',
+  '.jsx': 'tree-sitter-tsx.wasm',
+  '.mjs': 'tree-sitter-typescript.wasm',
+  '.cjs': 'tree-sitter-typescript.wasm',
+  '.py':  'tree-sitter-python.wasm',
+  '.pyi': 'tree-sitter-python.wasm',
+  '.go':  'tree-sitter-go.wasm',
+  '.rs':  'tree-sitter-rust.wasm',
 };
+
+// Grammar cache — each wasm file is loaded once per process (PARSE-02).
+const languageCache = new Map<string, Language>();
+
+async function loadLanguage(ext: string): Promise<Language | null> {
+  if (languageCache.has(ext)) return languageCache.get(ext)!;
+  const wasmFile = GRAMMAR_WASM[ext];
+  if (!wasmFile) return null;
+  const wasmPath = join(__dir, 'wasm', wasmFile);
+  try {
+    const lang = await Language.load(wasmPath);
+    languageCache.set(ext, lang);
+    return lang;
+  } catch (err) {
+    throw new Error(
+      `brain-cache: failed to load grammar for '${ext}' from '${wasmPath}'. ` +
+      `Ensure 'npm run build' has run (postbuild copies WASM files). ` +
+      `Original error: ${String(err)}`
+    );
+  }
+}
+
+// web-tree-sitter Node type alias.
+type SyntaxNode = Node;
 
 // Maps language categories to extractable AST node types.
 export const CHUNK_NODE_TYPES: Record<string, Set<string>> = {
@@ -154,9 +173,11 @@ function* walkNodes(node: SyntaxNode): Generator<SyntaxNode> {
  * Import edges are extracted from import_statement nodes in the same walkNodes traversal.
  * Dynamic call targets (subscript_expression, etc.) are silently skipped.
  */
-export function chunkFile(filePath: string, content: string): ChunkResult {
+export async function chunkFile(filePath: string, content: string): Promise<ChunkResult> {
   const ext = extname(filePath);
-  const lang = LANGUAGE_MAP[ext];
+
+  await ensureInit();
+  const lang = await loadLanguage(ext);
 
   if (!lang) {
     return { chunks: [], edges: [] };
@@ -169,102 +190,110 @@ export function chunkFile(filePath: string, content: string): ChunkResult {
   parser.setLanguage(lang);
   const tree = parser.parse(content);
 
+  if (!tree) {
+    return { chunks: [], edges: [] };
+  }
+
   const chunks: CodeChunk[] = [];
   const edges: CallEdge[] = [];
 
   let currentChunkId: string | null = null;
   let currentSymbol: string | null = null;
 
-  for (const node of walkNodes(tree.rootNode)) {
-    // Extract call edges from call_expression nodes (runs for ALL nodes)
-    if (node.type === 'call_expression') {
-      const funcNode = node.childForFieldName('function');
-      if (funcNode) {
-        let toSymbol: string | null = null;
-        if (funcNode.type === 'identifier') {
-          toSymbol = funcNode.text;
-        } else if (funcNode.type === 'member_expression' || funcNode.type === 'optional_member_expression') {
-          toSymbol = funcNode.childForFieldName('property')?.text ?? null;
+  try {
+    for (const node of walkNodes(tree.rootNode)) {
+      // Extract call edges from call_expression nodes (runs for ALL nodes)
+      if (node.type === 'call_expression') {
+        const funcNode = node.childForFieldName('function');
+        if (funcNode) {
+          let toSymbol: string | null = null;
+          if (funcNode.type === 'identifier') {
+            toSymbol = funcNode.text;
+          } else if (funcNode.type === 'member_expression' || funcNode.type === 'optional_member_expression') {
+            toSymbol = funcNode.childForFieldName('property')?.text ?? null;
+          }
+          // Skip dynamic call targets (subscript_expression, etc.) per pitfall 6
+          if (toSymbol) {
+            const chunkId = currentChunkId ?? `${filePath}:0`;
+            const symbol = currentSymbol;
+            edges.push({
+              fromChunkId: chunkId,
+              fromFile: filePath,
+              fromSymbol: symbol,
+              toSymbol,
+              toFile: null, // Resolved at query time, not index time
+              edgeType: 'call',
+            });
+          }
         }
-        // Skip dynamic call targets (subscript_expression, etc.) per pitfall 6
-        if (toSymbol) {
-          const chunkId = currentChunkId ?? `${filePath}:0`;
-          const symbol = currentSymbol;
+      }
+
+      // Extract import edges from import_statement nodes (runs for ALL nodes)
+      if (node.type === 'import_statement') {
+        const source = node.childForFieldName('source');
+        if (source) {
+          const raw = source.text.replace(/['"]/g, '');
+          const isRelative = raw.startsWith('./') || raw.startsWith('../');
+          const toFile = isRelative ? resolve(dirname(filePath), raw) : null;
           edges.push({
-            fromChunkId: chunkId,
+            fromChunkId: `${filePath}:0`,
             fromFile: filePath,
-            fromSymbol: symbol,
-            toSymbol,
-            toFile: null, // Resolved at query time, not index time
-            edgeType: 'call',
+            fromSymbol: null,
+            toSymbol: raw,
+            toFile,
+            edgeType: 'import',
           });
         }
       }
-    }
 
-    // Extract import edges from import_statement nodes (runs for ALL nodes)
-    if (node.type === 'import_statement') {
-      const source = node.childForFieldName('source');
-      if (source) {
-        const raw = source.text.replace(/['"]/g, '');
-        const isRelative = raw.startsWith('./') || raw.startsWith('../');
-        const toFile = isRelative ? resolve(dirname(filePath), raw) : null;
-        edges.push({
-          fromChunkId: `${filePath}:0`,
-          fromFile: filePath,
-          fromSymbol: null,
-          toSymbol: raw,
-          toFile,
-          edgeType: 'import',
-        });
-      }
-    }
-
-    // Chunk extraction: only for chunkable node types
-    if (!nodeTypes.has(node.type)) {
-      continue;
-    }
-
-    // For arrow functions: only extract top-level or exported ones.
-    // Check parent node types structurally rather than counting depth,
-    // which is fragile when AST nesting varies (e.g., if blocks, IIFEs).
-    //
-    // Admitted patterns:
-    //   export const fn = () => {}  → export_statement > lexical_declaration > variable_declarator > arrow_function
-    //   const fn = () => {}         → program > lexical_declaration > variable_declarator > arrow_function
-    if (node.type === 'arrow_function') {
-      const varDeclarator = node.parent;
-      const lexDecl = varDeclarator?.parent;
-      const container = lexDecl?.parent;
-
-      const isTopLevelConst =
-        varDeclarator?.type === 'variable_declarator' &&
-        lexDecl?.type === 'lexical_declaration' &&
-        (container?.type === 'program' || container?.type === 'export_statement');
-
-      if (!isTopLevelConst) {
+      // Chunk extraction: only for chunkable node types
+      if (!nodeTypes.has(node.type)) {
         continue;
       }
+
+      // For arrow functions: only extract top-level or exported ones.
+      // Check parent node types structurally rather than counting depth,
+      // which is fragile when AST nesting varies (e.g., if blocks, IIFEs).
+      //
+      // Admitted patterns:
+      //   export const fn = () => {}  → export_statement > lexical_declaration > variable_declarator > arrow_function
+      //   const fn = () => {}         → program > lexical_declaration > variable_declarator > arrow_function
+      if (node.type === 'arrow_function') {
+        const varDeclarator = node.parent;
+        const lexDecl = varDeclarator?.parent;
+        const container = lexDecl?.parent;
+
+        const isTopLevelConst =
+          varDeclarator?.type === 'variable_declarator' &&
+          lexDecl?.type === 'lexical_declaration' &&
+          (container?.type === 'program' || container?.type === 'export_statement');
+
+        if (!isTopLevelConst) {
+          continue;
+        }
+      }
+
+      const chunkType = classifyChunkType(node.type);
+      const name = extractName(node);
+      const scope = extractScope(node);
+
+      chunks.push({
+        id:        `${filePath}:${node.startPosition.row}`,
+        filePath,
+        chunkType,
+        scope,
+        name,
+        content:   content.slice(node.startIndex, node.endIndex),
+        startLine: node.startPosition.row + 1,
+        endLine:   node.endPosition.row + 1,
+      });
+
+      // Update currentChunkId tracking for associating call_expressions with their enclosing chunk
+      currentChunkId = `${filePath}:${node.startPosition.row}`;
+      currentSymbol = extractName(node);
     }
-
-    const chunkType = classifyChunkType(node.type);
-    const name = extractName(node);
-    const scope = extractScope(node);
-
-    chunks.push({
-      id:        `${filePath}:${node.startPosition.row}`,
-      filePath,
-      chunkType,
-      scope,
-      name,
-      content:   content.slice(node.startIndex, node.endIndex),
-      startLine: node.startPosition.row + 1,
-      endLine:   node.endPosition.row + 1,
-    });
-
-    // Update currentChunkId tracking for associating call_expressions with their enclosing chunk
-    currentChunkId = `${filePath}:${node.startPosition.row}`;
-    currentSymbol = extractName(node);
+  } finally {
+    tree.delete();
   }
 
   // Fallback: if language was found but no chunks extracted, emit one file-type chunk
