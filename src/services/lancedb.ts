@@ -10,6 +10,20 @@ import { IndexStateSchema } from '../lib/types.js';
 
 const log = childLogger('lancedb');
 
+export type FileType = 'test' | 'source';
+
+/**
+ * Classifies a file path as 'test' or 'source' based on filename patterns.
+ * Test patterns: *.test.{ts,tsx,js,jsx}, *.spec.{ts,tsx,js,jsx}, __tests__/ directory.
+ */
+export function classifyFileType(filePath: string): FileType {
+  const normalized = filePath.replace(/\\/g, '/');
+  const fileName = normalized.split('/').pop() ?? '';
+  if (/\.(test|spec)\.[tj]sx?$/.test(fileName)) return 'test';
+  if (normalized.includes('/__tests__/')) return 'test';
+  return 'source';
+}
+
 // --- Write mutex ---
 
 let _writeMutex: Promise<void> = Promise.resolve();
@@ -41,6 +55,7 @@ export function chunkSchema(dim: number): Schema {
     new Field('content',    new Utf8(),  false),
     new Field('start_line', new Int32(), false),
     new Field('end_line',   new Int32(), false),
+    new Field('file_type',  new Utf8(),  false),
     new Field('vector',
       new FixedSizeList(dim, new Field('item', new Float32(), true)),
       false
@@ -87,6 +102,7 @@ export interface ChunkRow {
   content: string;
   start_line: number;
   end_line: number;
+  file_type: string;
   vector: number[];
   /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
   [key: string]: unknown;
@@ -144,8 +160,21 @@ export async function openOrCreateChunkTable(
         log.warn('Also dropped edges table (stale chunk IDs)');
       }
     } else {
-      log.info({ model, dim }, 'Opened existing chunks table');
-      return db.openTable('chunks');
+      const existingTable = await db.openTable('chunks');
+      const hasFileType = existingTable.schema.fields.some(
+        (f: { name: string }) => f.name === 'file_type'
+      );
+      if (!hasFileType) {
+        log.warn('Schema missing file_type column — dropping and recreating chunks table');
+        await db.dropTable('chunks');
+        if (tableNames.includes('edges')) {
+          await db.dropTable('edges');
+          log.warn('Also dropped edges table (stale chunk IDs)');
+        }
+      } else {
+        log.info({ model, dim }, 'Opened existing chunks table');
+        return existingTable;
+      }
     }
   }
 
