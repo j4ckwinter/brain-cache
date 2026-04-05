@@ -2,8 +2,7 @@ import { createRequire } from 'node:module';
 import { extname, resolve, dirname } from 'node:path';
 import { childLogger } from './logger.js';
 import type { CodeChunk, CallEdge, ChunkResult } from '../lib/types.js';
-import type TreeSitter from 'tree-sitter';
-type SyntaxNode = TreeSitter.SyntaxNode;
+import type { Node as SyntaxNode } from 'web-tree-sitter';
 
 // CJS require workaround for tree-sitter packages.
 //
