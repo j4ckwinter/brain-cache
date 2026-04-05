@@ -6,7 +6,9 @@ import { isOllamaRunning } from '../services/ollama.js';
 import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
-import { setLogLevel } from '../services/logger.js';
+import { childLogger, setLogLevel } from '../services/logger.js';
+
+const log = childLogger('index');
 import {
   openDatabase,
   openOrCreateChunkTable,
@@ -229,9 +231,13 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     for (const filePath of group) {
       const content = contentMap.get(filePath)!;
       totalRawTokens += countChunkTokens(content);
-      const { chunks, edges } = await chunkFile(filePath, content);
-      groupChunks.push(...chunks);
-      groupEdges.push(...edges);
+      try {
+        const { chunks, edges } = await chunkFile(filePath, content);
+        groupChunks.push(...chunks);
+        groupEdges.push(...edges);
+      } catch (err) {
+        log.warn({ filePath, err }, 'Failed to chunk file, skipping');
+      }
     }
     processedFiles += group.length;
     totalChunks += groupChunks.length;
