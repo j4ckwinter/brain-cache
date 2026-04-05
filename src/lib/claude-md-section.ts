@@ -29,4 +29,8 @@ Call \`mcp__brain-cache__doctor\` when any brain-cache tool fails or returns une
 ### index_repo (reindex)
 
 Call \`mcp__brain-cache__index_repo\` only when the user explicitly asks to reindex, or after major code changes. Do not call proactively.
+
+### Hooks (enforcement)
+
+\`brain-cache init\` installs PreToolUse hooks that fire when Claude uses \`Grep\`, \`Glob\`, \`Read\`, or \`Agent\`. Each hook injects a reminder to check brain-cache first. Hooks are advisory — they do not block execution.
 `;
