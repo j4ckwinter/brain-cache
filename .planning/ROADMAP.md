@@ -120,6 +120,9 @@
 **Goal**: `brain-cache init` installs PreToolUse hooks into Claude Code settings.json that remind Claude to use brain-cache before reaching for Grep, Glob, Read, or Agent tools
 **Depends on**: Phase 35
 **Requirements**: HOOK-01, HOOK-02, HOOK-03
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 36-01-PLAN.md — Add PreToolUse hook installation to init workflow (tests + implementation)
 **Success Criteria** (what must be TRUE):
   1. After running `brain-cache init`, `~/.claude/settings.json` contains PreToolUse hook entries for Agent, Grep, Glob, and Read matchers
   2. Each hook outputs a reminder message mentioning brain-cache tools (build_context, search_codebase)
@@ -130,6 +133,9 @@
 **Goal**: SKILL.md and CLAUDE.md reference the PreToolUse hook so Claude understands the enforcement mechanism
 **Depends on**: Phase 36
 **Requirements**: HOOK-04, HOOK-05
+**Plans:** 1/1 plans complete
+Plans:
+- [x] 37-01-PLAN.md — Add hook documentation to SKILL.md and CLAUDE.md
 **Success Criteria** (what must be TRUE):
   1. SKILL.md contains a section explaining that PreToolUse hooks fire reminders when Claude reaches for search/read/agent tools
   2. CLAUDE.md mentions that brain-cache hooks are installed and what triggers them
@@ -139,9 +145,9 @@
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 36. Hook Installation | v3.1 | 0/? | Not started | — |
-| 37. Hook Documentation | v3.1 | 0/? | Not started | — |
+| 36. Hook Installation | v3.1 | 1/1 | Complete    | 2026-04-05 |
+| 37. Hook Documentation | v3.1 | 1/1 | Complete   | 2026-04-05 |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-05 — v3.1 Hook Adoption milestone started*
+*Last updated: 2026-04-05 — Phase 37 planned (1 plan)*

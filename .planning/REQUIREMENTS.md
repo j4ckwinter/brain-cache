@@ -9,14 +9,14 @@ Requirements for Hook Adoption milestone. Each maps to roadmap phases.
 
 ### Hook Installation
 
-- [ ] **HOOK-01**: `brain-cache init` adds PreToolUse hooks to `~/.claude/settings.json` that fire when Claude uses Agent, Grep, Glob, or Read tools, outputting a reminder to check brain-cache first
-- [ ] **HOOK-02**: Hook installation merges safely with existing hooks in settings.json — existing PreToolUse entries for other matchers are preserved, not overwritten
-- [ ] **HOOK-03**: Running `brain-cache init` multiple times does not duplicate hook entries — if brain-cache hooks already exist, they are skipped with a message
+- [x] **HOOK-01**: `brain-cache init` adds PreToolUse hooks to `~/.claude/settings.json` that fire when Claude uses Agent, Grep, Glob, or Read tools, outputting a reminder to check brain-cache first
+- [x] **HOOK-02**: Hook installation merges safely with existing hooks in settings.json — existing PreToolUse entries for other matchers are preserved, not overwritten
+- [x] **HOOK-03**: Running `brain-cache init` multiple times does not duplicate hook entries — if brain-cache hooks already exist, they are skipped with a message
 
 ### Documentation
 
-- [ ] **HOOK-04**: SKILL.md references the PreToolUse hook as the enforcement mechanism and explains what it does
-- [ ] **HOOK-05**: CLAUDE.md mentions that brain-cache hooks are installed and what triggers them
+- [x] **HOOK-04**: SKILL.md references the PreToolUse hook as the enforcement mechanism and explains what it does
+- [x] **HOOK-05**: CLAUDE.md mentions that brain-cache hooks are installed and what triggers them
 
 ## Future Requirements
 
