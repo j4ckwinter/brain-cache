@@ -27,7 +27,7 @@
   "scripts": {
     "dev": "tsx src/cli/index.ts",
     "build": "tsup",
-    "postbuild": "cpy 'node_modules/web-tree-sitter/tree-sitter.wasm' dist/wasm/ && cpy 'node_modules/tree-sitter-wasms/out/tree-sitter-{typescript,tsx,python,go,rust}.wasm' dist/wasm/ --flat",
+    "postbuild": "cpy 'node_modules/web-tree-sitter/tree-sitter.wasm' dist/wasm/ --flat && cpy 'node_modules/tree-sitter-wasms/out/tree-sitter-{typescript,tsx,python,go,rust}.wasm' dist/wasm/ --flat",
     "prepare": "npm run build",
     "link": "npm link",
     "test": "vitest run",
