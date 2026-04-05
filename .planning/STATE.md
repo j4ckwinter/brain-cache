@@ -1,43 +1,43 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: verifying
-stopped_at: Completed 37-01-PLAN.md
-last_updated: "2026-04-05T13:27:48.476Z"
+milestone: v3.1
+milestone_name: Hook Adoption
+status: complete
+stopped_at: Milestone v3.1 complete
+last_updated: "2026-04-05T14:40:00.000Z"
 last_activity: 2026-04-05
 progress:
   total_phases: 2
   completed_phases: 2
   total_plans: 2
   completed_plans: 2
-  percent: 0
+  percent: 100
 ---
 
 # Project State: Brain-Cache
 
-**Last updated:** 2026-04-04
-**Updated by:** plan-phase (v3.0 Skill Reshape)
+**Last updated:** 2026-04-05
+**Updated by:** complete-milestone (v3.1 Hook Adoption)
 
 ---
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-04)
+See: .planning/PROJECT.md (updated 2026-04-05)
 
-**Core value:** Reduce Claude token usage by running embeddings locally — save money, not features.
-**Current focus:** Phase 37 — hook-documentation
+**Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
+**Current focus:** Planning next milestone
 
 ---
 
 ## Current Position
 
-Phase: 37 (hook-documentation) — EXECUTING
-Plan: 1 of 1
-Status: Phase complete — ready for verification
+Phase: —
+Plan: —
+Status: v3.1 milestone complete — ready for next milestone
 Last activity: 2026-04-05
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ---
 
@@ -46,26 +46,6 @@ Progress: [░░░░░░░░░░] 0%
 ### Active Blockers
 
 None.
-
-### Key Decisions (v3.0 roadmap — phase structure)
-
-- Three phases: reset codebase (33), port statusline (34), package as skill (35)
-- Fresh branch from v1.0 tag, cherry-pick forward rather than surgical removal from HEAD
-- v1.0 core = embedder, chunker, crawler, lancedb, retriever, tokenCounter + 3 MCP tools
-- Incremental indexing (phase 10) cherry-picked as essential for UX
-- Status line (phases 30-32) cherry-picked as the UX proof of cost savings value prop
-- Everything from v2.0+ (trace_flow, explain_codebase, compression, file watcher, cohesion) is cut
-- Skill packaging via `.claude/skills/brain-cache/SKILL.md` for distribution
-
-### Key Decisions (34-01 — sessionStats port)
-
-- Replaced loadUserConfig import with inline readFile for config.json — removes configLoader dependency on v3.0 branch
-- Test 8 uses real config.json on disk in temp dir rather than mocking configLoader — simpler, more realistic
-
-### Key Decisions (34-02 — MCP wiring + init statusline)
-
-- Used static import for STATUSLINE_SCRIPT_CONTENT in init.ts — dynamic import caused esbuild to encounter escaped backticks in template literal, producing parse error
-- Replaced escaped backticks (`\``) with unicode escapes (`\u0060`) in statusline-script.ts — esbuild treats `\`` as template terminator; `\u0060` is the correct workaround with identical runtime output
 
 ### Session Notes
 
@@ -77,11 +57,11 @@ v1.0 README had the right pitch: "your API bill stops looking like a mortgage pa
 
 ## Session Continuity
 
-**Last session:** 2026-04-05T13:27:48.472Z
+**Last session:** 2026-04-05
 
-**Stopped at:** Completed 37-01-PLAN.md
+**Stopped at:** Milestone v3.1 complete
 
-**Next action:** `/gsd:plan-phase 33`
+**Next action:** `/gsd:new-milestone`
 
 ---
 

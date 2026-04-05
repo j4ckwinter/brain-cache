@@ -17,7 +17,7 @@
 - ✅ **v2.3 Final Quality Pass** — Phases 26-29 (shipped 2026-04-03)
 - ✅ **v2.4 Status Line** — Phases 30-32 (shipped 2026-04-04)
 - ✅ **v3.0 Skill Reshape** — Phases 33-35 (shipped 2026-04-04) — [archive](milestones/v3.0-ROADMAP.md)
-- 🔄 **v3.1 Hook Adoption** — Phases 36-37 (in progress)
+- ✅ **v3.1 Hook Adoption** — Phases 36-37 (shipped 2026-04-05) — [archive](milestones/v3.1-ROADMAP.md)
 
 ## Phases
 
@@ -116,38 +116,14 @@
 
 </details>
 
-### Phase 36: Hook Installation
-**Goal**: `brain-cache init` installs PreToolUse hooks into Claude Code settings.json that remind Claude to use brain-cache before reaching for Grep, Glob, Read, or Agent tools
-**Depends on**: Phase 35
-**Requirements**: HOOK-01, HOOK-02, HOOK-03
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 36-01-PLAN.md — Add PreToolUse hook installation to init workflow (tests + implementation)
-**Success Criteria** (what must be TRUE):
-  1. After running `brain-cache init`, `~/.claude/settings.json` contains PreToolUse hook entries for Agent, Grep, Glob, and Read matchers
-  2. Each hook outputs a reminder message mentioning brain-cache tools (build_context, search_codebase)
-  3. Running `brain-cache init` on a machine with existing PreToolUse hooks for other matchers preserves those hooks — only brain-cache entries are added
-  4. Running `brain-cache init` twice produces identical settings.json — no duplicated hook entries
+<details>
+<summary>✅ v3.1 Hook Adoption (Phases 36-37) — SHIPPED 2026-04-05</summary>
 
-### Phase 37: Hook Documentation
-**Goal**: SKILL.md and CLAUDE.md reference the PreToolUse hook so Claude understands the enforcement mechanism
-**Depends on**: Phase 36
-**Requirements**: HOOK-04, HOOK-05
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 37-01-PLAN.md — Add hook documentation to SKILL.md and CLAUDE.md
-**Success Criteria** (what must be TRUE):
-  1. SKILL.md contains a section explaining that PreToolUse hooks fire reminders when Claude reaches for search/read/agent tools
-  2. CLAUDE.md mentions that brain-cache hooks are installed and what triggers them
-  3. No references to removed tools (trace_flow, explain_codebase) in any updated documentation
+- [x] Phase 36: Hook Installation (1/1 plan) — completed 2026-04-05
+- [x] Phase 37: Hook Documentation (1/1 plan) — completed 2026-04-05
 
-## Progress
-
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 36. Hook Installation | v3.1 | 1/1 | Complete    | 2026-04-05 |
-| 37. Hook Documentation | v3.1 | 1/1 | Complete   | 2026-04-05 |
+</details>
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-05 — Phase 37 planned (1 plan)*
+*Last updated: 2026-04-05 — v3.1 Hook Adoption shipped*

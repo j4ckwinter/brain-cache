@@ -74,22 +74,24 @@ Reduce Claude token usage and improve response quality by running embeddings, re
 
 ### Active
 
-- brain-cache init installs a PreToolUse hook that reminds Claude to use brain-cache before Grep/Glob/Agent
-- Hook merges safely into existing ~/.claude/settings.json hooks
-- SKILL.md and CLAUDE.md reference the hook as the enforcement mechanism
+(No active requirements — planning next milestone)
 
-## Current Milestone: v3.1 Hook Adoption
+### Validated
 
-**Goal:** Make Claude actually use brain-cache tools by installing a PreToolUse hook that fires a reminder at tool-call time — harder to ignore than static CLAUDE.md instructions.
-
-**Target features:**
-- `brain-cache init` installs a PreToolUse hook into `~/.claude/settings.json` for Agent, Grep, Glob, and Read tools
-- Hook is idempotent and merges safely with existing hooks (same pattern as statusline install)
-- SKILL.md and CLAUDE.md updated to reference the hook as the enforcement mechanism
+- ✓ brain-cache init installs a PreToolUse hook that reminds Claude to use brain-cache before Grep/Glob/Agent (HOOK-01, HOOK-02, HOOK-03) — v3.1
+- ✓ Hook merges safely into existing ~/.claude/settings.json hooks (HOOK-01, HOOK-02) — v3.1
+- ✓ SKILL.md and CLAUDE.md reference the hook as the enforcement mechanism (HOOK-04, HOOK-05) — v3.1
 
 ## Current State
 
-v3.0 Skill Reshape shipped (2026-04-04). Codebase stripped to v1.0 core (3 MCP tools: search_codebase, build_context, index_repo + doctor diagnostic). Status line ported from v2.4. Ships as a Claude Code skill — `brain-cache init` copies SKILL.md to user's project, npm package includes `.claude/skills/`. README and CLAUDE.md simplified to 3-tool surface area.
+v3.1 Hook Adoption shipped (2026-04-05). Brain-cache now has a complete adoption surface: MCP tools, Claude Code skill, status line, and PreToolUse enforcement hooks. `brain-cache init` is a single command that sets up everything — MCP server config, skill installation, status line, and advisory hooks for Grep/Glob/Read/Agent tools.
+
+Shipped across 37 phases (11 milestones) since 2026-03-31.
+Tech stack: Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, tree-sitter, pino, zod v4.
+3 MCP tools (search_codebase, build_context, index_repo) + doctor diagnostic via stdio.
+Claude Code skill at `.claude/skills/brain-cache/SKILL.md`.
+Status line shows cumulative token savings.
+PreToolUse hooks remind Claude to check brain-cache before using native search/read tools.
 
 ### Out of Scope
 
@@ -107,12 +109,13 @@ v3.0 Skill Reshape shipped (2026-04-04). Codebase stripped to v1.0 core (3 MCP t
 
 ## Context
 
-Shipped v3.0 Skill Reshape across 35 phases (10 milestones).
+Shipped v3.1 Hook Adoption across 37 phases (11 milestones).
 Tech stack: Node.js 22, TypeScript, Commander CLI, Ollama, Anthropic SDK, LanceDB, tree-sitter, pino, zod v4.
 Architecture: workflows-first (workflows > services > commands), strict folder layout.
 MCP server discoverable via `.mcp.json` with stdio transport — 3 tools (search_codebase, build_context, index_repo) + doctor diagnostic.
 Claude Code skill at `.claude/skills/brain-cache/SKILL.md` teaches Claude tool routing with negative examples.
 Status line shows cumulative token savings in Claude Code.
+PreToolUse hooks (4) installed by `brain-cache init` — advisory reminders for Grep, Glob, Read, Agent.
 
 ## Constraints
 
@@ -170,4 +173,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-05 after v3.1 Hook Adoption milestone started*
+*Last updated: 2026-04-05 after v3.1 Hook Adoption milestone*
