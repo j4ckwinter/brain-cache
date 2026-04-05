@@ -66,7 +66,7 @@ describe('statusline.mjs subprocess integration', () => {
     const { stdout, code } = await runScript(STDIN_JSON, { ...process.env, HOME: tempDir });
 
     expect(code).toBe(0);
-    expect(stdout).toBe('brain-cache  \u219386%  2k saved\n');
+    expect(stdout).toBe('\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less)\n');
   });
 
   it('Test 2: no stats file — renders idle (STAT-04)', async () => {
@@ -74,7 +74,7 @@ describe('statusline.mjs subprocess integration', () => {
     const { stdout, code } = await runScript(STDIN_JSON, { ...process.env, HOME: tempDir });
 
     expect(code).toBe(0);
-    expect(stdout).toBe('brain-cache  idle\n');
+    expect(stdout).toBe('\ud83e\udde0 brain-cache  idle\n');
   });
 
   it('Test 3: expired stats file — renders idle (STAT-04)', async () => {
@@ -89,7 +89,7 @@ describe('statusline.mjs subprocess integration', () => {
     const { stdout, code } = await runScript(STDIN_JSON, { ...process.env, HOME: tempDir });
 
     expect(code).toBe(0);
-    expect(stdout).toBe('brain-cache  idle\n');
+    expect(stdout).toBe('\ud83e\udde0 brain-cache  idle\n');
   });
 
   it('Test 4: malformed JSON stats file — renders idle (STAT-04)', async () => {
@@ -99,7 +99,7 @@ describe('statusline.mjs subprocess integration', () => {
     const { stdout, code } = await runScript(STDIN_JSON, { ...process.env, HOME: tempDir });
 
     expect(code).toBe(0);
-    expect(stdout).toBe('brain-cache  idle\n');
+    expect(stdout).toBe('\ud83e\udde0 brain-cache  idle\n');
   });
 
   it('Test 5: zero estimated tokens — renders idle (STAT-04)', async () => {
@@ -114,7 +114,7 @@ describe('statusline.mjs subprocess integration', () => {
     const { stdout, code } = await runScript(STDIN_JSON, { ...process.env, HOME: tempDir });
 
     expect(code).toBe(0);
-    expect(stdout).toBe('brain-cache  idle\n');
+    expect(stdout).toBe('\ud83e\udde0 brain-cache  idle\n');
   });
 
   it('Test 6: cold-start timing — completes under 500ms (STAT-03)', async () => {

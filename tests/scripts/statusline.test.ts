@@ -172,7 +172,7 @@ describe('statusline', () => {
         callCount: 1,
         lastUpdatedAt: new Date().toISOString(),
       };
-      expect(renderOutput(stats)).toBe('brain-cache  \u219386%  2k saved\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less)\n');
     });
 
     it('returns formatted savings string for tokensSent=500, estimatedWithoutBraincache=1000 (50%)', () => {
@@ -182,7 +182,7 @@ describe('statusline', () => {
         callCount: 1,
         lastUpdatedAt: new Date().toISOString(),
       };
-      expect(renderOutput(stats)).toBe('brain-cache  \u219350%  500 saved\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less)\n');
     });
 
     it('returns formatted savings string for tokensSent=200000, estimatedWithoutBraincache=2000000 (90%)', () => {
@@ -192,7 +192,7 @@ describe('statusline', () => {
         callCount: 1,
         lastUpdatedAt: new Date().toISOString(),
       };
-      expect(renderOutput(stats)).toBe('brain-cache  \u219390%  1.8M saved\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 1.8M tokens (90% less)\n');
     });
   });
 });

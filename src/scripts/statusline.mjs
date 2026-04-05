@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 
 const STATS_PATH = join(homedir(), '.brain-cache', 'session-stats.json');
 const STATS_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — must match sessionStats.ts STATS_TTL_MS
-export const IDLE_OUTPUT = 'brain-cache  idle\n';
+export const IDLE_OUTPUT = '\ud83e\udde0 brain-cache  idle\n';
 
 /**
  * Formats a token count into a human-readable string.
@@ -67,7 +67,7 @@ export function renderOutput(stats) {
   const saved = stats.estimatedWithoutBraincache - stats.tokensSent;
   const pct = Math.round((1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100);
   if (pct <= 0 || saved <= 0) return IDLE_OUTPUT;
-  return `brain-cache  \u2193${pct}%  ${formatTokenCount(saved)} saved\n`;
+  return `\ud83e\udde0 brain-cache \u2192 saved ${formatTokenCount(saved)} tokens (${pct}% less)\n`;
 }
 
 // Stdin/stdout protocol — only when executed directly (not imported for testing)
