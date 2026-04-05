@@ -40,15 +40,6 @@ program
   });
 
 program
-  .command("watch")
-  .description("Watch a directory for file changes and auto-reindex")
-  .argument("[path]", "Directory to watch (defaults to current directory)")
-  .action(async (path: string | undefined) => {
-    const { runWatch } = await import("../workflows/watch.js");
-    await runWatch(path);
-  });
-
-program
   .command("search")
   .description("Search indexed codebase with a natural language query")
   .argument("<query>", "Natural language query string")

@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import type { RetrievedChunk, ContextResult } from './types.js';
-import type { TraceFlowResult } from '../workflows/traceFlow.js';
 
 export interface TokenSavingsInput {
   tokensSent: number;
@@ -106,21 +105,6 @@ export function formatSearchResults(chunks: RetrievedChunk[]): string {
       ${i + 1}. ${name} (${chunk.chunkType})
          ${chunk.filePath}:${chunk.startLine}
          Score: ${chunk.similarity.toFixed(3)}
-    `.trim();
-  }).join('\n\n');
-}
-
-export function formatTraceFlow(result: TraceFlowResult): string {
-  if (result.hops.length === 0) {
-    return 'No call hops found. The entrypoint may not be indexed — run index_repo first.';
-  }
-  return result.hops.map((hop, i) => {
-    const name = hop.name ?? '(anonymous)';
-    const calls = hop.callsFound.length > 0 ? hop.callsFound.join(', ') : '(none)';
-    return dedent`
-      ${i + 1}. depth:${hop.hopDepth} ${name}
-         ${hop.filePath}:${hop.startLine}
-         Calls: ${calls}
     `.trim();
   }).join('\n\n');
 }

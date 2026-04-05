@@ -18,11 +18,6 @@ vi.mock('../../src/lib/config.js', () => ({
   CONFIG_PATH: '',
 }));
 
-// We also mock loadUserConfig to control TTL config in Test 8.
-vi.mock('../../src/services/configLoader.js', () => ({
-  loadUserConfig: vi.fn().mockResolvedValue({}),
-}));
-
 describe('sessionStats', () => {
   beforeEach(async () => {
     // Create a fresh temp directory for each test.
@@ -31,10 +26,6 @@ describe('sessionStats', () => {
     // Point GLOBAL_CONFIG_DIR mock to fresh temp directory.
     const configMod = await import('../../src/lib/config.js');
     (configMod as Record<string, unknown>).GLOBAL_CONFIG_DIR = tempDir;
-
-    // Reset configLoader mock to default (no custom TTL).
-    const { loadUserConfig } = await import('../../src/services/configLoader.js');
-    vi.mocked(loadUserConfig).mockResolvedValue({});
 
     // Reset the mutex in sessionStats between tests.
     const stats = await import('../../src/services/sessionStats.js');
@@ -165,10 +156,13 @@ describe('sessionStats', () => {
     );
   });
 
-  it('Test 8: reads custom TTL from config.json via loadUserConfig', async () => {
-    // Mock loadUserConfig to return 0.5h (30 minutes) custom TTL.
-    const { loadUserConfig } = await import('../../src/services/configLoader.js');
-    vi.mocked(loadUserConfig).mockResolvedValue({ stats: { ttlHours: 0.5 } });
+  it('Test 8: reads custom TTL from config.json on disk', async () => {
+    // Write a config.json with 0.5h (30 minutes) custom TTL to tempDir (mocked GLOBAL_CONFIG_DIR).
+    await writeFile(
+      join(tempDir, 'config.json'),
+      JSON.stringify({ stats: { ttlHours: 0.5 } }),
+      'utf-8'
+    );
 
     const { accumulateStats } = await import('../../src/services/sessionStats.js');
     const statsPath = join(tempDir, 'session-stats.json');
@@ -183,7 +177,7 @@ describe('sessionStats', () => {
     };
     await writeFile(statsPath, JSON.stringify(stale), 'utf-8');
 
-    // Call WITHOUT passing ttlMs — should read from loadUserConfig (30-min TTL → reset).
+    // Call WITHOUT passing ttlMs — should read from config.json (30-min TTL → reset).
     await accumulateStats({ tokensSent: 50, estimatedWithoutBraincache: 200 });
 
     const raw = await readFile(statsPath, 'utf-8');

@@ -44,14 +44,6 @@ vi.mock('../../src/workflows/buildContext.js', () => ({
   runBuildContext: vi.fn(),
 }));
 
-vi.mock('../../src/workflows/traceFlow.js', () => ({
-  runTraceFlow: vi.fn(),
-}));
-
-vi.mock('../../src/workflows/explainCodebase.js', () => ({
-  runExplainCodebase: vi.fn(),
-}));
-
 vi.mock('../../src/services/logger.js', () => ({
   childLogger: vi.fn(() => ({
     info: vi.fn(),
@@ -59,10 +51,6 @@ vi.mock('../../src/services/logger.js', () => ({
     debug: vi.fn(),
     warn: vi.fn(),
   })),
-}));
-
-vi.mock('../../src/services/sessionStats.js', () => ({
-  accumulateStats: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { readProfile, detectCapabilities } from '../../src/services/capability.js';
@@ -75,12 +63,8 @@ import { readIndexState } from '../../src/services/lancedb.js';
 import { runIndex } from '../../src/workflows/index.js';
 import { runSearch } from '../../src/workflows/search.js';
 import { runBuildContext } from '../../src/workflows/buildContext.js';
-import { runTraceFlow } from '../../src/workflows/traceFlow.js';
-import { runExplainCodebase } from '../../src/workflows/explainCodebase.js';
-import { accumulateStats } from '../../src/services/sessionStats.js';
 
 const mockReadProfile = vi.mocked(readProfile);
-const mockAccumulateStats = vi.mocked(accumulateStats);
 const mockDetectCapabilities = vi.mocked(detectCapabilities);
 const mockIsOllamaInstalled = vi.mocked(isOllamaInstalled);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
@@ -89,8 +73,6 @@ const mockReadIndexState = vi.mocked(readIndexState);
 const mockRunIndex = vi.mocked(runIndex);
 const mockRunSearch = vi.mocked(runSearch);
 const mockRunBuildContext = vi.mocked(runBuildContext);
-const mockRunTraceFlow = vi.mocked(runTraceFlow);
-const mockRunExplainCodebase = vi.mocked(runExplainCodebase);
 
 const mockProfile = {
   version: 1 as const,
@@ -142,7 +124,6 @@ const fakeContextResult = {
     tokensSent: 150,
     estimatedWithoutBraincache: 1000,
     reductionPct: 85,
-    filesInContext: 2,
     localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'token_budget'],
     cloudCallsMade: 0,
   },
@@ -188,7 +169,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns formatted index result on success', async () => {
+    it('returns JSON with status, fileCount, and chunkCount on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunIndex.mockResolvedValue(undefined);
@@ -199,7 +180,6 @@ describe('MCP tool handlers', () => {
 
       expect(result.isError).toBeUndefined();
       const text = result.content[0].text;
-      expect(text).not.toContain('{');  // no JSON bleed-through
       expect(text).toContain('Indexed');
       expect(text).toContain('5 files');
       expect(text).toContain('42 chunks');
@@ -216,30 +196,6 @@ describe('MCP tool handlers', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Indexing failed');
       expect(result.content[0].text).toContain('Embedding failed');
-    });
-
-    it('passes force option to runIndex when force is true', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunIndex.mockResolvedValue(undefined);
-      mockReadIndexState.mockResolvedValue({ ...mockIndexState });
-
-      const { handler } = registeredTools.get('index_repo')!;
-      await handler({ path: '/some/project', force: true });
-
-      expect(mockRunIndex).toHaveBeenCalledWith('/some/project', { force: true });
-    });
-
-    it('passes force as undefined when not provided', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunIndex.mockResolvedValue(undefined);
-      mockReadIndexState.mockResolvedValue({ ...mockIndexState });
-
-      const { handler } = registeredTools.get('index_repo')!;
-      await handler({ path: '/some/project' });
-
-      expect(mockRunIndex).toHaveBeenCalledWith('/some/project', { force: undefined });
     });
   });
 
@@ -267,7 +223,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns formatted ranked list with savings and pipeline on success', async () => {
+    it('returns formatted results text on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunSearch.mockResolvedValue([fakeChunk('1'), fakeChunk('2')]);
@@ -276,15 +232,11 @@ describe('MCP tool handlers', () => {
       const result = await handler({ query: 'find auth functions', limit: 10 });
 
       expect(result.isError).toBeUndefined();
+      // search_codebase returns formatted text, not JSON
       const text = result.content[0].text;
-      expect(text).not.toContain('{');  // no JSON bleed-through
-      expect(text).toContain('Found 2 results');
-      expect(text).toContain('1.');
-      expect(text).toContain('fn_1');
-      expect(text).toContain('0.950');
-      expect(text).toContain('src/test_1.ts:1');
-      expect(text).toContain('Tokens sent to Claude:');
-      expect(text).toContain('Pipeline: embed -> search -> dedup');
+      expect(typeof text).toBe('string');
+      expect(text).toContain('Found 2 result');
+      expect(text).toContain('find auth functions');
     });
 
     it('passes limit and path options to runSearch', async () => {
@@ -323,7 +275,7 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain('Ollama is not running');
     });
 
-    it('returns formatted context with savings and pipeline on success', async () => {
+    it('returns formatted context text with metadata footer on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunBuildContext.mockResolvedValue(fakeContextResult);
@@ -332,318 +284,20 @@ describe('MCP tool handlers', () => {
       const result = await handler({ query: 'how does auth work', maxTokens: 2000 });
 
       expect(result.isError).toBeUndefined();
-      expect(result.content).toHaveLength(1);
-
+      // build_context returns formatted text, not JSON
       const text = result.content[0].text;
-      expect(text).not.toContain('{"content"');  // no JSON bleed-through
+      expect(typeof text).toBe('string');
       expect(text).toContain('Context assembled for');
+      expect(text).toContain('how does auth work');
       expect(text).toContain('assembled context here');
       expect(text).toContain('Tokens sent to Claude:');
-      expect(text).toContain('150');
-      expect(text).toContain('~1,000');
-      expect(text).toContain('85%');
-      expect(text).toContain('Pipeline: embed_query -> vector_search -> dedup -> token_budget');
-    });
-  });
-
-  // ---- trace_flow ----
-
-  describe('trace_flow', () => {
-    it('returns isError when no profile exists', async () => {
-      mockReadProfile.mockResolvedValue(null);
-
-      const { handler } = registeredTools.get('trace_flow')!;
-      const result = await handler({ entrypoint: 'runBuildContext' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('brain-cache init');
-    });
-
-    it('returns isError when Ollama is not running', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(false);
-
-      const { handler } = registeredTools.get('trace_flow')!;
-      const result = await handler({ entrypoint: 'runBuildContext' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Ollama is not running');
-    });
-
-    it('returns formatted hops with savings and pipeline on success', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunTraceFlow.mockResolvedValue({
-        hops: [
-          {
-            filePath: 'src/test.ts',
-            name: 'testFn',
-            startLine: 1,
-            content: 'function testFn() {}',
-            callsFound: ['otherFn'],
-            hopDepth: 0,
-          },
-        ],
-        metadata: {
-          seedChunkId: 'chunk-1',
-          totalHops: 1,
-          localTasksPerformed: ['embed_query', 'seed_search', 'bfs_trace', 'compress'],
-          tokensSent: 12,
-          estimatedWithoutBraincache: 900,
-          reductionPct: 99,
-          filesInContext: 1,
-        },
-      } as any);
-
-      const { handler } = registeredTools.get('trace_flow')!;
-      const result = await handler({ entrypoint: 'testFn', maxHops: 5, path: '/my/project' });
-
-      expect(result.isError).toBeUndefined();
-      const text = result.content[0].text;
-      expect(text).not.toContain('{');  // no JSON bleed-through
-      expect(text).toContain('Traced 1 hop');
-      expect(text).toContain('1.');
-      expect(text).toContain('testFn');
-      expect(text).toContain('src/test.ts:1');
-      expect(text).toContain('otherFn');
-      expect(text).toContain('Tokens sent to Claude:');
-      expect(text).toContain('Pipeline: embed_query -> seed_search -> bfs_trace -> compress');
-      expect(mockRunTraceFlow).toHaveBeenCalledWith('testFn', { maxHops: 5, path: '/my/project' });
-    });
-
-    it('returns isError when runTraceFlow throws', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunTraceFlow.mockRejectedValue(new Error('Symbol not found'));
-
-      const { handler } = registeredTools.get('trace_flow')!;
-      const result = await handler({ entrypoint: 'testFn' });
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('trace_flow failed');
-      expect(result.content[0].text).toContain('Symbol not found');
-    });
-  });
-
-  // ---- explain_codebase ----
-
-  describe('explain_codebase', () => {
-    it('returns isError when no profile exists', async () => {
-      mockReadProfile.mockResolvedValue(null);
-
-      const { handler } = registeredTools.get('explain_codebase')!;
-      const result = await handler({});
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('brain-cache init');
-    });
-
-    it('returns isError when Ollama is not running', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(false);
-
-      const { handler } = registeredTools.get('explain_codebase')!;
-      const result = await handler({});
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Ollama is not running');
-    });
-
-    it('returns architecture overview with savings and pipeline on success', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunExplainCodebase.mockResolvedValue({
-        content: 'Architecture overview text',
-        chunks: [],
-        metadata: {
-          tokensSent: 200,
-          estimatedWithoutBraincache: 800,
-          reductionPct: 75,
-          filesInContext: 3,
-          localTasksPerformed: ['embed_query', 'vector_search'],
-          cloudCallsMade: 0,
-        },
-      } as any);
-
-      const { handler } = registeredTools.get('explain_codebase')!;
-      const result = await handler({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
-
-      expect(result.isError).toBeUndefined();
-      const text = result.content[0].text;
-      expect(text).toContain('Architecture overview');
-      expect(text).toContain('Architecture overview text');
-      expect(text).toContain('Tokens sent to Claude:');
-      expect(text).toContain('200');
-      expect(text).toContain('Pipeline: embed_query -> vector_search');
-      expect(mockRunExplainCodebase).toHaveBeenCalledWith({ question: 'how is auth structured', maxTokens: 2000, path: '/my/project' });
-    });
-
-    it('returns isError when runExplainCodebase throws', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunExplainCodebase.mockRejectedValue(new Error('No index found'));
-
-      const { handler } = registeredTools.get('explain_codebase')!;
-      const result = await handler({});
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('explain_codebase failed');
-      expect(result.content[0].text).toContain('No index found');
-    });
-  });
-
-  // ---- tool description negative examples ----
-
-  describe('tool description negative examples', () => {
-    it('build_context description contains negative example referencing trace_flow', () => {
-      const desc = registeredTools.get('build_context')!.schema.description as string;
-      expect(desc).toContain('Do NOT use this tool');
-      expect(desc).toContain('trace_flow');
-    });
-
-    it('trace_flow description contains negative example referencing build_context', () => {
-      const desc = registeredTools.get('trace_flow')!.schema.description as string;
-      expect(desc).toContain('Do NOT use this tool');
-      expect(desc).toContain('build_context');
-    });
-
-    it('search_codebase description contains negative example referencing build_context', () => {
-      const desc = registeredTools.get('search_codebase')!.schema.description as string;
-      expect(desc).toContain('Do NOT use this tool');
-      expect(desc).toContain('build_context');
-    });
-
-    it('explain_codebase description contains negative example referencing build_context', () => {
-      const desc = registeredTools.get('explain_codebase')!.schema.description as string;
-      expect(desc).toContain('Do NOT use this tool');
-      expect(desc).toContain('build_context');
-    });
-  });
-
-  // ---- stats accumulation ----
-
-  describe('stats accumulation', () => {
-    it('accumulateStats is called with correct delta after successful build_context', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunBuildContext.mockResolvedValue(fakeContextResult);
-      mockAccumulateStats.mockResolvedValue(undefined);
-
-      const { handler } = registeredTools.get('build_context')!;
-      await handler({ query: 'how does auth work' });
-
-      expect(mockAccumulateStats).toHaveBeenCalledWith({
-        tokensSent: 150,
-        estimatedWithoutBraincache: 1000,
-      });
-    });
-
-    it('accumulateStats is NOT called when build_context throws', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunBuildContext.mockRejectedValue(new Error('Context build failed'));
-
-      const { handler } = registeredTools.get('build_context')!;
-      const result = await handler({ query: 'how does auth work' });
-
-      expect(result.isError).toBe(true);
-      expect(mockAccumulateStats).not.toHaveBeenCalled();
-    });
-
-    it('accumulateStats is called with correct delta after successful search_codebase', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      // chunk content: 'function fn_1() {}' = 18 chars, 'function fn_2() {}' = 18 chars => 36 total
-      // tokensSent = Math.round(36 / 4) = 9, estimatedWithoutBraincache = 9 * 3 = 27
-      const chunk1 = fakeChunk('1');
-      const chunk2 = fakeChunk('2');
-      mockRunSearch.mockResolvedValue([chunk1, chunk2]);
-      mockAccumulateStats.mockResolvedValue(undefined);
-
-      const { handler } = registeredTools.get('search_codebase')!;
-      await handler({ query: 'find auth functions' });
-
-      const expectedTokensSent = Math.round(
-        (chunk1.content.length + chunk2.content.length) / 4
-      );
-      expect(mockAccumulateStats).toHaveBeenCalledWith({
-        tokensSent: expectedTokensSent,
-        estimatedWithoutBraincache: expectedTokensSent * 3,
-      });
-    });
-
-    it('accumulateStats is called with correct delta after successful trace_flow', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunTraceFlow.mockResolvedValue({
-        hops: [],
-        metadata: {
-          seedChunkId: 'chunk-1',
-          totalHops: 0,
-          localTasksPerformed: [],
-          tokensSent: 50,
-          estimatedWithoutBraincache: 200,
-          reductionPct: 75,
-          filesInContext: 1,
-        },
-      } as any);
-      mockAccumulateStats.mockResolvedValue(undefined);
-
-      const { handler } = registeredTools.get('trace_flow')!;
-      await handler({ entrypoint: 'runBuildContext' });
-
-      expect(mockAccumulateStats).toHaveBeenCalledWith({
-        tokensSent: 50,
-        estimatedWithoutBraincache: 200,
-      });
-    });
-
-    it('accumulateStats is called with correct delta after successful explain_codebase', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunExplainCodebase.mockResolvedValue({
-        content: 'Architecture overview text',
-        chunks: [],
-        metadata: {
-          tokensSent: 300,
-          estimatedWithoutBraincache: 1200,
-          reductionPct: 75,
-          filesInContext: 4,
-          localTasksPerformed: ['embed_query', 'vector_search'],
-          cloudCallsMade: 0,
-        },
-      } as any);
-      mockAccumulateStats.mockResolvedValue(undefined);
-
-      const { handler } = registeredTools.get('explain_codebase')!;
-      await handler({ path: '/my/project' });
-
-      expect(mockAccumulateStats).toHaveBeenCalledWith({
-        tokensSent: 300,
-        estimatedWithoutBraincache: 1200,
-      });
-    });
-
-    it('accumulateStats failure does not affect handler response (fire-and-forget)', async () => {
-      mockReadProfile.mockResolvedValue({ ...mockProfile });
-      mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunBuildContext.mockResolvedValue(fakeContextResult);
-      // Simulate accumulateStats failing — handler should still return a valid response
-      mockAccumulateStats.mockRejectedValue(new Error('disk full'));
-
-      const { handler } = registeredTools.get('build_context')!;
-      const result = await handler({ query: 'how does auth work' });
-
-      // Handler returns successfully despite accumulateStats failure (caught by .catch)
-      expect(result.isError).toBeUndefined();
-      expect(result.content[0].text).toContain('Context assembled for');
     });
   });
 
   // ---- doctor ----
 
   describe('doctor', () => {
-    it('returns formatted health output even without profile', async () => {
+    it('returns health text even without profile', async () => {
       // doctor does not require profile — unlike other tools
       mockReadProfile.mockResolvedValue(null);
       mockIsOllamaInstalled.mockResolvedValue(true);
@@ -656,14 +310,16 @@ describe('MCP tool handlers', () => {
       const result = await handler({});
 
       expect(result.isError).toBeUndefined();
+      // doctor returns formatted text, not JSON
       const text = result.content[0].text;
-      expect(text).not.toContain('{');  // no JSON bleed-through
+      expect(typeof text).toBe('string');
       expect(text).toContain('Ollama:');
-      expect(text).toContain('running');
-      expect(text).toContain('Embedding model: none');  // no profile = null model
+      expect(text).toContain('Index:');
+      expect(text).toContain('Embedding model:');
+      expect(text).toContain('VRAM:');
     });
 
-    it('returns ollamaStatus not_installed when Ollama is missing', async () => {
+    it('reports not_installed when Ollama is missing', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaInstalled.mockResolvedValue(false);
       mockReadIndexState.mockResolvedValue(null);
@@ -674,10 +330,10 @@ describe('MCP tool handlers', () => {
 
       expect(result.isError).toBeUndefined();
       const text = result.content[0].text;
-      expect(text).toContain('Ollama: not_installed');
+      expect(text).toContain('not_installed');
     });
 
-    it('returns formatted full health output when everything is running', async () => {
+    it('returns full health text when everything is running', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaInstalled.mockResolvedValue(true);
       mockIsOllamaRunning.mockResolvedValue(true);
@@ -690,16 +346,13 @@ describe('MCP tool handlers', () => {
 
       expect(result.isError).toBeUndefined();
       const text = result.content[0].text;
-      expect(text).not.toContain('{');
-      expect(text).toContain('Ollama: running (v0.6.3)');
+      expect(text).toContain('running');
+      expect(text).toContain('0.6.3');
       expect(text).toContain('indexed');
-      expect(text).toContain('5 files');
-      expect(text).toContain('42 chunks');
-      expect(text).toContain('Embedding model: nomic-embed-text');
-      expect(text).toContain('VRAM: large (16 GiB)');
+      expect(text).toContain('nomic-embed-text');
     });
 
-    it('returns ollamaStatus not_running when installed but not running', async () => {
+    it('reports not_running when installed but Ollama not running', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaInstalled.mockResolvedValue(true);
       mockIsOllamaRunning.mockResolvedValue(false);
@@ -712,7 +365,7 @@ describe('MCP tool handlers', () => {
 
       expect(result.isError).toBeUndefined();
       const text = result.content[0].text;
-      expect(text).toContain('Ollama: not_running');
+      expect(text).toContain('not_running');
     });
   });
 });

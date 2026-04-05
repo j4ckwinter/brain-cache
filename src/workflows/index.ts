@@ -21,7 +21,6 @@ import {
   withWriteLock,
   type ChunkRow,
 } from '../services/lancedb.js';
-import { loadIgnorePatterns } from '../services/ignorePatterns.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk, CallEdge } from '../lib/types.js';
@@ -72,12 +71,6 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   // Step 1: Resolve path
   const rootDir = resolve(targetPath ?? '.');
 
-  // Step 1b: Load .braincacheignore patterns
-  const ignorePatterns = await loadIgnorePatterns(rootDir);
-  if (ignorePatterns.length > 0) {
-    process.stderr.write(`brain-cache: loaded ${ignorePatterns.length} patterns from .braincacheignore\n`);
-  }
-
   // Step 2: Read profile
   const profile = await readProfile();
   if (profile === null) {
@@ -104,9 +97,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   const edgesTable = await openOrCreateEdgesTable(db);
 
   // Step 6: Crawl source files
-  const files = await crawlSourceFiles(rootDir, {
-    extraIgnorePatterns: ignorePatterns.length > 0 ? ignorePatterns : undefined,
-  });
+  const files = await crawlSourceFiles(rootDir);
   process.stderr.write(`brain-cache: found ${files.length} source files\n`);
 
   if (files.length === 0) {

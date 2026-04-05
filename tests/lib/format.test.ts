@@ -6,13 +6,11 @@ import {
   formatDoctorOutput,
   formatIndexResult,
   formatSearchResults,
-  formatTraceFlow,
   formatContext,
   formatPipelineLabel,
 } from '../../src/lib/format.js';
 import type { DoctorHealth, IndexResult } from '../../src/lib/format.js';
 import type { RetrievedChunk, ContextResult, ContextMetadata } from '../../src/lib/types.js';
-import type { TraceFlowResult } from '../../src/workflows/traceFlow.js';
 
 describe('formatToolResponse', () => {
   it('joins summary and body with a blank line separator', () => {
@@ -332,90 +330,6 @@ describe('formatSearchResults', () => {
 
   it('does not contain JSON braces or brackets', () => {
     const result = formatSearchResults([makeChunk()]);
-    expect(result).not.toContain('{');
-    expect(result).not.toContain('[');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatTraceFlow
-// ---------------------------------------------------------------------------
-
-const makeHop = (overrides: Partial<TraceFlowResult['hops'][number]> = {}): TraceFlowResult['hops'][number] => ({
-  filePath: 'src/foo.ts',
-  name: 'doWork',
-  startLine: 10,
-  content: 'function doWork() {}',
-  callsFound: ['helperA', 'helperB'],
-  hopDepth: 0,
-  ...overrides,
-});
-
-const emptyTraceResult: TraceFlowResult = {
-  hops: [],
-  metadata: { seedChunkId: null, totalHops: 0, localTasksPerformed: [] },
-};
-
-describe('formatTraceFlow', () => {
-  it('returns clean sentence for zero hops (not an empty frame)', () => {
-    const result = formatTraceFlow(emptyTraceResult);
-    expect(result).toContain('No call hops found');
-    expect(result).not.toContain('[');
-    expect(result).not.toContain('{');
-  });
-
-  it('zero-hop message mentions index_repo', () => {
-    const result = formatTraceFlow(emptyTraceResult);
-    expect(result).toContain('index_repo');
-  });
-
-  it('contains hop number 1 for a single hop', () => {
-    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('1.');
-  });
-
-  it('contains hopDepth in output', () => {
-    const result = formatTraceFlow({ hops: [makeHop({ hopDepth: 0 })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('0');
-  });
-
-  it('contains filePath:startLine for a single hop', () => {
-    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('src/foo.ts:10');
-  });
-
-  it('contains name for a single hop', () => {
-    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('doWork');
-  });
-
-  it('contains callsFound comma-separated for a single hop', () => {
-    const result = formatTraceFlow({ hops: [makeHop({ callsFound: ['helperA', 'helperB'] })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('helperA');
-    expect(result).toContain('helperB');
-  });
-
-  it('shows (none) for empty callsFound', () => {
-    const result = formatTraceFlow({ hops: [makeHop({ callsFound: [] })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('(none)');
-  });
-
-  it('produces numbered entries for multiple hops', () => {
-    const result = formatTraceFlow({
-      hops: [makeHop({ name: 'alpha' }), makeHop({ name: 'beta', hopDepth: 1 })],
-      metadata: { seedChunkId: 'c1', totalHops: 2, localTasksPerformed: [] },
-    });
-    expect(result).toContain('1.');
-    expect(result).toContain('2.');
-  });
-
-  it('shows (anonymous) for null name', () => {
-    const result = formatTraceFlow({ hops: [makeHop({ name: null })], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
-    expect(result).toContain('(anonymous)');
-  });
-
-  it('does not contain JSON braces or brackets', () => {
-    const result = formatTraceFlow({ hops: [makeHop()], metadata: { seedChunkId: 'c1', totalHops: 1, localTasksPerformed: [] } });
     expect(result).not.toContain('{');
     expect(result).not.toContain('[');
   });

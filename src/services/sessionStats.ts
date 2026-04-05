@@ -1,7 +1,6 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { GLOBAL_CONFIG_DIR, SESSION_STATS_FILENAME } from '../lib/config.js';
-import { loadUserConfig } from './configLoader.js';
 import { childLogger } from './logger.js';
 
 const log = childLogger('sessionStats');
@@ -56,7 +55,8 @@ async function _doAccumulate(delta: StatsDelta, ttlMs?: number): Promise<void> {
     effectiveTtlMs = ttlMs;
   } else {
     try {
-      const config = await loadUserConfig();
+      const raw = await readFile(join(GLOBAL_CONFIG_DIR, 'config.json'), 'utf-8');
+      const config = JSON.parse(raw) as { stats?: { ttlHours?: number } };
       const ttlHours = config.stats?.ttlHours;
       effectiveTtlMs = ttlHours !== undefined ? ttlHours * 60 * 60 * 1000 : STATS_TTL_MS;
     } catch {

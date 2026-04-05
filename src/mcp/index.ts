@@ -10,7 +10,6 @@ import {
   formatDoctorOutput,
   formatIndexResult,
   formatSearchResults,
-  formatTraceFlow,
   formatContext,
   formatPipelineLabel,
 } from "../lib/format.js";
@@ -26,8 +25,6 @@ import { readIndexState } from "../services/lancedb.js";
 import { runIndex } from "../workflows/index.js";
 import { runSearch } from "../workflows/search.js";
 import { runBuildContext } from "../workflows/buildContext.js";
-import { runTraceFlow } from "../workflows/traceFlow.js";
-import { runExplainCodebase } from "../workflows/explainCodebase.js";
 import { accumulateStats } from "../services/sessionStats.js";
 
 declare const __BRAIN_CACHE_VERSION__: string | undefined;
@@ -233,7 +230,7 @@ server.registerTool(
   "build_context",
   {
     description:
-      "Use this tool when answering questions like 'how does X work', 'what does this function do', or any question requiring understanding of specific code behavior across multiple files. Retrieves semantically relevant code across the entire repo, deduplicates, and assembles a token-budgeted context block — more accurate and efficient than reading files individually or relying on memory. Use this before answering to ensure your response is grounded in actual code rather than assumptions. Ideal for explaining how systems work, understanding workflows and data flow, answering code behavior questions, multi-file reasoning, and debugging unfamiliar code paths. Do NOT use this tool when you need to trace a call path across files — use trace_flow instead. Do NOT use this tool for architecture overviews — use explain_codebase instead. Requires index_repo to have been run first.",
+      "Use this tool when answering questions like 'how does X work', 'what does this function do', or any question requiring understanding of specific code behavior across multiple files. Retrieves semantically relevant code across the entire repo, deduplicates, and assembles a token-budgeted context block — more accurate and efficient than reading files individually or relying on memory. Use this before answering to ensure your response is grounded in actual code rather than assumptions. Ideal for explaining how systems work, understanding workflows and data flow, answering code behavior questions, multi-file reasoning, and debugging unfamiliar code paths. Requires index_repo to have been run first.",
     inputSchema: {
       query: z.string().describe("Natural language query or question"),
       maxTokens: z
@@ -376,95 +373,6 @@ server.registerTool(
       };
     }
   },
-);
-
-// Tool 5: trace_flow (FLOW-02)
-server.registerTool(
-  'trace_flow',
-  {
-    description:
-      'Trace call paths from an entrypoint symbol. Returns a structured hops[] array showing which functions are called in sequence, their file locations, and what they call next. Use this instead of build_context when asked to trace how a function call propagates through the codebase, e.g. "how does indexing flow from CLI to LanceDB". Requires index_repo to have been run first. Do NOT use this tool when the question is about how code works or what a function does — use build_context instead.',
-    inputSchema: {
-      entrypoint: z.string().describe('Natural language description of the starting function or entry point to trace from, e.g. "runBuildContext workflow" or "how does indexing work"'),
-      maxHops: z.number().int().min(1).max(10).optional().describe('Maximum call depth to follow (default 3)'),
-      path: z.string().optional().describe('Project root directory (default: current directory)'),
-    },
-  },
-  async ({ entrypoint, maxHops, path }) => {
-    const profile = await readProfile();
-    if (!profile) {
-      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first.") }] };
-    }
-    const running = await isOllamaRunning();
-    if (!running) {
-      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'.") }] };
-    }
-    try {
-      const result = await runTraceFlow(entrypoint, { maxHops, path });
-      accumulateStats({
-        tokensSent: result.metadata.tokensSent,
-        estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
-      }).catch(err => log.warn({ err }, 'stats accumulation failed'));
-      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } = result.metadata;
-      const savings = formatTokenSavings({
-        tokensSent,
-        estimatedWithout: estimatedWithoutBraincache,
-        reductionPct,
-        filesInContext,
-      });
-      const pipeline = formatPipelineLabel(result.metadata.localTasksPerformed);
-      const footer = `---\n${savings}\nPipeline: ${pipeline}`;
-      const summary = `Traced ${result.hops.length} hop${result.hops.length !== 1 ? 's' : ''} from "${entrypoint}".`;
-      const warningLine = result.metadata.confidenceWarning
-        ? `Warning: ${result.metadata.confidenceWarning}\n\n`
-        : '';
-      return {
-        content: [{ type: 'text' as const, text: formatToolResponse(summary, `${warningLine}${formatTraceFlow(result)}\n\n${footer}`) }],
-      };
-    } catch (err) {
-      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope(`trace_flow failed: ${err instanceof Error ? err.message : String(err)}`) }] };
-    }
-  }
-);
-
-// Tool 6: explain_codebase (TOOL-02)
-server.registerTool(
-  'explain_codebase',
-  {
-    description:
-      'Get a high-level architecture overview of the indexed codebase. Returns module-grouped summaries describing what each part of the repo does. Use this instead of build_context when asked to explain the project architecture, understand the overall structure, or get oriented in a new codebase. No follow-up question required — works with just a project path. Requires index_repo to have been run first. Do NOT use this tool for questions about specific code behavior or how a particular function works — use build_context instead.',
-    inputSchema: {
-      question: z.string().optional().describe('Optional focus question, e.g. "how is authentication structured". Defaults to a broad architecture overview.'),
-      maxTokens: z.number().int().min(100).max(100000).optional().describe('Token budget for assembled context (default 4096)'),
-      path: z.string().optional().describe('Project root directory (default: current directory)'),
-    },
-  },
-  async ({ question, maxTokens, path }) => {
-    const profile = await readProfile();
-    if (!profile) {
-      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("No capability profile found.", "Run 'brain-cache init' first.") }] };
-    }
-    const running = await isOllamaRunning();
-    if (!running) {
-      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope("Ollama is not running.", "Start it with 'ollama serve'.") }] };
-    }
-    try {
-      const result = await runExplainCodebase({ question, maxTokens, path });
-      accumulateStats({
-        tokensSent: result.metadata.tokensSent,
-        estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
-      }).catch(err => log.warn({ err }, 'stats accumulation failed'));
-      const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext, localTasksPerformed } = result.metadata;
-      const savings = formatTokenSavings({ tokensSent, estimatedWithout: estimatedWithoutBraincache, reductionPct, filesInContext });
-      const pipeline = formatPipelineLabel(localTasksPerformed);
-      const footer = `---\n${savings}\nPipeline: ${pipeline}`;
-      const summary = `Architecture overview for ${path ?? '.'}.`;
-      const text = formatToolResponse(summary, `${formatContext(result)}\n\n${footer}`);
-      return { content: [{ type: 'text' as const, text }] };
-    } catch (err) {
-      return { isError: true, content: [{ type: 'text' as const, text: formatErrorEnvelope(`explain_codebase failed: ${err instanceof Error ? err.message : String(err)}`) }] };
-    }
-  }
 );
 
 async function main() {
