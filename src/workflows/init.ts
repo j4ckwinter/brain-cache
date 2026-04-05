@@ -137,7 +137,11 @@ export async function runInit(): Promise<void> {
 
   // Step 11b: Install skill to user's project (idempotent)
   const currentFile = fileURLToPath(import.meta.url);
-  const packageRoot = join(dirname(currentFile), '..', '..');
+  // Walk up from current file to find package root (works regardless of tsup output structure)
+  let packageRoot = dirname(currentFile);
+  while (!existsSync(join(packageRoot, 'package.json')) && packageRoot !== dirname(packageRoot)) {
+    packageRoot = dirname(packageRoot);
+  }
   const skillSource = join(packageRoot, '.claude', 'skills', 'brain-cache', 'SKILL.md');
   const skillTargetDir = join(process.cwd(), '.claude', 'skills', 'brain-cache');
   const skillTarget = join(skillTargetDir, 'SKILL.md');
