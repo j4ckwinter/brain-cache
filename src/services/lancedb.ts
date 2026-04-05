@@ -161,7 +161,8 @@ export async function openOrCreateChunkTable(
       }
     } else {
       const existingTable = await db.openTable('chunks');
-      const hasFileType = existingTable.schema.fields.some(
+      const tableSchema = await existingTable.schema();
+      const hasFileType = tableSchema.fields.some(
         (f: { name: string }) => f.name === 'file_type'
       );
       if (!hasFileType) {
