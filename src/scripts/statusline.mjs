@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 
-const STATS_PATH = join(homedir(), '.brain-cache', 'session-stats.json');
+const STATS_PATH = join(homedir(), ".brain-cache", "session-stats.json");
 const STATS_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — must match sessionStats.ts STATS_TTL_MS
-export const IDLE_OUTPUT = '\ud83e\udde0 brain-cache  idle\n';
+export const IDLE_OUTPUT = "\ud83e\udde0 brain-cache → idle\n";
 
 /**
  * Formats a token count into a human-readable string.
@@ -32,12 +32,16 @@ export function formatTokenCount(n) {
  */
 export function _readStatsFromPath(filePath) {
   try {
-    const raw = readFileSync(filePath, 'utf-8');
+    const raw = readFileSync(filePath, "utf-8");
     const stats = JSON.parse(raw);
     if (!stats.lastUpdatedAt) return null;
     const age = Date.now() - Date.parse(stats.lastUpdatedAt);
     if (age > STATS_TTL_MS) return null;
-    if (!stats.estimatedWithoutBraincache || stats.estimatedWithoutBraincache <= 0) return null;
+    if (
+      !stats.estimatedWithoutBraincache ||
+      stats.estimatedWithoutBraincache <= 0
+    )
+      return null;
     return stats;
   } catch {
     return null;
@@ -65,7 +69,9 @@ export function readStats() {
 export function renderOutput(stats) {
   if (!stats) return IDLE_OUTPUT;
   const saved = stats.estimatedWithoutBraincache - stats.tokensSent;
-  const pct = Math.round((1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100);
+  const pct = Math.round(
+    (1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100,
+  );
   if (pct <= 0 || saved <= 0) return IDLE_OUTPUT;
   return `\ud83e\udde0 brain-cache \u2192 saved ${formatTokenCount(saved)} tokens (${pct}% less)\n`;
 }
@@ -73,10 +79,12 @@ export function renderOutput(stats) {
 // Stdin/stdout protocol — only when executed directly (not imported for testing)
 if (import.meta.url === `file://${process.argv[1]}`) {
   const stdinTimeout = setTimeout(() => process.exit(0), 3000);
-  let input = '';
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => { input += chunk; });
-  process.stdin.on('end', () => {
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    input += chunk;
+  });
+  process.stdin.on("end", () => {
     clearTimeout(stdinTimeout);
     try {
       const stats = readStats();
