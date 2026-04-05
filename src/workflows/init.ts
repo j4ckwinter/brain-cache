@@ -2,6 +2,48 @@ import { existsSync, readFileSync, writeFileSync, appendFileSync, chmodSync, mkd
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+
+// ─── PreToolUse hook constants (Step 14) ───────────────────────────────────
+
+const BRAIN_CACHE_HOOK_PREFIX = 'brain-cache:';
+
+interface HookCommand {
+  type: 'command';
+  command: string;
+}
+
+interface HookEntry {
+  matcher: string;
+  hooks: HookCommand[];
+}
+
+function isBrainCacheHookEntry(entry: HookEntry): boolean {
+  return entry.hooks?.some(h =>
+    typeof h.command === 'string' && h.command.includes(BRAIN_CACHE_HOOK_PREFIX)
+  ) ?? false;
+}
+
+const makeHookCommand = (reminder: string): string =>
+  `echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"${reminder}"}}'`;
+
+const BRAIN_CACHE_PRETOOLUSE_HOOKS: HookEntry[] = [
+  {
+    matcher: 'Grep',
+    hooks: [{ type: 'command' as const, command: makeHookCommand('brain-cache: before using Grep, try mcp__brain-cache__search_codebase to find code by meaning instead of regex.') }],
+  },
+  {
+    matcher: 'Glob',
+    hooks: [{ type: 'command' as const, command: makeHookCommand('brain-cache: before using Glob, try mcp__brain-cache__search_codebase to locate files by meaning instead of pattern.') }],
+  },
+  {
+    matcher: 'Read',
+    hooks: [{ type: 'command' as const, command: makeHookCommand('brain-cache: before using Read, try mcp__brain-cache__build_context to get semantically relevant code instead of reading whole files.') }],
+  },
+  {
+    matcher: 'Agent',
+    hooks: [{ type: 'command' as const, command: makeHookCommand('brain-cache: before spawning an Agent, try mcp__brain-cache__build_context or mcp__brain-cache__search_codebase to answer the question directly.') }],
+  },
+];
 import {
   detectCapabilities,
   writeProfile,
@@ -208,6 +250,42 @@ export async function runInit(): Promise<void> {
     process.stderr.write(
       `brain-cache: Warning: Could not configure ~/.claude/settings.json: ${msg}. ` +
       'Status line will not appear in Claude Code until settings.json is configured manually.\n'
+    );
+  }
+
+  // Step 14: Add PreToolUse hooks to ~/.claude/settings.json (idempotent, safe merge per HOOK-01/02/03)
+  try {
+    const rawSettings = existsSync(settingsPath)
+      ? readFileSync(settingsPath, 'utf-8')
+      : '{}';
+    const parsed = JSON.parse(rawSettings) as Record<string, unknown>;
+    const hooks = (parsed['hooks'] ?? {}) as Record<string, unknown>;
+    const preToolUse: HookEntry[] = Array.isArray(hooks['PreToolUse'])
+      ? (hooks['PreToolUse'] as HookEntry[])
+      : [];
+
+    const preserved = preToolUse.filter(e => !isBrainCacheHookEntry(e));
+    const currentBC = preToolUse.filter(e => isBrainCacheHookEntry(e));
+    const noChange = JSON.stringify(currentBC) === JSON.stringify(BRAIN_CACHE_PRETOOLUSE_HOOKS);
+
+    if (noChange && currentBC.length > 0) {
+      process.stderr.write('brain-cache: PreToolUse hooks already installed, skipping.\n');
+    } else {
+      hooks['PreToolUse'] = [...preserved, ...BRAIN_CACHE_PRETOOLUSE_HOOKS];
+      parsed['hooks'] = hooks;
+      mkdirSync(claudeDir, { recursive: true });
+      writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
+      if (currentBC.length > 0) {
+        process.stderr.write('brain-cache: updated PreToolUse hooks in ~/.claude/settings.json\n');
+      } else {
+        process.stderr.write('brain-cache: installed PreToolUse hooks into ~/.claude/settings.json\n');
+      }
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `brain-cache: Warning: Could not install PreToolUse hooks: ${msg}. ` +
+      'Hooks will not fire until settings.json is configured manually.\n'
     );
   }
 }
