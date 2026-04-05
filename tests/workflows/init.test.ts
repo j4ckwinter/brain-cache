@@ -865,6 +865,276 @@ describe('settings.json management', () => {
   });
 });
 
+describe('PreToolUse hook installation', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+
+  // statusLine already present in settings.json so Step 13 skips write,
+  // allowing tests to isolate Step 14 behavior.
+  const settingsWithStatusLine = JSON.stringify({
+    statusLine: { type: 'command', command: 'node "/home/user/.brain-cache/statusline.mjs"' },
+  });
+
+  beforeEach(async () => {
+    stderrOutput = [];
+
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    vi.spyOn(process, 'exit').mockImplementation((_code?: unknown) => {
+      throw new Error(`process.exit(${_code})`);
+    });
+
+    // Service mocks
+    mockDetectCapabilities.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaInstalled.mockResolvedValue(true);
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockStartOllama.mockResolvedValue(true);
+    mockPullModelIfMissing.mockResolvedValue(undefined);
+    mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
+    mockWriteProfile.mockResolvedValue(undefined);
+    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+
+    mockWriteFileSync.mockImplementation(() => undefined);
+    mockAppendFileSync.mockImplementation(() => undefined);
+
+    const mod = await import('../../src/workflows/init.js');
+    runInit = mod.runInit;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  // Helper: set up existsSync so settings.json exists (Step 13 skips write)
+  function mockFsWithSettings(settingsJson: string): void {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return true;
+      if (ps.endsWith('SKILL.md')) return true; // skill already installed
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      if (ps.endsWith('settings.json')) return settingsJson;
+      return '';
+    });
+  }
+
+  it('Test 1 (HOOK-01): writes settings.json with 4 PreToolUse entries when no hooks exist', async () => {
+    mockFsWithSettings(settingsWithStatusLine);
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    expect(written.hooks).toBeDefined();
+    expect(written.hooks.PreToolUse).toBeDefined();
+    expect(Array.isArray(written.hooks.PreToolUse)).toBe(true);
+    expect(written.hooks.PreToolUse).toHaveLength(4);
+    const matchers = written.hooks.PreToolUse.map((e: { matcher: string }) => e.matcher);
+    expect(matchers).toContain('Agent');
+    expect(matchers).toContain('Grep');
+    expect(matchers).toContain('Glob');
+    expect(matchers).toContain('Read');
+  });
+
+  it('Test 2 (HOOK-01): each hook command contains hookSpecificOutput, additionalContext, and brain-cache:', async () => {
+    mockFsWithSettings(settingsWithStatusLine);
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    const entries = written.hooks.PreToolUse as Array<{ matcher: string; hooks: Array<{ command: string }> }>;
+    for (const entry of entries) {
+      expect(entry.hooks).toBeDefined();
+      expect(entry.hooks.length).toBeGreaterThan(0);
+      const cmd = entry.hooks[0].command;
+      expect(cmd).toContain('hookSpecificOutput');
+      expect(cmd).toContain('additionalContext');
+      expect(cmd).toContain('brain-cache:');
+    }
+  });
+
+  it('Test 3 (HOOK-01): Grep hook mentions search_codebase; Read hook mentions build_context', async () => {
+    mockFsWithSettings(settingsWithStatusLine);
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    const entries = written.hooks.PreToolUse as Array<{ matcher: string; hooks: Array<{ command: string }> }>;
+
+    const grepEntry = entries.find(e => e.matcher === 'Grep');
+    expect(grepEntry).toBeDefined();
+    expect(grepEntry!.hooks[0].command).toContain('mcp__brain-cache__search_codebase');
+
+    const readEntry = entries.find(e => e.matcher === 'Read');
+    expect(readEntry).toBeDefined();
+    expect(readEntry!.hooks[0].command).toContain('mcp__brain-cache__build_context');
+  });
+
+  it('Test 4 (HOOK-02): existing non-brain-cache PreToolUse entries are preserved', async () => {
+    const bashHook = {
+      matcher: 'Bash',
+      hooks: [{ type: 'command', command: 'echo "custom bash hook"' }],
+    };
+    const settingsJson = JSON.stringify({
+      statusLine: { type: 'command', command: 'node "/home/user/.brain-cache/statusline.mjs"' },
+      hooks: { PreToolUse: [bashHook] },
+    });
+    mockFsWithSettings(settingsJson);
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    const entries = written.hooks.PreToolUse as Array<{ matcher: string }>;
+    const bashEntry = entries.find(e => e.matcher === 'Bash');
+    expect(bashEntry).toBeDefined();
+    // Should also have brain-cache hooks
+    expect(entries.length).toBe(5); // 1 Bash + 4 brain-cache
+  });
+
+  it('Test 5 (HOOK-03): when brain-cache hooks already installed with identical content, no settings.json write emitted', async () => {
+    // We need to know what BRAIN_CACHE_PRETOOLUSE_HOOKS looks like.
+    // First run to get the written content, then use that as input for idempotency test.
+    // Instead, construct the expected hooks manually matching the plan spec.
+    const makeHookCommand = (reminder: string): string =>
+      `echo '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"${reminder}"}}'`;
+
+    const brainCacheHooks = [
+      {
+        matcher: 'Grep',
+        hooks: [{ type: 'command', command: makeHookCommand('brain-cache: before using Grep, try mcp__brain-cache__search_codebase to find code by meaning instead of regex.') }],
+      },
+      {
+        matcher: 'Glob',
+        hooks: [{ type: 'command', command: makeHookCommand('brain-cache: before using Glob, try mcp__brain-cache__search_codebase to locate files by meaning instead of pattern.') }],
+      },
+      {
+        matcher: 'Read',
+        hooks: [{ type: 'command', command: makeHookCommand('brain-cache: before using Read, try mcp__brain-cache__build_context to get semantically relevant code instead of reading whole files.') }],
+      },
+      {
+        matcher: 'Agent',
+        hooks: [{ type: 'command', command: makeHookCommand('brain-cache: before spawning an Agent, try mcp__brain-cache__build_context or mcp__brain-cache__search_codebase to answer the question directly.') }],
+      },
+    ];
+
+    const settingsJson = JSON.stringify({
+      statusLine: { type: 'command', command: 'node "/home/user/.brain-cache/statusline.mjs"' },
+      hooks: { PreToolUse: brainCacheHooks },
+    });
+    mockFsWithSettings(settingsJson);
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeUndefined();
+    const combined = stderrOutput.join('');
+    expect(combined).toMatch(/already installed|skipping/i);
+  });
+
+  it('Test 6 (HOOK-03/D-07): when brain-cache hooks exist but have different message text, settings.json IS written (silent update)', async () => {
+    const outdatedHooks = [
+      {
+        matcher: 'Grep',
+        hooks: [{ type: 'command', command: "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"brain-cache: old message for Grep\"}}'" }],
+      },
+      {
+        matcher: 'Glob',
+        hooks: [{ type: 'command', command: "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"brain-cache: old message for Glob\"}}'" }],
+      },
+      {
+        matcher: 'Read',
+        hooks: [{ type: 'command', command: "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"brain-cache: old message for Read\"}}'" }],
+      },
+      {
+        matcher: 'Agent',
+        hooks: [{ type: 'command', command: "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"brain-cache: old message for Agent\"}}'" }],
+      },
+    ];
+
+    const settingsJson = JSON.stringify({
+      statusLine: { type: 'command', command: 'node "/home/user/.brain-cache/statusline.mjs"' },
+      hooks: { PreToolUse: outdatedHooks },
+    });
+    mockFsWithSettings(settingsJson);
+
+    await runInit();
+
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(writeCall).toBeDefined();
+    const written = JSON.parse(writeCall![1] as string);
+    // Should have 4 updated brain-cache entries
+    const entries = written.hooks.PreToolUse as Array<{ matcher: string; hooks: Array<{ command: string }> }>;
+    expect(entries).toHaveLength(4);
+    // Messages should be updated (not the old ones)
+    const grepEntry = entries.find(e => e.matcher === 'Grep');
+    expect(grepEntry!.hooks[0].command).not.toContain('old message');
+  });
+
+  it('Test 7: when settings.json does not exist, creates it with both statusLine AND hooks.PreToolUse entries', async () => {
+    mockExistsSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return true;
+      if (ps === '.mcp.json') return false;
+      if (ps.endsWith('statusline.mjs')) return true;
+      if (ps.endsWith('settings.json')) return false;
+      if (ps.endsWith('SKILL.md')) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: unknown) => {
+      const ps = String(p);
+      if (ps === 'CLAUDE.md') return '## Brain-Cache MCP Tools\n';
+      if (ps.endsWith('statusline.mjs')) return '#!/usr/bin/env node\n// mock statusline content\n';
+      return '';
+    });
+
+    await runInit();
+
+    // Find all settings.json writes - there may be two (one from Step 13, one from Step 14)
+    const settingsWrites = mockWriteFileSync.mock.calls.filter(
+      (c) => String(c[0]).endsWith('settings.json')
+    );
+    expect(settingsWrites.length).toBeGreaterThan(0);
+
+    // The last write should contain both statusLine and hooks.PreToolUse
+    const lastWrite = settingsWrites[settingsWrites.length - 1];
+    const written = JSON.parse(lastWrite[1] as string);
+    expect(written.statusLine).toBeDefined();
+    expect(written.hooks).toBeDefined();
+    expect(written.hooks.PreToolUse).toBeDefined();
+    expect(written.hooks.PreToolUse).toHaveLength(4);
+  });
+});
+
 describe('runDoctor', () => {
   let stderrOutput: string[];
   let stdoutOutput: string[];
