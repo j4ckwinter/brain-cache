@@ -1,6 +1,7 @@
 .planning/
 node_modules/
 dist/
+src/services/wasm/
 .brain-cache/
 .claude/*
 !.claude/skills/

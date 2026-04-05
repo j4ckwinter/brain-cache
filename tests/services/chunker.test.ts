@@ -1,33 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { chunkFile, LANGUAGE_MAP, CHUNK_NODE_TYPES } from '../../src/services/chunker.js';
+import { chunkFile, GRAMMAR_WASM, CHUNK_NODE_TYPES } from '../../src/services/chunker.js';
 
-describe('LANGUAGE_MAP', () => {
-  it('maps .ts to a language object', () => {
-    expect(LANGUAGE_MAP['.ts']).toBeDefined();
+describe('GRAMMAR_WASM', () => {
+  it('maps .ts to typescript wasm', () => {
+    expect(GRAMMAR_WASM['.ts']).toBe('tree-sitter-typescript.wasm');
   });
 
-  it('maps .tsx to a language object', () => {
-    expect(LANGUAGE_MAP['.tsx']).toBeDefined();
+  it('maps .tsx to tsx wasm', () => {
+    expect(GRAMMAR_WASM['.tsx']).toBe('tree-sitter-tsx.wasm');
   });
 
-  it('maps .js to a language object', () => {
-    expect(LANGUAGE_MAP['.js']).toBeDefined();
+  it('maps .js to typescript wasm', () => {
+    expect(GRAMMAR_WASM['.js']).toBe('tree-sitter-typescript.wasm');
   });
 
-  it('maps .jsx to a language object', () => {
-    expect(LANGUAGE_MAP['.jsx']).toBeDefined();
+  it('maps .jsx to tsx wasm', () => {
+    expect(GRAMMAR_WASM['.jsx']).toBe('tree-sitter-tsx.wasm');
   });
 
-  it('maps .py to a language object', () => {
-    expect(LANGUAGE_MAP['.py']).toBeDefined();
+  it('maps .py to python wasm', () => {
+    expect(GRAMMAR_WASM['.py']).toBe('tree-sitter-python.wasm');
   });
 
-  it('maps .go to a language object', () => {
-    expect(LANGUAGE_MAP['.go']).toBeDefined();
+  it('maps .go to go wasm', () => {
+    expect(GRAMMAR_WASM['.go']).toBe('tree-sitter-go.wasm');
   });
 
-  it('maps .rs to a language object', () => {
-    expect(LANGUAGE_MAP['.rs']).toBeDefined();
+  it('maps .rs to rust wasm', () => {
+    expect(GRAMMAR_WASM['.rs']).toBe('tree-sitter-rust.wasm');
   });
 });
 
@@ -62,9 +62,9 @@ describe('CHUNK_NODE_TYPES', () => {
 });
 
 describe('chunkFile - TypeScript', () => {
-  it('extracts function declaration', () => {
+  it('extracts function declaration', async () => {
     const src = `export function greet(name: string): string { return 'hi ' + name; }`;
-    const chunks = chunkFile('test.ts', src);
+    const { chunks } = await chunkFile('test.ts', src);
     expect(chunks.length).toBeGreaterThanOrEqual(1);
     const fn = chunks.find(c => c.chunkType === 'function' && c.name === 'greet');
     expect(fn).toBeDefined();
@@ -72,43 +72,43 @@ describe('chunkFile - TypeScript', () => {
     expect(fn!.name).toBe('greet');
   });
 
-  it('extracts class declaration and method', () => {
+  it('extracts class declaration and method', async () => {
     const src = `export class Foo { bar() { return 1; } }`;
-    const chunks = chunkFile('test.ts', src);
+    const { chunks } = await chunkFile('test.ts', src);
     const classChunk = chunks.find(c => c.chunkType === 'class' && c.name === 'Foo');
     const methodChunk = chunks.find(c => c.chunkType === 'method' && c.name === 'bar');
     expect(classChunk).toBeDefined();
     expect(methodChunk).toBeDefined();
   });
 
-  it('extracts exported arrow function (top-level)', () => {
+  it('extracts exported arrow function (top-level)', async () => {
     const src = `export const add = (a: number, b: number) => a + b;`;
-    const chunks = chunkFile('test.ts', src);
+    const { chunks } = await chunkFile('test.ts', src);
     expect(chunks.length).toBeGreaterThanOrEqual(1);
     const fnChunk = chunks.find(c => c.chunkType === 'function');
     expect(fnChunk).toBeDefined();
   });
 
-  it('returns fallback file chunk for type-only file', () => {
+  it('returns fallback file chunk for type-only file', async () => {
     const src = `export interface User { id: string; name: string; }\nexport type ID = string;`;
-    const chunks = chunkFile('types.ts', src);
+    const { chunks } = await chunkFile('types.ts', src);
     expect(chunks.length).toBe(1);
     expect(chunks[0].chunkType).toBe('file');
     expect(chunks[0].content).toContain('interface User');
   });
 
-  it('chunk has correct line numbers', () => {
+  it('chunk has correct line numbers', async () => {
     const src = `function foo() {\n  return 1;\n}`;
-    const chunks = chunkFile('test.ts', src);
+    const { chunks } = await chunkFile('test.ts', src);
     const fn = chunks.find(c => c.chunkType === 'function' && c.name === 'foo');
     expect(fn).toBeDefined();
     expect(fn!.startLine).toBe(1);
     expect(fn!.endLine).toBe(3);
   });
 
-  it('each chunk has valid content, startLine, endLine', () => {
+  it('each chunk has valid content, startLine, endLine', async () => {
     const src = `export function hello() { return 'world'; }`;
-    const chunks = chunkFile('test.ts', src);
+    const { chunks } = await chunkFile('test.ts', src);
     for (const chunk of chunks) {
       expect(chunk.content.length).toBeGreaterThan(0);
       expect(chunk.startLine).toBeGreaterThanOrEqual(1);
@@ -116,9 +116,9 @@ describe('chunkFile - TypeScript', () => {
     }
   });
 
-  it('each chunk has an id field', () => {
+  it('each chunk has an id field', async () => {
     const src = `export function foo() { return 1; }`;
-    const chunks = chunkFile('test.ts', src);
+    const { chunks } = await chunkFile('test.ts', src);
     for (const chunk of chunks) {
       expect(chunk.id).toBeDefined();
       expect(chunk.id.length).toBeGreaterThan(0);
@@ -127,26 +127,26 @@ describe('chunkFile - TypeScript', () => {
 });
 
 describe('chunkFile - Python', () => {
-  it('extracts function_definition', () => {
+  it('extracts function_definition', async () => {
     const src = `def hello():\n    return "world"`;
-    const chunks = chunkFile('test.py', src);
+    const { chunks } = await chunkFile('test.py', src);
     expect(chunks.length).toBeGreaterThanOrEqual(1);
     const fn = chunks.find(c => c.chunkType === 'function' && c.name === 'hello');
     expect(fn).toBeDefined();
   });
 
-  it('extracts class_definition', () => {
+  it('extracts class_definition', async () => {
     const src = `class MyClass:\n    def method(self):\n        pass`;
-    const chunks = chunkFile('test.py', src);
+    const { chunks } = await chunkFile('test.py', src);
     const cls = chunks.find(c => c.chunkType === 'class' && c.name === 'MyClass');
     expect(cls).toBeDefined();
   });
 });
 
 describe('chunkFile - Go', () => {
-  it('extracts function_declaration', () => {
+  it('extracts function_declaration', async () => {
     const src = `package main\n\nfunc main() {\n    fmt.Println("hello")\n}`;
-    const chunks = chunkFile('test.go', src);
+    const { chunks } = await chunkFile('test.go', src);
     expect(chunks.length).toBeGreaterThanOrEqual(1);
     const fn = chunks.find(c => c.chunkType === 'function' && c.name === 'main');
     expect(fn).toBeDefined();
@@ -154,9 +154,9 @@ describe('chunkFile - Go', () => {
 });
 
 describe('chunkFile - Rust', () => {
-  it('extracts function_item', () => {
+  it('extracts function_item', async () => {
     const src = `fn main() {\n    println!("hello");\n}`;
-    const chunks = chunkFile('test.rs', src);
+    const { chunks } = await chunkFile('test.rs', src);
     expect(chunks.length).toBeGreaterThanOrEqual(1);
     const fn = chunks.find(c => c.chunkType === 'function' && c.name === 'main');
     expect(fn).toBeDefined();
@@ -164,44 +164,44 @@ describe('chunkFile - Rust', () => {
 });
 
 describe('chunkFile - unsupported', () => {
-  it('returns empty array for .txt extension', () => {
-    const chunks = chunkFile('readme.txt', 'some text here');
+  it('returns empty chunks for .txt extension', async () => {
+    const { chunks } = await chunkFile('readme.txt', 'some text here');
     expect(chunks).toEqual([]);
   });
 
-  it('returns empty array for .json extension', () => {
-    const chunks = chunkFile('data.json', '{"key": "value"}');
+  it('returns empty chunks for .json extension', async () => {
+    const { chunks } = await chunkFile('data.json', '{"key": "value"}');
     expect(chunks).toEqual([]);
   });
 
-  it('returns empty array for .md extension', () => {
-    const chunks = chunkFile('README.md', '# Title\n\nSome text.');
+  it('returns empty chunks for .md extension', async () => {
+    const { chunks } = await chunkFile('README.md', '# Title\n\nSome text.');
     expect(chunks).toEqual([]);
   });
 });
 
 describe('arrow function extraction', () => {
-  it('extracts top-level exported arrow function', () => {
+  it('extracts top-level exported arrow function', async () => {
     const code = `export const greet = (name: string): string => {\n  return 'hello ' + name;\n};\n`;
-    const chunks = chunkFile('test.ts', code);
+    const { chunks } = await chunkFile('test.ts', code);
     expect(chunks.some(c => c.chunkType === 'function')).toBe(true);
   });
 
-  it('extracts top-level non-exported arrow function', () => {
+  it('extracts top-level non-exported arrow function', async () => {
     const code = `const add = (a: number, b: number) => a + b;\n`;
-    const chunks = chunkFile('test.ts', code);
+    const { chunks } = await chunkFile('test.ts', code);
     expect(chunks.some(c => c.chunkType === 'function')).toBe(true);
   });
 
-  it('does NOT extract arrow function used as callback argument', () => {
+  it('does NOT extract arrow function used as callback argument', async () => {
     const code = `const arr = [1, 2, 3];\nconst result = arr.map((x) => x * 2);\n`;
-    const chunks = chunkFile('test.ts', code);
+    const { chunks } = await chunkFile('test.ts', code);
     // The map callback arrow should not be extracted as a standalone chunk
     const arrowChunks = chunks.filter(c => c.chunkType === 'function');
     expect(arrowChunks.length).toBe(0);
   });
 
-  it('does NOT extract deeply nested arrow function', () => {
+  it('does NOT extract deeply nested arrow function', async () => {
     const code = [
       'function outer() {',
       '  function middle() {',
@@ -212,7 +212,7 @@ describe('arrow function extraction', () => {
       '  }',
       '}',
     ].join('\n');
-    const chunks = chunkFile('test.ts', code);
+    const { chunks } = await chunkFile('test.ts', code);
     const arrowChunks = chunks.filter(c => c.content.includes('=>'));
     // Only the named functions should be extracted, not the forEach callback
     expect(arrowChunks.every(c => c.name === 'outer' || c.name === 'middle')).toBe(true);
