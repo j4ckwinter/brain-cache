@@ -37,16 +37,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HOOK-01 | — | Planned |
-| HOOK-02 | — | Planned |
-| HOOK-03 | — | Planned |
-| HOOK-04 | — | Planned |
-| HOOK-05 | — | Planned |
+| HOOK-01 | Phase 36 | Planned |
+| HOOK-02 | Phase 36 | Planned |
+| HOOK-03 | Phase 36 | Planned |
+| HOOK-04 | Phase 37 | Planned |
+| HOOK-05 | Phase 37 | Planned |
 
 **Coverage:**
 - v3.1 requirements: 5 total, 0 complete
-- Mapped to phases: 0
-- Unmapped: 5
+- Mapped to phases: 5
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-05*
