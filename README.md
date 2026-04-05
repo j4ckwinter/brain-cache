@@ -1,6 +1,6 @@
 # brain-cache
 
-> Your local GPU finally has a job.
+> Stop sending your entire repo to Claude.
 
 brain-cache is a local AI runtime that sits between your codebase and Claude. It runs embeddings and retrieval on your machine — so Claude only sees what actually matters. Fewer tokens. Better answers. Your API bill stops looking like a mortgage payment.
 
@@ -33,22 +33,6 @@ No copy/pasting code into prompts. No manual file opens. Claude knows where to l
 
 ---
 
-## Example
-
-```
-> "How does the auth middleware work?"
-
-brain-cache: context assembled (74 tokens, 97% reduction)
-
-Tokens sent to Claude:     74
-Estimated without:         ~2,795
-Reduction:                 97%
-```
-
-Claude gets only what matters — answers are sharper and grounded.
-
----
-
 ## Quick start
 
 **Step 1: Install**
@@ -71,6 +55,7 @@ brain-cache index
 brain-cache tools are called automatically. You don't change how you work — the context just gets better.
 
 > **Advanced:** `init` creates `.mcp.json` automatically. If you need to customise it manually, the expected shape is:
+>
 > ```json
 > {
 >   "mcpServers": {
@@ -129,18 +114,6 @@ brain-cache ask "how does auth work?" Direct Claude query via CLI
 brain-cache status                    Show index and system status
 brain-cache doctor                    Check system health
 ```
-
----
-
-## Token savings
-
-Every call shows exactly what was saved:
-
-```
-context: 1,240 tokens (93% reduction)
-```
-
-Less noise — better reasoning — cheaper usage.
 
 ---
 
