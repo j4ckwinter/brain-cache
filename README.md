@@ -48,7 +48,7 @@ brain-cache init
 brain-cache index
 ```
 
-`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, appends MCP tool instructions to `CLAUDE.md`, installs the brain-cache skill to `.claude/skills/brain-cache/SKILL.md`, and installs a status line in Claude Code that shows cumulative token savings. Runs once; idempotent.
+`brain-cache init` sets up your project: configures `.mcp.json` so Claude Code connects to brain-cache automatically, appends MCP tool instructions to `CLAUDE.md`, installs the brain-cache skill to `.claude/skills/brain-cache/SKILL.md`, installs a status line that shows cumulative token savings, and adds PreToolUse hooks that remind Claude to use brain-cache tools first. Runs once; idempotent.
 
 **Step 3: Use Claude normally**
 
@@ -83,6 +83,21 @@ project root.
 ## Status line
 
 After `brain-cache init`, the status line in Claude Code's bottom bar shows your cumulative token savings session by session. You see the reduction without doing anything different.
+
+---
+
+## PreToolUse hooks
+
+`brain-cache init` installs advisory hooks into Claude Code (`~/.claude/settings.json`) that fire before certain tools. They remind Claude to try brain-cache first — but never block execution.
+
+| Tool triggered | Reminder |
+|---------------|----------|
+| Grep | Try `search_codebase` to find code by meaning instead of regex |
+| Glob | Try `search_codebase` to locate files by meaning instead of pattern |
+| Read | Try `build_context` to get relevant code instead of reading whole files |
+| Agent | Try `build_context` or `search_codebase` before spawning a sub-agent |
+
+Hooks are idempotent — re-running `init` updates brain-cache hooks without touching any other hooks you have configured.
 
 ---
 
