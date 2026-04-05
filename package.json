@@ -30,6 +30,7 @@
     "postbuild": "cpy 'node_modules/web-tree-sitter/tree-sitter.wasm' dist/wasm/ --flat && cpy 'node_modules/tree-sitter-wasms/out/tree-sitter-{typescript,tsx,python,go,rust}.wasm' dist/wasm/ --flat",
     "prepare": "npm run build",
     "link": "npm link",
+    "pretest": "cpy 'node_modules/web-tree-sitter/tree-sitter.wasm' src/services/wasm/ --flat && cpy 'node_modules/tree-sitter-wasms/out/tree-sitter-{typescript,tsx,python,go,rust}.wasm' src/services/wasm/ --flat",
     "test": "vitest run",
     "test:watch": "vitest"
   },
