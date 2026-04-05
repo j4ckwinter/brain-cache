@@ -31,7 +31,11 @@ describe('npm pack --dry-run', () => {
       encoding: 'utf8',
     });
 
-    const wasmLines = output.split('\n').filter((line) => line.includes('.wasm'));
+    // Filter to only "npm notice" lines containing .wasm to avoid counting
+    // postbuild command echo lines that also contain .wasm paths
+    const wasmLines = output.split('\n').filter(
+      (line) => line.includes('npm notice') && line.includes('.wasm'),
+    );
     expect(wasmLines.length).toBe(6);
   });
 });

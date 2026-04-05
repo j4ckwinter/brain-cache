@@ -51,14 +51,32 @@ RESTORE_CMD="mv node_modules/_tree-sitter-wasms-hidden node_modules/tree-sitter-
 trap "$RESTORE_CMD" EXIT
 
 # Run brain-cache index against a small fixture directory using built CLI
-# Use --path with a small directory to keep it fast
-# We just need to confirm it starts without WASM resolution errors
-node dist/cli.js index --path ./src/lib 2>&1 | head -20
-STATUS=${PIPESTATUS[0]}
+# Use positional path argument with a small directory to keep it fast
+# We just need to confirm it starts without WASM resolution errors.
+# Note: "No profile found" is an acceptable CLI error — it means WASM loaded OK
+# and the CLI reached application logic. Only WASM/path resolution errors are failures.
+set +e
+node dist/cli.js index ./src/lib > /tmp/brain-cache-index-out.txt 2>&1
+STATUS=$?
+RUNTIME_OUTPUT=$(head -20 /tmp/brain-cache-index-out.txt)
+set -e
+echo "$RUNTIME_OUTPUT"
 
-if [ "$STATUS" -ne 0 ]; then
+# Check for WASM resolution errors specifically
+if echo "$RUNTIME_OUTPUT" | grep -qiE '(expected magic word|CompileError|instantiate|wasm.*not found|cannot find.*wasm|failed to load.*wasm)'; then
   echo ""
-  echo "FAIL: brain-cache index failed without node_modules/tree-sitter-wasms/"
+  echo "FAIL: brain-cache index encountered WASM resolution error without node_modules/tree-sitter-wasms/"
+  exit 1
+fi
+
+# "No profile found" means we passed WASM init — CLI reached application logic
+if echo "$RUNTIME_OUTPUT" | grep -q "No profile found"; then
+  echo "  OK: WASM loaded from dist/wasm/ (CLI reached application logic)"
+elif [ "$STATUS" -eq 0 ]; then
+  echo "  OK: brain-cache index succeeded"
+else
+  echo ""
+  echo "FAIL: brain-cache index failed with unexpected error without node_modules/tree-sitter-wasms/"
   exit 1
 fi
 
