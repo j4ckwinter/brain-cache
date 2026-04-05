@@ -199,6 +199,39 @@ function computeNoisePenalty(chunk: RetrievedChunk, query: string): number {
   return 0;
 }
 
+/** Keywords that signal the user wants test-related results. */
+const TEST_INTENT_KEYWORDS = ['test', 'spec', 'coverage', 'tested'];
+
+/**
+ * Score penalty subtracted from blended score for test file chunks.
+ * Range 0.3-0.5 per RANK-01. Set to 0.4 as initial value.
+ */
+const TEST_FILE_NOISE_PENALTY = 0.4;
+
+/**
+ * Returns TEST_FILE_NOISE_PENALTY when the chunk belongs to a test file
+ * and the query does not signal test intent; returns 0 otherwise.
+ *
+ * Test file detection uses file path regex (not LanceDB metadata):
+ * - *.test.{js,jsx,ts,tsx}
+ * - *.spec.{js,jsx,ts,tsx}
+ * - __tests__/ directory
+ */
+function computeTestFilePenalty(chunk: RetrievedChunk, query: string): number {
+  const filePath = chunk.filePath;
+  const isTestFile =
+    /\.test\.[jt]sx?$/.test(filePath) ||
+    /\.spec\.[jt]sx?$/.test(filePath) ||
+    filePath.includes('__tests__/');
+
+  if (!isTestFile) return 0;
+
+  const lowerQuery = query.toLowerCase();
+  if (TEST_INTENT_KEYWORDS.some(kw => lowerQuery.includes(kw))) return 0;
+
+  return TEST_FILE_NOISE_PENALTY;
+}
+
 export async function searchChunks(
   table: Table,
   queryVector: number[],
@@ -232,8 +265,9 @@ export async function searchChunks(
     }));
 
   if (queryTokens.length > 0) {
-    // Rerank: blend vector similarity with per-mode keyword boost weight, minus config noise penalty.
+    // Rerank: blend vector similarity with per-mode keyword boost weight, minus noise penalties.
     // Config noise penalty prevents build tool config files from ranking above application code.
+    // Test file noise penalty prevents test files from ranking above impl files for generic queries.
     // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact.
     // IMPORTANT: compute sort score FIRST using original similarity, THEN apply promotion.
     const boostWeight = opts.keywordBoostWeight ?? 0.10;
@@ -241,7 +275,8 @@ export async function searchChunks(
       const boost = computeKeywordBoost(chunk, queryTokens);
       const score = chunk.similarity * (1 - boostWeight)
         + boost * boostWeight
-        - computeNoisePenalty(chunk, query!);
+        - computeNoisePenalty(chunk, query!)
+        - computeTestFilePenalty(chunk, query!);
       // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact
       const promotedSimilarity = boost > 0
         ? Math.max(chunk.similarity, HIGH_RELEVANCE_SIMILARITY_THRESHOLD)

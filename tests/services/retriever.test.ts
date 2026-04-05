@@ -183,6 +183,75 @@ describe('searchChunks', () => {
       expect(results).toHaveLength(1);
     });
   });
+
+  describe('test file noise penalty', () => {
+    it('penalizes test file chunks for generic queries', async () => {
+      const implRow = makeRow({ id: 'impl', file_path: 'src/services/chunker.ts', _distance: 0.25 });
+      const testRow = makeRow({ id: 'test', file_path: 'tests/services/chunker.test.ts', _distance: 0.20 });
+      const table = makeMockTable([testRow, implRow]); // test has better raw distance
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'how does chunkFile work');
+
+      // impl ranks first because test file is penalized
+      expect(results[0].id).toBe('impl');
+    });
+
+    it('does not penalize test file chunks for test-intent queries', async () => {
+      const implRow = makeRow({ id: 'impl', file_path: 'src/services/chunker.ts', _distance: 0.25 });
+      const testRow = makeRow({ id: 'test', file_path: 'tests/services/chunker.test.ts', _distance: 0.20 });
+      const table = makeMockTable([testRow, implRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'how is chunkFile tested');
+
+      // test file keeps its raw advantage — "tested" bypasses penalty
+      expect(results[0].id).toBe('test');
+    });
+
+    it('bypasses penalty when query contains spec keyword', async () => {
+      const specRow = makeRow({ id: 'spec', file_path: 'src/services/chunker.spec.ts', _distance: 0.20 });
+      const implRow = makeRow({ id: 'impl', file_path: 'src/services/chunker.ts', _distance: 0.25 });
+      const table = makeMockTable([specRow, implRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'spec for chunker');
+
+      // "spec" bypasses penalty
+      expect(results[0].id).toBe('spec');
+    });
+
+    it('config file and test file penalties apply independently', async () => {
+      const configRow = makeRow({ id: 'cfg', file_path: 'vitest.config.ts', _distance: 0.20 });
+      const testRow = makeRow({ id: 'test', file_path: 'tests/chunker.test.ts', _distance: 0.22 });
+      const implRow = makeRow({ id: 'impl', file_path: 'src/chunker.ts', _distance: 0.28 });
+      const table = makeMockTable([configRow, testRow, implRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'how does chunking work');
+
+      // impl first, both config and test penalized
+      expect(results[0].id).toBe('impl');
+    });
+
+    it('does not penalize files with test in directory name but not test file extension', async () => {
+      const contestRow = makeRow({ id: 'contest', file_path: 'src/contest/solution.ts', _distance: 0.20 });
+      const implRow = makeRow({ id: 'impl', file_path: 'src/services/solver.ts', _distance: 0.25 });
+      const table = makeMockTable([contestRow, implRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'contest solution');
+
+      // not penalized, keeps raw advantage
+      expect(results[0].id).toBe('contest');
+    });
+
+    it('penalizes __tests__ directory files for generic queries', async () => {
+      const testsRow = makeRow({ id: 'testdir', file_path: 'src/__tests__/chunker.ts', _distance: 0.20 });
+      const implRow = makeRow({ id: 'impl', file_path: 'src/services/chunker.ts', _distance: 0.25 });
+      const table = makeMockTable([testsRow, implRow]);
+
+      const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.4 }, 'how does chunker work');
+
+      // __tests__ file penalized
+      expect(results[0].id).toBe('impl');
+    });
+  });
 });
 
 describe('deduplicateChunks', () => {
