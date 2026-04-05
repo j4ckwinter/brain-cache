@@ -229,7 +229,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     for (const filePath of group) {
       const content = contentMap.get(filePath)!;
       totalRawTokens += countChunkTokens(content);
-      const { chunks, edges } = chunkFile(filePath, content);
+      const { chunks, edges } = await chunkFile(filePath, content);
       groupChunks.push(...chunks);
       groupEdges.push(...edges);
     }

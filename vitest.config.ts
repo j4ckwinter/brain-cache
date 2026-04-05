@@ -10,7 +10,6 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
-      'tests/services/chunker.test.ts', // tree-sitter native binding not available in this arch
     ],
   },
 });
