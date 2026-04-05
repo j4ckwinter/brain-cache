@@ -50,3 +50,11 @@ Call `mcp__brain-cache__doctor` when any brain-cache tool fails or returns unexp
 ## Status line
 
 brain-cache displays cumulative token savings in the Claude Code status bar. After tool calls you will see `brain-cache down-arrow{pct}% {n} saved` — this confirms cost savings are working. If the status bar shows idle, no tools have been called yet in the current session.
+
+## Enforcement hooks
+
+brain-cache installs PreToolUse hooks into `~/.claude/settings.json` via `brain-cache init`. These hooks fire automatically when Claude reaches for one of four tools that brain-cache replaces: `Grep`, `Glob`, `Read`, or `Agent`. When triggered, each hook injects a one-line reminder into Claude's context suggesting the appropriate brain-cache tool to use instead.
+
+The hooks do not block tool calls. They are advisory — a nudge, not a gate. If brain-cache tools are unavailable (index not built, Ollama down), Claude can still fall back to the standard tools.
+
+To install hooks: run `brain-cache init`. Running it multiple times is safe — existing hooks are not duplicated.
