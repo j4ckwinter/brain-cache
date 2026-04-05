@@ -3,6 +3,72 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 
+// --- classifyFileType tests ---
+
+describe('classifyFileType', () => {
+  it('returns "source" for a regular source file', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.ts')).toBe('source');
+  });
+
+  it('returns "test" for *.test.ts files', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.test.ts')).toBe('test');
+  });
+
+  it('returns "test" for *.spec.ts files', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.spec.ts')).toBe('test');
+  });
+
+  it('returns "test" for *.test.tsx files', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.test.tsx')).toBe('test');
+  });
+
+  it('returns "test" for *.spec.tsx files', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.spec.tsx')).toBe('test');
+  });
+
+  it('returns "test" for *.test.js files', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.test.js')).toBe('test');
+  });
+
+  it('returns "test" for *.spec.js files', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/utils/helper.spec.js')).toBe('test');
+  });
+
+  it('returns "test" for files in __tests__/ directory', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/__tests__/helper.ts')).toBe('test');
+  });
+
+  it('returns "test" for files in __tests__/ directory with Windows paths', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src\\__tests__\\helper.ts')).toBe('test');
+  });
+
+  it('returns "source" for a service file like lancedb.ts', async () => {
+    const { classifyFileType } = await import('../../src/services/lancedb.js');
+    expect(classifyFileType('src/services/lancedb.ts')).toBe('source');
+  });
+});
+
+// --- chunkSchema file_type field tests ---
+
+describe('chunkSchema', () => {
+  it('includes a non-nullable file_type field', async () => {
+    const { chunkSchema } = await import('../../src/services/lancedb.js');
+    const schema = chunkSchema(768);
+    const fileTypeField = schema.fields.find((f: { name: string }) => f.name === 'file_type');
+    expect(fileTypeField).toBeDefined();
+    expect(fileTypeField?.nullable).toBe(false);
+  });
+});
+
 // --- readFileHashes / writeFileHashes tests ---
 
 describe('readFileHashes', () => {
