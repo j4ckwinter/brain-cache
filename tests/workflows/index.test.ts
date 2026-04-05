@@ -338,4 +338,26 @@ describe('runIndex', () => {
     expect(combined).toContain('Estimated without:');
     expect(combined).toContain('Reduction:');
   });
+
+  it('skips files that fail to chunk instead of crashing the run', async () => {
+    const goodFile = '/project/src/bar.ts';
+    const badFile = '/project/src/foo.ts';
+    mockCrawlSourceFiles.mockResolvedValue([badFile, goodFile]);
+
+    mockChunkFile.mockImplementation((filePath, _content) => {
+      if (filePath === badFile) throw new Error('parse failure');
+      return { chunks: [fakeChunk(filePath, 1)], edges: [] };
+    });
+
+    await runIndex('/project');
+
+    // Good file's chunk was still embedded and stored
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+    expect(mockInsertChunks).toHaveBeenCalledWith(
+      mockTable,
+      expect.arrayContaining([
+        expect.objectContaining({ file_path: goodFile }),
+      ])
+    );
+  });
 });
