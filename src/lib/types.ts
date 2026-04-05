@@ -70,6 +70,7 @@ export interface RetrievedChunk {
   content: string;
   startLine: number;
   endLine: number;
+  fileType: string;    // 'test' | 'source'
   similarity: number; // 1 - _distance (higher = more similar)
 }
 

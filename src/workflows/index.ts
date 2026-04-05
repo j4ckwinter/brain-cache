@@ -19,6 +19,7 @@ import {
   openOrCreateEdgesTable,
   insertEdges,
   withWriteLock,
+  classifyFileType,
   type ChunkRow,
 } from '../services/lancedb.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
@@ -275,6 +276,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
         content: chunk.content,
         start_line: chunk.startLine,
         end_line: chunk.endLine,
+        file_type: classifyFileType(chunk.filePath),
         vector: vectors[i],
       }));
 

@@ -41,6 +41,7 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<strin
     content: 'function myFunc() {}',
     start_line: 1,
     end_line: 5,
+    file_type: 'source',
     _distance: 0.2,
     ...overrides,
   };
@@ -105,6 +106,20 @@ describe('searchChunks', () => {
       endLine: 20,
       similarity: 0.85,
     });
+  });
+
+  it('maps file_type from RawChunkRow to fileType on RetrievedChunk', async () => {
+    const sourceRow = makeRow({ id: 'source-chunk', file_path: 'src/services/foo.ts', file_type: 'source', _distance: 0.1 });
+    const testRow = makeRow({ id: 'test-chunk', file_path: 'tests/foo.test.ts', file_type: 'test', _distance: 0.15 });
+    const table = makeMockTable([sourceRow, testRow]);
+
+    const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.3 });
+
+    expect(results).toHaveLength(2);
+    const sourceResult = results.find(r => r.id === 'source-chunk');
+    const testResult = results.find(r => r.id === 'test-chunk');
+    expect(sourceResult?.fileType).toBe('source');
+    expect(testResult?.fileType).toBe('test');
   });
 
   it('returns empty array when all rows are above distanceThreshold', async () => {
@@ -173,9 +188,9 @@ describe('searchChunks', () => {
 describe('deduplicateChunks', () => {
   it('removes duplicate chunks by id, preserving first occurrence', () => {
     const chunks: RetrievedChunk[] = [
-      { id: 'a', filePath: 'f1', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, similarity: 0.9 },
-      { id: 'b', filePath: 'f2', chunkType: 'function', scope: null, name: 'b', content: '', startLine: 1, endLine: 5, similarity: 0.8 },
-      { id: 'a', filePath: 'f1', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, similarity: 0.7 },
+      { id: 'a', filePath: 'f1', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.9 },
+      { id: 'b', filePath: 'f2', chunkType: 'function', scope: null, name: 'b', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.8 },
+      { id: 'a', filePath: 'f1', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.7 },
     ];
 
     const result = deduplicateChunks(chunks);
@@ -192,8 +207,8 @@ describe('deduplicateChunks', () => {
 
   it('preserves original order (not sorted)', () => {
     const chunks: RetrievedChunk[] = [
-      { id: 'z', filePath: 'f', chunkType: 'function', scope: null, name: 'z', content: '', startLine: 1, endLine: 5, similarity: 0.5 },
-      { id: 'a', filePath: 'f', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, similarity: 0.9 },
+      { id: 'z', filePath: 'f', chunkType: 'function', scope: null, name: 'z', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.5 },
+      { id: 'a', filePath: 'f', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.9 },
     ];
 
     const result = deduplicateChunks(chunks);

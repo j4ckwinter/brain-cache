@@ -33,6 +33,7 @@ vi.mock('../../src/services/lancedb.js', () => ({
   deleteChunksByFilePath: vi.fn(),
   createVectorIndexIfNeeded: vi.fn(),
   withWriteLock: vi.fn(),
+  classifyFileType: vi.fn((filePath: string) => filePath.includes('.test.') ? 'test' : 'source'),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -64,6 +65,7 @@ import {
   deleteChunksByFilePath,
   createVectorIndexIfNeeded,
   withWriteLock,
+  classifyFileType,
 } from '../../src/services/lancedb.js';
 import { readFile } from 'node:fs/promises';
 import { countChunkTokens } from '../../src/services/tokenCounter.js';
@@ -86,6 +88,7 @@ const mockCreateVectorIndexIfNeeded = vi.mocked(createVectorIndexIfNeeded);
 const mockWithWriteLock = vi.mocked(withWriteLock);
 const mockReadFile = vi.mocked(readFile);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
+const mockClassifyFileType = vi.mocked(classifyFileType);
 
 const mockProfile = {
   version: 1 as const,
@@ -220,6 +223,25 @@ describe('runIndex', () => {
       mockTable,
       expect.arrayContaining([
         expect.objectContaining({ vector: zeroVector768 }),
+      ])
+    );
+  });
+
+  it('calls insertChunks with rows containing file_type from classifyFileType', async () => {
+    // Set up: one test file, one source file
+    const testFilePath = '/project/src/foo.test.ts';
+    const sourceFilePath = '/project/src/bar.ts';
+    mockCrawlSourceFiles.mockResolvedValue([testFilePath, sourceFilePath]);
+    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockClassifyFileType.mockImplementation((fp: string) => fp.includes('.test.') ? 'test' : 'source');
+
+    await runIndex('/project');
+
+    expect(mockInsertChunks).toHaveBeenCalledWith(
+      mockTable,
+      expect.arrayContaining([
+        expect.objectContaining({ file_path: testFilePath, file_type: 'test' }),
+        expect.objectContaining({ file_path: sourceFilePath, file_type: 'source' }),
       ])
     );
   });

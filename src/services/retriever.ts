@@ -15,6 +15,7 @@ interface RawChunkRow {
   content: string;
   start_line: number;
   end_line: number;
+  file_type: string;
   _distance: number;
 }
 
@@ -226,6 +227,7 @@ export async function searchChunks(
       content: r.content,
       startLine: r.start_line,
       endLine: r.end_line,
+      fileType: r.file_type,
       similarity: 1 - r._distance,
     }));
 
