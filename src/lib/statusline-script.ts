@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 
 const STATS_PATH = join(homedir(), '.brain-cache', 'session-stats.json');
 const STATS_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — must match sessionStats.ts STATS_TTL_MS
-export const IDLE_OUTPUT = '\\ud83e\\udde0 brain-cache  idle\\n';
+export const IDLE_OUTPUT = '\\ud83e\\udde0 brain-cache \\u2192 idle\\n';
 
 /**
  * Formats a token count into a human-readable string.

@@ -101,18 +101,6 @@ After `brain-cache init`, the status line in Claude Code's bottom bar shows your
 
 ---
 
-## Optional: Token savings footer
-
-brain-cache returns token usage stats in its tool responses (tokens sent, estimated without, reduction %). By default, Claude decides whether to surface these — no footer is forced.
-
-If you'd like Claude to always show the stats, add this to your project's `CLAUDE.md`:
-
-```
-When using brain-cache build_context, include the token savings summary from the response at the end of your answer.
-```
-
-This keeps it transparent and under your control.
-
 ## Tuning how much Claude uses brain-cache
 
 `brain-cache init` adds a section to your project's `CLAUDE.md` with clear instructions to use brain-cache tools first. This works well for most users.
