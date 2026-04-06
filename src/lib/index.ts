@@ -35,3 +35,5 @@ export {
 } from './types.js';
 
 export { formatTokenSavings, type TokenSavingsInput } from './format.js';
+
+export { requireProfile, requireOllama } from './guards.js';
