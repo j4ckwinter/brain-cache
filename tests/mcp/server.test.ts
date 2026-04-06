@@ -142,7 +142,8 @@ describe('MCP tool handlers', () => {
     vi.clearAllMocks();
 
     // Trigger module load to register tools
-    await import('../../src/mcp/index.js');
+    const { createMcpServer } = await import('../../src/mcp/server.js');
+    createMcpServer();
   });
 
   afterEach(() => {

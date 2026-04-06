@@ -17,7 +17,7 @@ export default defineConfig([
     },
   },
   {
-    entry: { mcp: "src/mcp/index.ts" },
+    entry: { mcp: "src/mcp/main.ts" },
     format: ["esm"],
     target: "node20",
     outDir: "dist",
