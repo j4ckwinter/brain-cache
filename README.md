@@ -136,6 +136,21 @@ brain-cache status                    Show index and system status
 brain-cache doctor                    Check system health
 ```
 
+### Background service lifecycle
+
+Use service lifecycle commands when you want `brain-cache watch` running in the background without a dedicated terminal.
+
+```bash
+brain-cache service install [path]    Install/start per-project background watcher service
+brain-cache service status [path]     Show service status for this project
+brain-cache service uninstall [path]  Uninstall service (disables and removes unit/plist)
+```
+
+- macOS: uses a per-project `launchd` LaunchAgent.
+- Linux: uses a per-project `systemd --user` unit.
+- Windows: docs-only fallback; service install is not automated by the runtime.
+- "Disable" maps to uninstall in the current CLI: `brain-cache service uninstall` both stops/disable and removes installed service files.
+
 ---
 
 ## Requirements
