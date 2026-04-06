@@ -46,6 +46,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   return {
     ...actual,
     readFile: vi.fn(),
+    stat: vi.fn(),
   };
 });
 
@@ -73,7 +74,7 @@ import {
   withWriteLock,
   classifyFileType,
 } from '../../src/services/lancedb.js';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { countChunkTokens } from '../../src/services/tokenCounter.js';
 
 const mockAcquireIndexLock = vi.mocked(acquireIndexLock);
@@ -95,6 +96,7 @@ const mockDeleteChunksByFilePaths = vi.mocked(deleteChunksByFilePaths);
 const mockCreateVectorIndexIfNeeded = vi.mocked(createVectorIndexIfNeeded);
 const mockWithWriteLock = vi.mocked(withWriteLock);
 const mockReadFile = vi.mocked(readFile);
+const mockStat = vi.mocked(stat);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockClassifyFileType = vi.mocked(classifyFileType);
 
@@ -162,6 +164,7 @@ describe('runIndex', () => {
     mockIsOllamaRunning.mockResolvedValue(true);
     mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
     // chunkFile now returns { chunks, edges } — provide that shape
     mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
@@ -172,7 +175,7 @@ describe('runIndex', () => {
     mockInsertEdges.mockResolvedValue(undefined);
     mockWriteIndexState.mockResolvedValue(undefined);
     // Incremental indexing: empty stored hashes = full index on first run
-    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
     mockWriteFileHashes.mockResolvedValue(undefined);
     mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
     mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
@@ -480,6 +483,7 @@ describe('incremental re-index file removal', () => {
     mockReadProfile.mockResolvedValue({ ...mockProfile });
     mockIsOllamaRunning.mockResolvedValue(true);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
     mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
@@ -507,6 +511,7 @@ describe('incremental re-index file removal', () => {
     mockReadFileHashes.mockResolvedValue({
       hashes: { '/proj/old.ts': 'abc', '/proj/keep.ts': 'def' },
       tokenCounts: {},
+      stats: {},
     });
     mockCrawlSourceFiles.mockResolvedValue(['/proj/keep.ts']);
     mockChunkFile.mockImplementation((fp, _c) => ({ chunks: [fakeChunk(fp, 1)], edges: [] }));
@@ -516,6 +521,274 @@ describe('incremental re-index file removal', () => {
     expect(mockDeleteChunksByFilePaths).toHaveBeenCalledWith(
       mockTable,
       expect.arrayContaining(['/proj/old.ts']),
+    );
+  });
+});
+
+describe('partitionByStatChange', () => {
+  it('returns both arrays empty when files is empty', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const result = partitionByStatChange([], new Map(), {});
+    expect(result.statUnchanged).toEqual([]);
+    expect(result.statChanged).toEqual([]);
+  });
+
+  it('classifies file as statUnchanged when size and mtimeMs both match', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const currentStats = new Map([['/a.ts', { size: 100, mtimeMs: 2000 }]]);
+    const storedStats = { '/a.ts': { size: 100, mtimeMs: 2000 } };
+    const result = partitionByStatChange(['/a.ts'], currentStats, storedStats);
+    expect(result.statUnchanged).toEqual(['/a.ts']);
+    expect(result.statChanged).toEqual([]);
+  });
+
+  it('classifies file as statChanged when size differs', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const currentStats = new Map([['/a.ts', { size: 200, mtimeMs: 2000 }]]);
+    const storedStats = { '/a.ts': { size: 100, mtimeMs: 2000 } };
+    const result = partitionByStatChange(['/a.ts'], currentStats, storedStats);
+    expect(result.statChanged).toEqual(['/a.ts']);
+    expect(result.statUnchanged).toEqual([]);
+  });
+
+  it('classifies file as statChanged when mtimeMs differs', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const currentStats = new Map([['/a.ts', { size: 100, mtimeMs: 9999 }]]);
+    const storedStats = { '/a.ts': { size: 100, mtimeMs: 2000 } };
+    const result = partitionByStatChange(['/a.ts'], currentStats, storedStats);
+    expect(result.statChanged).toEqual(['/a.ts']);
+  });
+
+  it('classifies file as statChanged when not present in storedStats', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const currentStats = new Map([['/a.ts', { size: 100, mtimeMs: 2000 }]]);
+    const result = partitionByStatChange(['/a.ts'], currentStats, {});
+    expect(result.statChanged).toEqual(['/a.ts']);
+  });
+
+  it('classifies file as statChanged when not present in currentStats', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const storedStats = { '/a.ts': { size: 100, mtimeMs: 2000 } };
+    const result = partitionByStatChange(['/a.ts'], new Map(), storedStats);
+    expect(result.statChanged).toEqual(['/a.ts']);
+  });
+
+  it('handles multiple files with mixed results', async () => {
+    const { partitionByStatChange } = await import('../../src/workflows/index.js');
+    const currentStats = new Map([
+      ['/unchanged.ts', { size: 50, mtimeMs: 1000 }],
+      ['/changed.ts', { size: 99, mtimeMs: 1000 }],
+      ['/new.ts', { size: 10, mtimeMs: 500 }],
+    ]);
+    const storedStats = {
+      '/unchanged.ts': { size: 50, mtimeMs: 1000 },
+      '/changed.ts': { size: 50, mtimeMs: 1000 },
+    };
+    const result = partitionByStatChange(
+      ['/unchanged.ts', '/changed.ts', '/new.ts'],
+      currentStats,
+      storedStats,
+    );
+    expect(result.statUnchanged).toEqual(['/unchanged.ts']);
+    expect(result.statChanged).toContain('/changed.ts');
+    expect(result.statChanged).toContain('/new.ts');
+  });
+});
+
+describe('runIndex stat fast-path', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+  let runIndexLocal: (targetPath?: string, opts?: { force?: boolean; verify?: boolean }) => Promise<void>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+
+    mockAcquireIndexLock.mockResolvedValue(undefined);
+    mockReleaseIndexLock.mockResolvedValue(undefined);
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
+    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+    mockGetConnection.mockResolvedValue(mockDb);
+    mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
+    mockOpenOrCreateEdgesTable.mockResolvedValue({ delete: vi.fn(), countRows: vi.fn().mockResolvedValue(0) } as any);
+    mockInsertChunks.mockResolvedValue(undefined);
+    mockInsertEdges.mockResolvedValue(undefined);
+    mockWriteIndexState.mockResolvedValue(undefined);
+    mockWriteFileHashes.mockResolvedValue(undefined);
+    mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
+    mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
+    mockWithWriteLock.mockImplementation(async (fn) => fn());
+    (mockTable as any).countRows = vi.fn().mockResolvedValue(2);
+
+    const mod = await import('../../src/workflows/index.js');
+    runIndexLocal = mod.runIndex;
+  });
+
+  afterEach(() => {
+    stderrWriteSpy.mockRestore();
+    vi.clearAllMocks();
+  });
+
+  it('skips readFile for stat-unchanged files when manifest has matching hash and tokenCounts', async () => {
+    // Two files in manifest with matching stats — readFile should NOT be called for either
+    mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
+    mockStat.mockImplementation(async (fp) => {
+      return { size: 100, mtimeMs: 1000 } as any;
+    });
+    mockReadFileHashes.mockResolvedValue({
+      hashes: {
+        [fakeFiles[0]]: 'stored-hash-0',
+        [fakeFiles[1]]: 'stored-hash-1',
+      },
+      tokenCounts: {
+        [fakeFiles[0]]: 80,
+        [fakeFiles[1]]: 60,
+      },
+      stats: {
+        [fakeFiles[0]]: { size: 100, mtimeMs: 1000 },
+        [fakeFiles[1]]: { size: 100, mtimeMs: 1000 },
+      },
+    });
+
+    await runIndexLocal('/project');
+
+    // readFile should NOT be called because all files are stat-skipped
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
+
+  it('reads file when stat-unchanged but tokenCounts missing (backfill D-48-06)', async () => {
+    // File has hash and stats but no tokenCounts — must backfill by reading
+    mockCrawlSourceFiles.mockResolvedValue([fakeFiles[0]]);
+    mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { [fakeFiles[0]]: 'stored-hash-0' },
+      tokenCounts: {}, // missing tokenCounts triggers backfill
+      stats: { [fakeFiles[0]]: { size: 100, mtimeMs: 1000 } },
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+
+    await runIndexLocal('/project');
+
+    // readFile must be called to backfill token count
+    expect(mockReadFile).toHaveBeenCalledWith(fakeFiles[0], 'utf-8');
+  });
+
+  it('reads all files when --verify is set even if stat matches', async () => {
+    // All files have matching stats in manifest but --verify forces full read
+    mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
+    mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockReadFileHashes.mockResolvedValue({
+      hashes: {
+        [fakeFiles[0]]: 'stored-hash-0',
+        [fakeFiles[1]]: 'stored-hash-1',
+      },
+      tokenCounts: {
+        [fakeFiles[0]]: 80,
+        [fakeFiles[1]]: 60,
+      },
+      stats: {
+        [fakeFiles[0]]: { size: 100, mtimeMs: 1000 },
+        [fakeFiles[1]]: { size: 100, mtimeMs: 1000 },
+      },
+    });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+
+    await runIndexLocal('/project', { verify: true });
+
+    // Both files must be read even though stats match
+    expect(mockReadFile).toHaveBeenCalledWith(fakeFiles[0], 'utf-8');
+    expect(mockReadFile).toHaveBeenCalledWith(fakeFiles[1], 'utf-8');
+  });
+
+  it('--force wins over --verify (both flags: force takes precedence)', async () => {
+    mockCrawlSourceFiles.mockResolvedValue([fakeFiles[0]]);
+    mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+
+    // Should not throw when both flags are true; --force wins
+    await expect(runIndexLocal('/project', { force: true, verify: true })).resolves.not.toThrow();
+    // When force, readFileHashes should NOT be called (empty baseline)
+    expect(mockReadFileHashes).not.toHaveBeenCalled();
+  });
+
+  it('writeFileHashes includes stats for all crawled files', async () => {
+    mockCrawlSourceFiles.mockResolvedValue([fakeFiles[0]]);
+    mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+
+    await runIndexLocal('/project');
+
+    expect(mockWriteFileHashes).toHaveBeenCalledWith(
+      '/project',
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          [fakeFiles[0]]: expect.objectContaining({ size: expect.any(Number), mtimeMs: expect.any(Number) }),
+        }),
+      }),
+    );
+  });
+
+  it('writeFileHashes includes stats on nothing-to-re-index early return', async () => {
+    // All files unchanged: nothing to process but stats must still be written
+    mockCrawlSourceFiles.mockResolvedValue([fakeFiles[0]]);
+    mockStat.mockResolvedValue({ size: 55, mtimeMs: 9999 } as any);
+    mockReadFile.mockResolvedValue('hello' as any);
+    // Make the hash match: store the SHA-256 of 'hello'
+    const { createHash } = await import('node:crypto');
+    const storedHash = createHash('sha256').update('hello', 'utf-8').digest('hex');
+    // But stat differs from stored so readFile will be called; set same hash to get unchanged result
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { [fakeFiles[0]]: storedHash },
+      tokenCounts: { [fakeFiles[0]]: 10 },
+      stats: { [fakeFiles[0]]: { size: 55, mtimeMs: 9999 } }, // stat matches → skip read
+    });
+
+    await runIndexLocal('/project');
+
+    // readFile should not be called (stat-skipped)
+    expect(mockReadFile).not.toHaveBeenCalled();
+    // stats should be written
+    expect(mockWriteFileHashes).toHaveBeenCalledWith(
+      '/project',
+      expect.objectContaining({
+        stats: expect.objectContaining({
+          [fakeFiles[0]]: expect.objectContaining({ size: 55, mtimeMs: 9999 }),
+        }),
+      }),
+    );
+  });
+
+  it('allFilesTotalTokens sums carried-forward tokenCounts for stat-skipped files', async () => {
+    // Both files stat-skipped; totalTokens must be sum of their manifest tokenCounts
+    mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
+    mockReadFileHashes.mockResolvedValue({
+      hashes: {
+        [fakeFiles[0]]: 'hash0',
+        [fakeFiles[1]]: 'hash1',
+      },
+      tokenCounts: {
+        [fakeFiles[0]]: 40,
+        [fakeFiles[1]]: 60,
+      },
+      stats: {
+        [fakeFiles[0]]: { size: 100, mtimeMs: 1000 },
+        [fakeFiles[1]]: { size: 100, mtimeMs: 1000 },
+      },
+    });
+
+    await runIndexLocal('/project');
+
+    expect(mockWriteIndexState).toHaveBeenCalledWith(
+      '/project',
+      expect.objectContaining({ totalTokens: 100 }), // 40 + 60
     );
   });
 });
@@ -541,6 +814,7 @@ describe('embedding dimension fallback', () => {
     mockIsOllamaRunning.mockResolvedValue(true);
     mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
     mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
@@ -549,7 +823,7 @@ describe('embedding dimension fallback', () => {
     mockInsertChunks.mockResolvedValue(undefined);
     mockInsertEdges.mockResolvedValue(undefined);
     mockWriteIndexState.mockResolvedValue(undefined);
-    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
     mockWriteFileHashes.mockResolvedValue(undefined);
     mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
     mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
