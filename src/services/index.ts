@@ -14,6 +14,14 @@ export { crawlSourceFiles, SOURCE_EXTENSIONS } from './crawler.js';
 export { embedBatchWithRetry } from './embedder.js';
 
 export {
+  fetchGitCommits,
+  parseGitLog,
+  buildCommitContent,
+  readGitConfig,
+  isGitCommandError,
+} from './gitHistory.js';
+
+export {
   openDatabase,
   openOrCreateChunkTable,
   insertChunks,
@@ -23,6 +31,8 @@ export {
   readFileHashes,
   writeFileHashes,
   deleteChunksByFilePath,
+  deleteHistoryChunks,
+  migrateSourceKindColumn,
   chunkSchema,
   edgeSchema,
   openOrCreateEdgesTable,

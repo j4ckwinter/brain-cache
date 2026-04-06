@@ -18,7 +18,7 @@ export type CapabilityProfile = z.infer<typeof CapabilityProfileSchema>;
 export const CodeChunkSchema = z.object({
   id:         z.string(),
   filePath:   z.string(),
-  chunkType:  z.enum(['function', 'class', 'method', 'file']),
+  chunkType:  z.enum(['function', 'class', 'method', 'file', 'commit']),
   scope:      z.string().nullable(),
   name:       z.string().nullable(),
   content:    z.string(),
@@ -65,6 +65,7 @@ export interface RetrievedChunk {
   id: string;
   filePath: string;
   chunkType: string;
+  sourceKind: 'file' | 'history';
   scope: string | null;
   name: string | null;
   content: string;

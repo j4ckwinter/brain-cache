@@ -19,6 +19,7 @@ import {
   readFileHashes,
   writeFileHashes,
   deleteChunksByFilePaths,
+  deleteHistoryChunks,
   openOrCreateEdgesTable,
   insertEdges,
   withWriteLock,
@@ -29,6 +30,12 @@ import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, 
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk, CallEdge, FileStatEntry } from '../lib/types.js';
 import { formatTokenSavings } from '../lib/format.js';
+import {
+  fetchGitCommits,
+  buildCommitContent,
+  readGitConfig,
+  isGitCommandError,
+} from '../services/gitHistory.js';
 
 /**
  * Compute a SHA-256 hex digest of file content.
@@ -224,6 +231,7 @@ export async function processFileGroup(
         start_line: chunk.startLine,
         end_line: chunk.endLine,
         file_type: classifyFileType(chunk.filePath),
+        source_kind: 'file',
         vector: vectors[i],
       }));
 
@@ -268,6 +276,56 @@ export function printSummary(params: {
     `${savingsBlock}\n` +
     `  Stored in:                 ${rootDir}/.brain-cache/\n`,
   );
+}
+
+async function runGitHistoryIngestion(params: {
+  table: Table;
+  rootDir: string;
+  embeddingModel: string;
+  dim: number;
+  maxCommits: number;
+}): Promise<void> {
+  const { table, rootDir, embeddingModel, dim, maxCommits } = params;
+  await deleteHistoryChunks(table);
+  const commits = await fetchGitCommits(rootDir, maxCommits);
+  if (commits.length === 0) {
+    process.stderr.write('brain-cache: git history enabled, no commits to ingest\n');
+    return;
+  }
+
+  const rows: ChunkRow[] = [];
+  for (let offset = 0; offset < commits.length; offset += DEFAULT_BATCH_SIZE) {
+    const batch = commits.slice(offset, offset + DEFAULT_BATCH_SIZE);
+    const contents = batch.map((commit) => buildCommitContent(commit));
+    const { embeddings, zeroVectorIndices } = await embedBatchWithRetry(
+      embeddingModel,
+      contents,
+      dim,
+    );
+
+    const batchRows: ChunkRow[] = batch
+      .map((commit, i) => ({ commit, i }))
+      .filter(({ i }) => !zeroVectorIndices.has(i))
+      .map(({ commit, i }) => ({
+        id: `git:${commit.shortHash}`,
+        file_path: '',
+        chunk_type: 'commit',
+        scope: null,
+        name: commit.shortHash,
+        content: contents[i],
+        start_line: 0,
+        end_line: 0,
+        file_type: 'source',
+        source_kind: 'history',
+        vector: embeddings[i],
+      }));
+    rows.push(...batchRows);
+  }
+
+  if (rows.length > 0) {
+    await insertChunks(table, rows);
+  }
+  process.stderr.write(`brain-cache: ingested ${rows.length} git history chunks\n`);
 }
 
 /**
@@ -338,6 +396,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
   // Step 2: Read profile and check Ollama
   const profile = await requireProfile();
   await requireOllama();
+  const gitCfg = (await readGitConfig()) ?? {};
 
   // Step 3: Determine dimensions
   const dim = EMBEDDING_DIMENSIONS[profile.embeddingModel] ?? DEFAULT_EMBEDDING_DIMENSION;
@@ -465,6 +524,24 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
   // Step 6k: Nothing to do
   if (filesToProcess.length === 0) {
     process.stderr.write(`brain-cache: nothing to re-index\n`);
+    if (gitCfg.enabled === true) {
+      const maxCommits = gitCfg.maxCommits ?? 500;
+      try {
+        await runGitHistoryIngestion({
+          table,
+          rootDir,
+          embeddingModel: profile.embeddingModel,
+          dim,
+          maxCommits,
+        });
+      } catch (error) {
+        if (isGitCommandError(error)) {
+          process.stderr.write(`Warning: ${error.message}\n`);
+        } else {
+          throw error;
+        }
+      }
+    }
     // Write updated manifest (may have removed some entries) and index state
     for (const filePath of files) {
       updatedHashes[filePath] = currentHashes[filePath];
@@ -543,6 +620,25 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
 
   // Step 8b: Create vector index if table is large enough
   await createVectorIndexIfNeeded(table, profile.embeddingModel);
+
+  if (gitCfg.enabled === true) {
+    const maxCommits = gitCfg.maxCommits ?? 500;
+    try {
+      await runGitHistoryIngestion({
+        table,
+        rootDir,
+        embeddingModel: profile.embeddingModel,
+        dim,
+        maxCommits,
+      });
+    } catch (error) {
+      if (isGitCommandError(error)) {
+        process.stderr.write(`Warning: ${error.message}\n`);
+      } else {
+        throw error;
+      }
+    }
+  }
 
   // Step 9a: Merge new/changed hashes into manifest
   for (const filePath of filesToProcess) {

@@ -67,6 +67,14 @@ describe('chunkSchema', () => {
     expect(fileTypeField).toBeDefined();
     expect(fileTypeField?.nullable).toBe(false);
   });
+
+  it('includes a non-nullable source_kind field', async () => {
+    const { chunkSchema } = await import('../../src/services/lancedb.js');
+    const schema = chunkSchema(768);
+    const sourceKindField = schema.fields.find((f: { name: string }) => f.name === 'source_kind');
+    expect(sourceKindField).toBeDefined();
+    expect(sourceKindField?.nullable).toBe(false);
+  });
 });
 
 // --- readFileHashes / writeFileHashes tests ---
@@ -227,6 +235,46 @@ describe('deleteChunksByFilePath', () => {
     const { deleteChunksByFilePath } = await import('../../src/services/lancedb.js');
     const mockTable = { delete: vi.fn().mockResolvedValue(undefined) } as any;
     await expect(deleteChunksByFilePath(mockTable, '/project/src/foo.ts')).resolves.toBeUndefined();
+  });
+});
+
+describe('migrateSourceKindColumn', () => {
+  it('adds source_kind column with default file when missing', async () => {
+    const { migrateSourceKindColumn } = await import('../../src/services/lancedb.js');
+    const mockTable = {
+      schema: vi.fn().mockResolvedValue({
+        fields: [{ name: 'id' }, { name: 'file_path' }],
+      }),
+      addColumns: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await migrateSourceKindColumn(mockTable);
+
+    expect(mockTable.addColumns).toHaveBeenCalledWith([
+      { name: 'source_kind', valueSql: "'file'" },
+    ]);
+  });
+
+  it('is a no-op when source_kind already exists', async () => {
+    const { migrateSourceKindColumn } = await import('../../src/services/lancedb.js');
+    const mockTable = {
+      schema: vi.fn().mockResolvedValue({
+        fields: [{ name: 'id' }, { name: 'source_kind' }],
+      }),
+      addColumns: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await migrateSourceKindColumn(mockTable);
+    expect(mockTable.addColumns).not.toHaveBeenCalled();
+  });
+});
+
+describe('deleteHistoryChunks', () => {
+  it("deletes only rows where source_kind='history'", async () => {
+    const { deleteHistoryChunks } = await import('../../src/services/lancedb.js');
+    const mockTable = { delete: vi.fn().mockResolvedValue(undefined) } as any;
+    await deleteHistoryChunks(mockTable);
+    expect(mockTable.delete).toHaveBeenCalledWith("source_kind = 'history'");
   });
 });
 

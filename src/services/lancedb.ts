@@ -56,6 +56,7 @@ export function chunkSchema(dim: number): Schema {
     new Field('start_line', new Int32(), false),
     new Field('end_line',   new Int32(), false),
     new Field('file_type',  new Utf8(),  false),
+    new Field('source_kind', new Utf8(), false),
     new Field('vector',
       new FixedSizeList(dim, new Field('item', new Float32(), true)),
       false
@@ -129,9 +130,19 @@ export interface ChunkRow {
   start_line: number;
   end_line: number;
   file_type: string;
+  source_kind: 'file' | 'history';
   vector: number[];
   /** Index signature required by LanceDB's Data type (Record<string, unknown>[]). */
   [key: string]: unknown;
+}
+
+export async function migrateSourceKindColumn(table: lancedb.Table): Promise<void> {
+  const tableSchema = await table.schema();
+  const hasSourceKind = tableSchema.fields.some(
+    (f: { name: string }) => f.name === 'source_kind',
+  );
+  if (hasSourceKind) return;
+  await table.addColumns([{ name: 'source_kind', valueSql: "'file'" }]);
 }
 
 /**
@@ -191,6 +202,9 @@ export async function openOrCreateChunkTable(
       const hasFileType = tableSchema.fields.some(
         (f: { name: string }) => f.name === 'file_type'
       );
+      const hasSourceKind = tableSchema.fields.some(
+        (f: { name: string }) => f.name === 'source_kind'
+      );
       if (!hasFileType) {
         log.warn('Schema missing file_type column — dropping and recreating chunks table');
         await db.dropTable('chunks');
@@ -199,6 +213,12 @@ export async function openOrCreateChunkTable(
           log.warn('Also dropped edges table (stale chunk IDs)');
         }
       } else {
+        if (!hasSourceKind) {
+          await migrateSourceKindColumn(existingTable);
+          const refreshed = await db.openTable('chunks');
+          log.info({ model, dim }, 'Opened existing chunks table after source_kind migration');
+          return refreshed;
+        }
         log.info({ model, dim }, 'Opened existing chunks table');
         return existingTable;
       }
@@ -387,6 +407,12 @@ export async function deleteChunksByFilePaths(
   const escaped = filePaths.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
   await withWriteLock(async () => {
     await table.delete(`file_path IN (${escaped})`);
+  });
+}
+
+export async function deleteHistoryChunks(table: lancedb.Table): Promise<void> {
+  await withWriteLock(async () => {
+    await table.delete("source_kind = 'history'");
   });
 }
 

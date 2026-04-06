@@ -36,9 +36,19 @@ vi.mock('../../src/services/lancedb.js', () => ({
   readFileHashes: vi.fn(),
   writeFileHashes: vi.fn(),
   deleteChunksByFilePaths: vi.fn(),
+  deleteHistoryChunks: vi.fn(),
   createVectorIndexIfNeeded: vi.fn(),
   withWriteLock: vi.fn(),
   classifyFileType: vi.fn((filePath: string) => filePath.includes('.test.') ? 'test' : 'source'),
+}));
+
+vi.mock('../../src/services/gitHistory.js', () => ({
+  fetchGitCommits: vi.fn(),
+  buildCommitContent: vi.fn((commit: { shortHash: string }) => `Commit: ${commit.shortHash}`),
+  readGitConfig: vi.fn(),
+  isGitCommandError: vi.fn((error: unknown) => {
+    return typeof error === 'object' && error !== null && 'command' in error;
+  }),
 }));
 
 vi.mock('node:fs/promises', async (importOriginal) => {
@@ -70,10 +80,16 @@ import {
   readFileHashes,
   writeFileHashes,
   deleteChunksByFilePaths,
+  deleteHistoryChunks,
   createVectorIndexIfNeeded,
   withWriteLock,
   classifyFileType,
 } from '../../src/services/lancedb.js';
+import {
+  fetchGitCommits,
+  readGitConfig,
+  buildCommitContent,
+} from '../../src/services/gitHistory.js';
 import { readFile, stat } from 'node:fs/promises';
 import { countChunkTokens } from '../../src/services/tokenCounter.js';
 
@@ -93,12 +109,16 @@ const mockWriteIndexState = vi.mocked(writeIndexState);
 const mockReadFileHashes = vi.mocked(readFileHashes);
 const mockWriteFileHashes = vi.mocked(writeFileHashes);
 const mockDeleteChunksByFilePaths = vi.mocked(deleteChunksByFilePaths);
+const mockDeleteHistoryChunks = vi.mocked(deleteHistoryChunks);
 const mockCreateVectorIndexIfNeeded = vi.mocked(createVectorIndexIfNeeded);
 const mockWithWriteLock = vi.mocked(withWriteLock);
 const mockReadFile = vi.mocked(readFile);
 const mockStat = vi.mocked(stat);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockClassifyFileType = vi.mocked(classifyFileType);
+const mockFetchGitCommits = vi.mocked(fetchGitCommits);
+const mockReadGitConfig = vi.mocked(readGitConfig);
+const mockBuildCommitContent = vi.mocked(buildCommitContent);
 
 const mockProfile = {
   version: 1 as const,
@@ -178,11 +198,15 @@ describe('runIndex', () => {
     mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
     mockWriteFileHashes.mockResolvedValue(undefined);
     mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
+    mockDeleteHistoryChunks.mockResolvedValue(undefined);
     mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
     // withWriteLock: just call the callback
     mockWithWriteLock.mockImplementation(async (fn) => fn());
     // table needs countRows for index state
     (mockTable as any).countRows = vi.fn().mockResolvedValue(fakeFiles.length);
+    mockReadGitConfig.mockResolvedValue({});
+    mockFetchGitCommits.mockResolvedValue([]);
+    mockBuildCommitContent.mockImplementation((commit: { shortHash: string }) => `Commit: ${commit.shortHash}`);
 
     // Dynamically import after mocks are in place
     const mod = await import('../../src/workflows/index.js');
@@ -237,7 +261,7 @@ describe('runIndex', () => {
     expect(mockInsertChunks).toHaveBeenCalledWith(
       mockTable,
       expect.arrayContaining([
-        expect.objectContaining({ vector: zeroVector768 }),
+        expect.objectContaining({ vector: zeroVector768, source_kind: 'file' }),
       ])
     );
   });
@@ -255,8 +279,8 @@ describe('runIndex', () => {
     expect(mockInsertChunks).toHaveBeenCalledWith(
       mockTable,
       expect.arrayContaining([
-        expect.objectContaining({ file_path: testFilePath, file_type: 'test' }),
-        expect.objectContaining({ file_path: sourceFilePath, file_type: 'source' }),
+        expect.objectContaining({ file_path: testFilePath, file_type: 'test', source_kind: 'file' }),
+        expect.objectContaining({ file_path: sourceFilePath, file_type: 'source', source_kind: 'file' }),
       ])
     );
   });
@@ -399,6 +423,56 @@ describe('runIndex', () => {
         expect.objectContaining({ file_path: goodFile }),
       ])
     );
+  });
+
+  it('ingests git history after file indexing when git.enabled=true', async () => {
+    mockReadGitConfig.mockResolvedValue({ enabled: true, maxCommits: 25 });
+    mockFetchGitCommits.mockResolvedValue([
+      {
+        shortHash: 'abc1234',
+        author: 'Jane Dev',
+        date: '2026-04-07T12:00:00.000Z',
+        message: 'feat: add history',
+        files: [{ path: 'src/index.ts', insertions: 2, deletions: 0 }],
+      },
+    ]);
+    const callOrder: string[] = [];
+    mockCreateVectorIndexIfNeeded.mockImplementation(async () => {
+      callOrder.push('createVectorIndexIfNeeded');
+    });
+    mockDeleteHistoryChunks.mockImplementation(async () => {
+      callOrder.push('deleteHistoryChunks');
+    });
+    mockInsertChunks.mockImplementation(async (_table, rows: unknown[]) => {
+      const hasHistory = rows.some(
+        (row) =>
+          typeof row === 'object' &&
+          row !== null &&
+          (row as { source_kind?: string }).source_kind === 'history',
+      );
+      callOrder.push(hasHistory ? 'insertHistoryChunks' : 'insertFileChunks');
+    });
+
+    await runIndex('/project');
+
+    expect(mockFetchGitCommits).toHaveBeenCalledWith('/project', 25);
+    expect(callOrder.indexOf('insertFileChunks')).toBeGreaterThan(-1);
+    expect(callOrder.indexOf('deleteHistoryChunks')).toBeGreaterThan(callOrder.indexOf('insertFileChunks'));
+    expect(callOrder.indexOf('insertHistoryChunks')).toBeGreaterThan(callOrder.indexOf('deleteHistoryChunks'));
+  });
+
+  it('skips history ingestion when git.enabled is false', async () => {
+    mockReadGitConfig.mockResolvedValue({ enabled: false, maxCommits: 100 });
+    await runIndex('/project');
+    expect(mockFetchGitCommits).not.toHaveBeenCalled();
+    expect(mockDeleteHistoryChunks).not.toHaveBeenCalled();
+  });
+
+  it('uses default maxCommits=500 when git.enabled=true and maxCommits is missing', async () => {
+    mockReadGitConfig.mockResolvedValue({ enabled: true });
+    mockFetchGitCommits.mockResolvedValue([]);
+    await runIndex('/project');
+    expect(mockFetchGitCommits).toHaveBeenCalledWith('/project', 500);
   });
 });
 
