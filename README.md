@@ -60,6 +60,15 @@ brain-cache index
 
 brain-cache tools are called automatically. You don't change how you work — the context just gets better.
 
+### Daily adoption workflow (v3.5 shipped)
+
+Once your first index is built, these daily-use paths are available now:
+
+- `brain-cache index` runs incrementally by default, so unchanged files are skipped on re-index.
+- `brain-cache watch [path]` keeps the index in sync with file saves.
+- `brain-cache service install [path]` runs watcher automation in the background.
+- Git history is indexed and surfaced with provenance labels, so retrieval can answer both "what" and "why changed" questions.
+
 > **Advanced:** `init` creates `.mcp.json` automatically. If you need to customise it manually, the expected shape is:
 >
 > ```json
@@ -129,6 +138,7 @@ The CLI is the setup and admin interface. Use it to init, index, debug, and diag
 ```
 brain-cache init                      Initialize brain-cache in a project
 brain-cache index                     Build/rebuild the vector index
+brain-cache watch [path]              Watch project and run debounced incremental re-index
 brain-cache search "auth middleware"  Manual search (useful for debugging)
 brain-cache context "auth flow"       Manual context building (useful for debugging)
 brain-cache ask "how does auth work?" Direct Claude query via CLI
