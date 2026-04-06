@@ -159,7 +159,7 @@
 
 **Milestone Goal:** Make brain-cache something developers use daily — cheap incremental indexing on large repos, a watch path so the index tracks the working tree, and git history in the index for “why” queries.
 
-- [ ] **Phase 48: Incremental Index I/O** — Reduce full-file reads on incremental index using stat/mtime (or equivalent) so unchanged files skip `readFile`+hash when the manifest says they are unchanged (3/3 plans)
+- [x] **Phase 48: Incremental Index I/O** — Reduce full-file reads on incremental index using stat/mtime (or equivalent) so unchanged files skip `readFile`+hash when the manifest says they are unchanged (3/3 plans)
 - [ ] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned)
 - [ ] **Phase 50: Background Service Install** — Optional `init` path or subcommand to install LaunchAgent/systemd user unit (document Windows separately) (planned)
 - [ ] **Phase 51: Git History Indexing** — Ingest commit messages and touched paths; same embed pipeline; search/build_context return provenance for history vs file chunks (planned)
@@ -253,12 +253,12 @@ Plans:
   1. Stored manifest (or sidecar) records per-file metadata sufficient to skip `readFile` when the file is unchanged (e.g. size + mtime, with documented invalidation rules)
   2. When a skip is wrong (clock skew, editor that preserves mtime), a full re-read+hash path still exists — `--force` or first mismatch triggers re-hash
   3. Behaviour is covered by tests using controlled mtimes in a temp directory
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] [48-01-PLAN.md](phases/48-incremental-index-io/48-01-PLAN.md) — DAILY-01: `FileStatEntry`, `FileHashManifest.stats`, migration-safe read/write (`tests/services/lancedb.test.ts`)
-- [ ] [48-02-PLAN.md](phases/48-incremental-index-io/48-02-PLAN.md) — DAILY-01: `statAllFiles`, `partitionByStatChange`, `runIndex` stat fast-path, token carry-forward + backfill, manifest stats merge
-- [ ] [48-03-PLAN.md](phases/48-incremental-index-io/48-03-PLAN.md) — DAILY-01: CLI `--verify`, workflow + CLI tests, controlled-mtime tempdir test
+- [x] [48-01-PLAN.md](phases/48-incremental-index-io/48-01-PLAN.md) — DAILY-01: `FileStatEntry`, `FileHashManifest.stats`, migration-safe read/write (`tests/services/lancedb.test.ts`)
+- [x] [48-02-PLAN.md](phases/48-incremental-index-io/48-02-PLAN.md) — DAILY-01: `statAllFiles`, `partitionByStatChange`, `runIndex` stat fast-path, token carry-forward + backfill, manifest stats merge
+- [x] [48-03-PLAN.md](phases/48-incremental-index-io/48-03-PLAN.md) — DAILY-01: CLI `--verify`, workflow + CLI tests, controlled-mtime tempdir test
 
 ### Phase 49: File Watcher
 **Goal**: Developers run `brain-cache watch` in a project; saves trigger debounced incremental re-index; lock prevents corruption with concurrent CLI/MCP index.
@@ -298,7 +298,7 @@ Plans:
 | 45. Auto-Index Retry Test and withGuards Extraction | v3.4 | 2/2 | Complete   | 2026-04-06 |
 | 46. Missing Features | v3.4 | 3/3 | Complete | 2026-04-06 |
 | 47. Test Coverage and Structural Refactoring | v3.4 | 3/3 | Complete | 2026-04-06 |
-| 48. Incremental Index I/O | v3.5 | 2/3 | In Progress|  |
+| 48. Incremental Index I/O | v3.5 | 3/3 | Complete | 2026-04-06 |
 | 49. File Watcher | v3.5 | 0/? | Planned | — |
 | 50. Background Service Install | v3.5 | 0/? | Planned | — |
 | 51. Git History Indexing | v3.5 | 0/? | Planned | — |
