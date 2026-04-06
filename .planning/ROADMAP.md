@@ -304,7 +304,7 @@ Plans:
   1. User-facing docs include service lifecycle commands for install, status, disable, and uninstall.
   2. `50-VERIFICATION.md` exists with DAILY-03 evidence and a clear pass/fail verdict.
   3. Phase 50 closure metadata is consistent across roadmap, requirements, and phase artifacts.
-**Plans:** 1/1 plans planned
+**Plans:** 1/1 plans complete
 Plans:
 - [ ] [52-01-PLAN.md](phases/52-service-install-closure-and-verification/52-01-PLAN.md) — DAILY-03 closure: README service lifecycle docs, 50 verification artifact, and traceability metadata sync
 
@@ -332,7 +332,7 @@ Plans:
 | 49. File Watcher | v3.5 | 2/2 | Complete    | 2026-04-06 |
 | 50. Background Service Install | v3.5 | 2/2 | Complete   | 2026-04-06 |
 | 51. Git History Indexing | v3.5 | 0/3 | Planned | — |
-| 52. Service Install Closure and Verification | v3.5 | 1/1 | Complete | 2026-04-07 |
+| 52. Service Install Closure and Verification | v3.5 | 1/1 | Complete   | 2026-04-06 |
 | 53. Git History Closure and Traceability Sync | v3.5 | 0/? | Planned | — |
 
 ---
