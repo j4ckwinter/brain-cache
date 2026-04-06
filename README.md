@@ -41,6 +41,12 @@ No copy/pasting code into prompts. No manual file opens. Claude knows where to l
 npm install -g brain-cache
 ```
 
+Or install as a project dev dependency:
+
+```
+npm install -D brain-cache
+```
+
 **Step 2: Init and index your project**
 
 ```
