@@ -27,6 +27,7 @@ function rowToChunk(r: Record<string, unknown>): RetrievedChunk {
     id: r.id as string,
     filePath: r.file_path as string,
     chunkType: r.chunk_type as string,
+    sourceKind: r.source_kind === 'history' ? 'history' : 'file',
     scope: (r.scope as string) ?? null,
     name: (r.name as string) ?? null,
     content: r.content as string,

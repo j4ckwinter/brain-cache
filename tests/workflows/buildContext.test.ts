@@ -102,6 +102,7 @@ const fakeChunk = (id: string, filePath: string) => ({
   id,
   filePath,
   chunkType: 'function',
+  sourceKind: 'file' as const,
   scope: null,
   name: `fn_${id}`,
   content: `function fn_${id}() {}`,
@@ -266,5 +267,30 @@ describe('runBuildContext', () => {
     await runBuildContext('test query');
     const combined = stderrOutput.join('');
     expect(combined).toContain('brain-cache:');
+  });
+
+  it('appends a Git History section after source context when history chunks exist', async () => {
+    const sourceChunk = fakeChunk('c1', '/project/src/index.ts');
+    const historyChunk = {
+      ...fakeChunk('h1', ''),
+      chunkType: 'commit',
+      sourceKind: 'history' as const,
+      name: 'abc1234',
+      content: 'Commit: abc1234\nTouched files:\n- src/index.ts (+1/-0)',
+    };
+    mockSearchChunks.mockResolvedValue([sourceChunk, historyChunk]);
+    mockDeduplicateChunks.mockReturnValue([sourceChunk, historyChunk]);
+    mockAssembleContext.mockReturnValue({
+      content: '## Source Context\n\nsource body',
+      chunks: [sourceChunk],
+      tokenCount: 120,
+    });
+
+    const result = await runBuildContext('why was this changed?');
+    expect(result.content).toContain('## Source Context');
+    expect(result.content).toContain('## Git History');
+    expect(result.content.indexOf('## Source Context')).toBeLessThan(
+      result.content.indexOf('## Git History'),
+    );
   });
 });

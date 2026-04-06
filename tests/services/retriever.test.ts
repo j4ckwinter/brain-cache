@@ -44,6 +44,7 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<strin
     start_line: 1,
     end_line: 5,
     file_type: 'source',
+    source_kind: 'file',
     _distance: 0.2,
     ...overrides,
   };
@@ -101,6 +102,7 @@ describe('searchChunks', () => {
       id: 'chunk-abc',
       filePath: 'src/bar.ts',
       chunkType: 'class',
+      sourceKind: 'file',
       scope: 'MyClass',
       name: 'MyClass',
       content: 'class MyClass {}',
@@ -288,14 +290,44 @@ describe('searchChunks', () => {
       expect(results[0].id).toBe('impl');
     });
   });
+
+  describe('history chunk penalty', () => {
+    it('applies a small score penalty so source beats equal-similarity history', async () => {
+      const sourceRow = makeRow({
+        id: 'source',
+        file_path: 'src/workflows/index.ts',
+        source_kind: 'file',
+        _distance: 0.2,
+      });
+      const historyRow = makeRow({
+        id: 'history',
+        file_path: '',
+        chunk_type: 'commit',
+        source_kind: 'history',
+        _distance: 0.2,
+      });
+      const table = makeMockTable([historyRow, sourceRow]);
+
+      const results = await searchChunks(
+        table,
+        [0.1],
+        { limit: 10, distanceThreshold: 0.4, keywordBoostWeight: 0.1 },
+        'why did indexing change',
+      );
+
+      expect(results[0].id).toBe('source');
+      const history = results.find((chunk) => chunk.id === 'history');
+      expect(history?.sourceKind).toBe('history');
+    });
+  });
 });
 
 describe('deduplicateChunks', () => {
   it('removes duplicate chunks by id, preserving first occurrence', () => {
     const chunks: RetrievedChunk[] = [
-      { id: 'a', filePath: 'f1', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.9 },
-      { id: 'b', filePath: 'f2', chunkType: 'function', scope: null, name: 'b', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.8 },
-      { id: 'a', filePath: 'f1', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.7 },
+      { id: 'a', filePath: 'f1', chunkType: 'function', sourceKind: 'file', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.9 },
+      { id: 'b', filePath: 'f2', chunkType: 'function', sourceKind: 'file', scope: null, name: 'b', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.8 },
+      { id: 'a', filePath: 'f1', chunkType: 'function', sourceKind: 'file', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.7 },
     ];
 
     const result = deduplicateChunks(chunks);
@@ -312,8 +344,8 @@ describe('deduplicateChunks', () => {
 
   it('preserves original order (not sorted)', () => {
     const chunks: RetrievedChunk[] = [
-      { id: 'z', filePath: 'f', chunkType: 'function', scope: null, name: 'z', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.5 },
-      { id: 'a', filePath: 'f', chunkType: 'function', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.9 },
+      { id: 'z', filePath: 'f', chunkType: 'function', sourceKind: 'file', scope: null, name: 'z', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.5 },
+      { id: 'a', filePath: 'f', chunkType: 'function', sourceKind: 'file', scope: null, name: 'a', content: '', startLine: 1, endLine: 5, fileType: 'source', similarity: 0.9 },
     ];
 
     const result = deduplicateChunks(chunks);
@@ -653,6 +685,7 @@ describe('filterDedupedForNonTestChunks', () => {
     id,
     filePath: path,
     chunkType: 'function',
+    sourceKind: 'file',
     scope: null,
     name: 'f',
     content: 'x',

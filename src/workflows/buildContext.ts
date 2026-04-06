@@ -63,6 +63,8 @@ export async function runBuildContext(
   const results = await searchChunks(table, queryVector, strategy, query);
   let deduped = deduplicateChunks(results);
   deduped = filterDedupedForNonTestChunks(deduped, query);
+  const sourceChunks = deduped.filter((chunk) => chunk.sourceKind !== 'history');
+  const historyChunks = deduped.filter((chunk) => chunk.sourceKind === 'history');
 
   /** Raw chunk body tokens in the retrieval set (before formatting / budget assembly). */
   const matchedPoolTokens = deduped.reduce(
@@ -70,7 +72,16 @@ export async function runBuildContext(
     0,
   );
 
-  const assembled = assembleContext(deduped, { maxTokens });
+  const assembled = assembleContext(sourceChunks, { maxTokens });
+  const historySection = historyChunks
+    .map(
+      (chunk) =>
+        `### ${chunk.name ?? chunk.id}\n${chunk.content}`,
+    )
+    .join('\n\n');
+  const contentWithHistory = historySection.length > 0
+    ? `${assembled.content}\n\n## Git History\n\n${historySection}`
+    : assembled.content;
 
   const { tokenCounts } = await readFileHashes(rootDir);
 
@@ -126,7 +137,7 @@ export async function runBuildContext(
   const numFiles = uniqueFiles.length;
 
   const result: ContextResult = {
-    content: assembled.content,
+    content: contentWithHistory,
     chunks: assembled.chunks,
     metadata: {
       tokensSent,

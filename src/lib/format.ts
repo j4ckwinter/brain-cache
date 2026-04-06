@@ -161,8 +161,9 @@ export function formatSearchResults(chunks: RetrievedChunk[]): string {
   }
   return chunks.map((chunk, i) => {
     const name = chunk.name ?? '(anonymous)';
+    const provenance = chunk.sourceKind === 'history' ? '[history]' : '[source]';
     return dedent`
-      ${i + 1}. ${name} (${chunk.chunkType})
+      ${i + 1}. ${name} (${chunk.chunkType}) ${provenance}
          ${chunk.filePath}:${chunk.startLine}
          Score: ${chunk.similarity.toFixed(3)}
     `.trim();

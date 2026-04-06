@@ -176,6 +176,39 @@ describe('formatSearchResults', () => {
   it('returns empty message when no chunks', () => {
     expect(formatSearchResults([])).toContain('No results');
   });
+
+  it('adds provenance labels for source and history results', () => {
+    const sourceChunk: RetrievedChunk = {
+      id: 'file:1',
+      filePath: 'src/workflows/index.ts',
+      chunkType: 'function',
+      sourceKind: 'file',
+      scope: null,
+      name: 'runIndex',
+      content: '...',
+      startLine: 1,
+      endLine: 10,
+      fileType: 'source',
+      similarity: 0.91,
+    };
+    const historyChunk: RetrievedChunk = {
+      id: 'git:abc1234',
+      filePath: '',
+      chunkType: 'commit',
+      sourceKind: 'history',
+      scope: null,
+      name: 'abc1234',
+      content: '...',
+      startLine: 0,
+      endLine: 0,
+      fileType: 'source',
+      similarity: 0.80,
+    };
+
+    const output = formatSearchResults([sourceChunk, historyChunk]);
+    expect(output).toContain('[source]');
+    expect(output).toContain('[history]');
+  });
 });
 
 describe('formatContext', () => {

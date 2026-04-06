@@ -16,6 +16,7 @@ interface RawChunkRow {
   start_line: number;
   end_line: number;
   file_type: string;
+  source_kind?: string;
   _distance: number;
 }
 
@@ -214,6 +215,11 @@ function computeNoisePenalty(chunk: RetrievedChunk, query: string): number {
  * Range 0.3-0.5 per RANK-01; increased so impl files win over specs for generic queries.
  */
 const TEST_FILE_NOISE_PENALTY = 0.55;
+const HISTORY_CHUNK_PENALTY = 0.07;
+
+function computeHistoryPenalty(chunk: RetrievedChunk): number {
+  return chunk.sourceKind === 'history' ? HISTORY_CHUNK_PENALTY : 0;
+}
 
 /** True when the query likely targets tests (skip test-file down-ranking / filtering). */
 export function querySignalsTestIntent(query: string): boolean {
@@ -299,7 +305,7 @@ export async function searchChunks(
 
   const queryTokens = query ? extractQueryTokens(query) : [];
 
-  const chunks = (rows as RawChunkRow[])
+  const chunks: RetrievedChunk[] = (rows as RawChunkRow[])
     .filter((r) => r._distance <= opts.distanceThreshold)
     .filter((r) => {
       const vec = (r as unknown as { vector?: unknown }).vector;
@@ -309,6 +315,7 @@ export async function searchChunks(
       id: r.id,
       filePath: r.file_path,
       chunkType: r.chunk_type,
+      sourceKind: r.source_kind === 'history' ? 'history' : 'file' as const,
       scope: r.scope,
       name: r.name,
       content: r.content,
@@ -330,7 +337,8 @@ export async function searchChunks(
       const score = chunk.similarity * (1 - boostWeight)
         + boost * boostWeight
         - computeNoisePenalty(chunk, query!)
-        - computeTestFilePenalty(chunk, query!);
+        - computeTestFilePenalty(chunk, query!)
+        - computeHistoryPenalty(chunk);
       // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact
       const promotedSimilarity = boost > 0
         ? Math.max(chunk.similarity, HIGH_RELEVANCE_SIMILARITY_THRESHOLD)
@@ -377,6 +385,7 @@ export async function keywordSearchChunks(
       id: r.id as string,
       filePath: r.file_path as string,
       chunkType: r.chunk_type as string,
+      sourceKind: r.source_kind === 'history' ? 'history' : 'file',
       scope: (r.scope as string) ?? null,
       name: (r.name as string) ?? null,
       content: r.content as string,
