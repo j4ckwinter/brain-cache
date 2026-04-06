@@ -8,6 +8,7 @@ const {
   mockRunStatus,
   mockRunBuildContext,
   mockRunAskCodebase,
+  mockRunWatch,
 } = vi.hoisted(() => ({
   mockRunInit: vi.fn().mockResolvedValue(undefined),
   mockRunIndex: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +41,7 @@ const {
       savingsDisplayMode: 'full',
     },
   }),
+  mockRunWatch: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../src/workflows/init.js', () => ({ runInit: mockRunInit }));
@@ -49,6 +51,7 @@ vi.mock('../../src/workflows/doctor.js', () => ({ runDoctor: mockRunDoctor }));
 vi.mock('../../src/workflows/status.js', () => ({ runStatus: mockRunStatus }));
 vi.mock('../../src/workflows/buildContext.js', () => ({ runBuildContext: mockRunBuildContext }));
 vi.mock('../../src/workflows/askCodebase.js', () => ({ runAskCodebase: mockRunAskCodebase }));
+vi.mock('../../src/workflows/watch.js', () => ({ runWatch: mockRunWatch }));
 
 import { program } from '../../src/cli/index.js';
 
@@ -107,5 +110,15 @@ describe('CLI Commander', () => {
 
   it('search without query errors', async () => {
     await expect(program.parseAsync(['search'], { from: 'user' })).rejects.toThrow();
+  });
+
+  it('watch calls runWatch with undefined path by default', async () => {
+    await program.parseAsync(['watch'], { from: 'user' });
+    expect(mockRunWatch).toHaveBeenCalledWith(undefined);
+  });
+
+  it('watch passes path argument to runWatch', async () => {
+    await program.parseAsync(['watch', '/some/path'], { from: 'user' });
+    expect(mockRunWatch).toHaveBeenCalledWith('/some/path');
   });
 });

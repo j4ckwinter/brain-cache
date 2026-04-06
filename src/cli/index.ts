@@ -139,6 +139,15 @@ program
     );
   });
 
+program
+  .command('watch')
+  .description('Watch a directory and automatically re-index on file changes')
+  .argument('[path]', 'Directory to watch (defaults to current directory)')
+  .action(async (path: string | undefined) => {
+    const { runWatch } = await import('../workflows/watch.js');
+    await runWatch(path);
+  });
+
 /**
  * Resolve to a canonical path so `isMain` matches when the CLI is invoked via
  * a symlink (e.g. `node_modules/.bin/brain-cache`) or `/tmp` vs `/private/tmp`
