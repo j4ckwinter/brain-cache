@@ -53,6 +53,10 @@ vi.mock('../../src/services/logger.js', () => ({
   })),
 }));
 
+vi.mock('../../src/services/sessionStats.js', () => ({
+  accumulateStats: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { readProfile, detectCapabilities } from '../../src/services/capability.js';
 import {
   isOllamaInstalled,
@@ -260,6 +264,36 @@ describe('MCP tool handlers', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('sensitive system directory');
     });
+
+    it('auto-indexes and retries search when no index found', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunSearch
+        .mockRejectedValueOnce(new Error('No index found at /some/project'))
+        .mockResolvedValueOnce([fakeChunk('1')]);
+      mockRunIndex.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('search_codebase')!;
+      const result = await handler({ query: 'auth functions', path: '/some/project' });
+
+      expect(mockRunIndex).toHaveBeenCalledTimes(1);
+      expect(mockRunSearch).toHaveBeenCalledTimes(2);
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('Found 1 result');
+    });
+
+    it('returns error envelope when retry also fails after auto-index', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunSearch.mockRejectedValue(new Error('No index found at /some/project'));
+      mockRunIndex.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('search_codebase')!;
+      const result = await handler({ query: 'auth functions', path: '/some/project' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('after auto-index');
+    });
   });
 
   // ---- build_context ----
@@ -302,6 +336,36 @@ describe('MCP tool handlers', () => {
       expect(text).toContain('how does auth work');
       expect(text).toContain('assembled context here');
       expect(text).toContain('Tokens sent to Claude:');
+    });
+
+    it('auto-indexes and retries build_context when no index found', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunBuildContext
+        .mockRejectedValueOnce(new Error('No index found at /some/project'))
+        .mockResolvedValueOnce(fakeContextResult);
+      mockRunIndex.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('build_context')!;
+      const result = await handler({ query: 'how does auth work', path: '/some/project' });
+
+      expect(mockRunIndex).toHaveBeenCalledTimes(1);
+      expect(mockRunBuildContext).toHaveBeenCalledTimes(2);
+      expect(result.isError).toBeUndefined();
+      expect(result.content[0].text).toContain('Context assembled for');
+    });
+
+    it('returns error envelope when build_context retry also fails after auto-index', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+      mockRunBuildContext.mockRejectedValue(new Error('No index found at /some/project'));
+      mockRunIndex.mockResolvedValue(undefined);
+
+      const { handler } = registeredTools.get('build_context')!;
+      const result = await handler({ query: 'how does auth work', path: '/some/project' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('after auto-index');
     });
   });
 
