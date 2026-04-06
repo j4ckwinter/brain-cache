@@ -460,10 +460,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
       outTokenCounts[fp] = existingTokenCounts[fp];
     }
   }
-  // processFileGroup will overwrite counts for files it processes (via tokenCounts arg below)
-
-  // Compute total tokens for index state — uses outTokenCounts (filled after processFileGroup below)
-  // We compute this after the process loop to capture both fresh and carried-forward counts.
+  // processFileGroup will overwrite counts for files it processes (via processedTokenCounts arg below)
 
   // Step 6k: Nothing to do
   if (filesToProcess.length === 0) {
