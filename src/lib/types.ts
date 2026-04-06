@@ -115,3 +115,13 @@ export interface ChunkResult {
   chunks: CodeChunk[];
   edges: CallEdge[];
 }
+
+// --- Phase 48: Incremental index I/O ---
+
+/** Per-file stat fingerprint stored in file-hashes.json (Phase 48).
+ * Used by the stat fast-path to skip SHA-256 hashing when size and mtime are unchanged.
+ * D-48-04: mtimeMs is number to align with fs.Stats.mtimeMs. */
+export interface FileStatEntry {
+  size: number;
+  mtimeMs: number;
+}
