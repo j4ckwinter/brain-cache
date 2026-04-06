@@ -249,6 +249,17 @@ describe('MCP tool handlers', () => {
 
       expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: '/my/project' });
     });
+
+    it('returns isError when path points to a sensitive system directory', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(true);
+
+      const { handler } = registeredTools.get('search_codebase')!;
+      const result = await handler({ query: 'find auth functions', path: '/etc' });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('sensitive system directory');
+    });
   });
 
   // ---- build_context ----

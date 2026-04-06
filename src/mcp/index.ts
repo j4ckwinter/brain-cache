@@ -26,6 +26,7 @@ import { runIndex } from "../workflows/index.js";
 import { runSearch } from "../workflows/search.js";
 import { runBuildContext } from "../workflows/buildContext.js";
 import { accumulateStats } from "../services/sessionStats.js";
+import { validateIndexPath } from "../lib/pathValidator.js";
 
 declare const __BRAIN_CACHE_VERSION__: string | undefined;
 const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
@@ -82,11 +83,12 @@ server.registerTool(
       };
     }
     try {
-      await runIndex(path, { force });
+      const resolvedPath = resolve(path);
+      validateIndexPath(resolvedPath);
+      await runIndex(resolvedPath, { force });
       // Read index state to get counts (runIndex returns void)
       // IMPORTANT: resolve() the path to match runIndex's internal resolution,
       // so readIndexState finds .brain-cache/index_state.json at the correct location.
-      const resolvedPath = resolve(path);
       const indexState = await readIndexState(resolvedPath);
       const result = {
         status: "ok",
@@ -182,8 +184,10 @@ server.registerTool(
         ],
       };
     }
+    const resolvedPath = resolve(path ?? '.');
     try {
-      const chunks = await runSearch(query, { limit, path });
+      validateIndexPath(resolvedPath);
+      const chunks = await runSearch(query, { limit, path: resolvedPath });
       const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
       const estimatedWithoutBraincache = tokensSent * 3;
       accumulateStats({ tokensSent, estimatedWithoutBraincache })
@@ -191,10 +195,9 @@ server.registerTool(
       return buildSearchResponse(chunks, query);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
-        const resolvedPath = resolve(path ?? ".");
         await runIndex(resolvedPath);
         try {
-          const chunks = await runSearch(query, { limit, path });
+          const chunks = await runSearch(query, { limit, path: resolvedPath });
           const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
           const estimatedWithoutBraincache = tokensSent * 3;
           accumulateStats({ tokensSent, estimatedWithoutBraincache })
@@ -271,8 +274,10 @@ server.registerTool(
         ],
       };
     }
+    const resolvedPath = resolve(path ?? '.');
     try {
-      const result = await runBuildContext(query, { maxTokens, path });
+      validateIndexPath(resolvedPath);
+      const result = await runBuildContext(query, { maxTokens, path: resolvedPath });
       accumulateStats({
         tokensSent: result.metadata.tokensSent,
         estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
@@ -280,10 +285,9 @@ server.registerTool(
       return buildContextResponse(result, query);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
-        const resolvedPath = resolve(path ?? ".");
         await runIndex(resolvedPath);
         try {
-          const result = await runBuildContext(query, { maxTokens, path });
+          const result = await runBuildContext(query, { maxTokens, path: resolvedPath });
           accumulateStats({
             tokensSent: result.metadata.tokensSent,
             estimatedWithoutBraincache: result.metadata.estimatedWithoutBraincache,
@@ -333,6 +337,7 @@ server.registerTool(
   async ({ path: projectPath }) => {
     try {
       const rootDir = resolve(projectPath ?? ".");
+      validateIndexPath(rootDir);
       const profile = await readProfile();
       const installed = await isOllamaInstalled();
       const running = installed ? await isOllamaRunning() : false;

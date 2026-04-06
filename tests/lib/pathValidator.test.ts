@@ -1,0 +1,86 @@
+import { describe, it, expect } from 'vitest';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { validateIndexPath } from '../../src/lib/pathValidator.js';
+
+describe('validateIndexPath', () => {
+  describe('rejects sensitive system directories', () => {
+    it('rejects /etc', () => {
+      expect(() => validateIndexPath('/etc')).toThrow('sensitive system directory');
+    });
+
+    it('rejects /etc/passwd (subdirectory of /etc)', () => {
+      expect(() => validateIndexPath('/etc/passwd')).toThrow('sensitive system directory');
+    });
+
+    it('rejects /var', () => {
+      expect(() => validateIndexPath('/var')).toThrow('sensitive system directory');
+    });
+
+    it('rejects /var/log (subdirectory of /var)', () => {
+      expect(() => validateIndexPath('/var/log')).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.ssh', () => {
+      expect(() => validateIndexPath(join(homedir(), '.ssh'))).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.ssh/id_rsa (subdirectory of ~/.ssh)', () => {
+      expect(() => validateIndexPath(join(homedir(), '.ssh', 'id_rsa'))).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.aws', () => {
+      expect(() => validateIndexPath(join(homedir(), '.aws'))).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.aws/credentials (subdirectory of ~/.aws)', () => {
+      expect(() => validateIndexPath(join(homedir(), '.aws', 'credentials'))).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.gnupg', () => {
+      expect(() => validateIndexPath(join(homedir(), '.gnupg'))).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.config', () => {
+      expect(() => validateIndexPath(join(homedir(), '.config'))).toThrow('sensitive system directory');
+    });
+
+    it('rejects ~/.config/something (subdirectory of ~/.config)', () => {
+      expect(() => validateIndexPath(join(homedir(), '.config', 'something'))).toThrow('sensitive system directory');
+    });
+  });
+
+  describe('accepts normal project paths', () => {
+    it('accepts "." (current directory)', () => {
+      expect(() => validateIndexPath('.')).not.toThrow();
+    });
+
+    it('accepts /tmp/test', () => {
+      expect(() => validateIndexPath('/tmp/test')).not.toThrow();
+    });
+
+    it('accepts a real user project path', () => {
+      // Create a temp dir that resolves to a non-sensitive path
+      const tmpDir = mkdtempSync(join(tmpdir(), 'test-project-'));
+      expect(() => validateIndexPath(tmpDir)).not.toThrow();
+    });
+
+    it('accepts /home/user/projects/myapp (normal project path)', () => {
+      // This may not exist but validation is based on path prefix, not existence
+      expect(() => validateIndexPath('/home/user/projects/myapp')).not.toThrow();
+    });
+  });
+
+  describe('handles path traversal attacks', () => {
+    it('rejects ../../etc/passwd after resolve (traversal attack)', () => {
+      // After resolve(), ../../etc/passwd becomes /etc/passwd regardless of cwd
+      expect(() => validateIndexPath('../../etc/passwd')).toThrow('sensitive system directory');
+    });
+
+    it('rejects relative paths that resolve to /etc', () => {
+      expect(() => validateIndexPath('../../../etc')).toThrow('sensitive system directory');
+    });
+  });
+});
