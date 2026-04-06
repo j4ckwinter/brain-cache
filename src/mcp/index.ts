@@ -27,6 +27,8 @@ import { runSearch } from "../workflows/search.js";
 import { runBuildContext } from "../workflows/buildContext.js";
 import { accumulateStats } from "../services/sessionStats.js";
 import { validateIndexPath } from "../lib/pathValidator.js";
+import { computeTokenSavings } from "../lib/tokenSavings.js";
+import type { TokenSavingsResult } from "../lib/tokenSavings.js";
 
 declare const __BRAIN_CACHE_VERSION__: string | undefined;
 const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
@@ -113,12 +115,19 @@ server.registerTool(
   },
 );
 
-function buildSearchResponse(chunks: RetrievedChunk[], query: string) {
-  const filesInContext = new Set(chunks.map(c => c.filePath)).size;
-  const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
-  const estimatedWithout = tokensSent * 3;
-  const reductionPct = estimatedWithout > 0 ? Math.round((1 - tokensSent / estimatedWithout) * 100) : 0;
-  const savings = formatTokenSavings({ tokensSent, estimatedWithout, reductionPct, filesInContext });
+async function buildSearchResponse(
+  chunks: RetrievedChunk[],
+  query: string,
+  precomputed?: TokenSavingsResult,
+) {
+  const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } =
+    precomputed ?? await computeTokenSavings(chunks);
+  const savings = formatTokenSavings({
+    tokensSent,
+    estimatedWithout: estimatedWithoutBraincache,
+    reductionPct,
+    filesInContext,
+  });
   const pipeline = formatPipelineLabel(['embed', 'search', 'dedup']);
   const footer = `---\n${savings}\nPipeline: ${pipeline}`;
   const summary = `Found ${chunks.length} result${chunks.length !== 1 ? 's' : ''} for "${query}".`;
@@ -188,21 +197,23 @@ server.registerTool(
     try {
       validateIndexPath(resolvedPath);
       const chunks = await runSearch(query, { limit, path: resolvedPath });
-      const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
-      const estimatedWithoutBraincache = tokensSent * 3;
-      accumulateStats({ tokensSent, estimatedWithoutBraincache })
-        .catch(err => log.warn({ err }, 'stats accumulation failed'));
-      return buildSearchResponse(chunks, query);
+      const savings = await computeTokenSavings(chunks);
+      accumulateStats({
+        tokensSent: savings.tokensSent,
+        estimatedWithoutBraincache: savings.estimatedWithoutBraincache,
+      }).catch(err => log.warn({ err }, 'stats accumulation failed'));
+      return buildSearchResponse(chunks, query, savings);
     } catch (err) {
       if (err instanceof Error && err.message.includes("No index found")) {
         await runIndex(resolvedPath);
         try {
           const chunks = await runSearch(query, { limit, path: resolvedPath });
-          const tokensSent = Math.round(chunks.reduce((sum, c) => sum + c.content.length, 0) / 4);
-          const estimatedWithoutBraincache = tokensSent * 3;
-          accumulateStats({ tokensSent, estimatedWithoutBraincache })
-            .catch(err => log.warn({ err }, 'stats accumulation failed'));
-          return buildSearchResponse(chunks, query);
+          const savings = await computeTokenSavings(chunks);
+          accumulateStats({
+            tokensSent: savings.tokensSent,
+            estimatedWithoutBraincache: savings.estimatedWithoutBraincache,
+          }).catch(err => log.warn({ err }, 'stats accumulation failed'));
+          return buildSearchResponse(chunks, query, savings);
         } catch (retryErr) {
           return {
             isError: true,
