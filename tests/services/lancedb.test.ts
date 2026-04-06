@@ -86,7 +86,7 @@ describe('readFileHashes', () => {
   it('returns empty manifest when file-hashes.json does not exist', async () => {
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual({ hashes: {}, tokenCounts: {} });
+    expect(result).toEqual({ hashes: {}, tokenCounts: {}, stats: {} });
   });
 
   it('returns parsed manifest when file-hashes.json exists in new format', async () => {
@@ -107,7 +107,8 @@ describe('readFileHashes', () => {
     );
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual(manifest);
+    // Manifest without stats key → stats defaults to {}
+    expect(result).toEqual({ ...manifest, stats: {} });
   });
 
   it('migrates legacy format (plain hashes object) to FileHashManifest with empty tokenCounts', async () => {
@@ -122,7 +123,7 @@ describe('readFileHashes', () => {
     );
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual({ hashes: legacyHashes, tokenCounts: {} });
+    expect(result).toEqual({ hashes: legacyHashes, tokenCounts: {}, stats: {} });
   });
 
   it('returns empty manifest when file-hashes.json contains invalid JSON', async () => {
@@ -133,7 +134,22 @@ describe('readFileHashes', () => {
     );
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual({ hashes: {}, tokenCounts: {} });
+    expect(result).toEqual({ hashes: {}, tokenCounts: {}, stats: {} });
+  });
+
+  it('returns stats: {} when file-hashes.json exists but lacks a stats key (migration-safe)', async () => {
+    const manifestWithoutStats = {
+      hashes: { '/project/src/foo.ts': 'abc123' },
+      tokenCounts: { '/project/src/foo.ts': 50 },
+    };
+    await writeFile(
+      join(testDir, '.brain-cache', 'file-hashes.json'),
+      JSON.stringify(manifestWithoutStats),
+      'utf-8'
+    );
+    const { readFileHashes } = await import('../../src/services/lancedb.js');
+    const result = await readFileHashes(testDir);
+    expect(result.stats).toEqual({});
   });
 });
 
@@ -151,7 +167,7 @@ describe('writeFileHashes', () => {
 
   it('creates .brain-cache directory if needed and writes JSON', async () => {
     const { writeFileHashes, readFileHashes } = await import('../../src/services/lancedb.js');
-    const manifest = { hashes: { '/project/src/foo.ts': 'abc123' }, tokenCounts: { '/project/src/foo.ts': 42 } };
+    const manifest = { hashes: { '/project/src/foo.ts': 'abc123' }, tokenCounts: { '/project/src/foo.ts': 42 }, stats: {} };
     await writeFileHashes(testDir, manifest);
     const result = await readFileHashes(testDir);
     expect(result).toEqual(manifest);
@@ -161,14 +177,32 @@ describe('writeFileHashes', () => {
     await mkdir(join(testDir, '.brain-cache'), { recursive: true });
     await writeFile(
       join(testDir, '.brain-cache', 'file-hashes.json'),
-      JSON.stringify({ hashes: { '/old/file.ts': 'oldhash' }, tokenCounts: {} }),
+      JSON.stringify({ hashes: { '/old/file.ts': 'oldhash' }, tokenCounts: {}, stats: {} }),
       'utf-8'
     );
     const { writeFileHashes, readFileHashes } = await import('../../src/services/lancedb.js');
-    const newManifest = { hashes: { '/new/file.ts': 'newhash' }, tokenCounts: { '/new/file.ts': 99 } };
+    const newManifest = { hashes: { '/new/file.ts': 'newhash' }, tokenCounts: { '/new/file.ts': 99 }, stats: {} };
     await writeFileHashes(testDir, newManifest);
     const result = await readFileHashes(testDir);
     expect(result).toEqual(newManifest);
+  });
+
+  it('round-trips stats entries (size and mtimeMs preserved)', async () => {
+    const { writeFileHashes, readFileHashes } = await import('../../src/services/lancedb.js');
+    const manifest = {
+      hashes: { '/project/src/foo.ts': 'abc123' },
+      tokenCounts: { '/project/src/foo.ts': 42 },
+      stats: {
+        '/project/src/foo.ts': { size: 1024, mtimeMs: 1712345678901 },
+        '/project/src/bar.ts': { size: 512, mtimeMs: 1712000000000 },
+      },
+    };
+    await writeFileHashes(testDir, manifest);
+    const result = await readFileHashes(testDir);
+    expect(result.stats).toEqual(manifest.stats);
+    expect(result.stats['/project/src/foo.ts'].size).toBe(1024);
+    expect(result.stats['/project/src/foo.ts'].mtimeMs).toBe(1712345678901);
+    expect(result.stats['/project/src/bar.ts'].size).toBe(512);
   });
 });
 
