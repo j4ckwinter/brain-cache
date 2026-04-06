@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { readProfile } from '../services/capability.js';
+import { requireProfile } from '../lib/guards.js';
 import { readIndexState } from '../services/lancedb.js';
 
 /**
@@ -15,10 +15,7 @@ export async function runStatus(targetPath?: string): Promise<void> {
   const rootDir = resolve(targetPath ?? '.');
 
   // Step 1: Read capability profile
-  const profile = await readProfile();
-  if (!profile) {
-    throw new Error("No profile found. Run 'brain-cache init' first.");
-  }
+  const profile = await requireProfile();
 
   // Step 2: Read index state
   const indexState = await readIndexState(rootDir);
