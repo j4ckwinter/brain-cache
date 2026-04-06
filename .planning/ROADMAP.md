@@ -180,7 +180,12 @@ Plans:
   3. Sequential MCP tool calls against an already-indexed project complete faster — LanceDB connections are reused from a module-level pool rather than opened per-call
   4. Incremental re-index completes faster on large projects — chunk deletions use batched SQL `IN` predicates instead of serial per-chunk deletes
   5. Parser instances are reused across files during indexing — the same language grammar is not loaded more than once per index run
-**Plans**: TBD
+**Plans:** 2/4 plans executed
+Plans:
+- [x] 44-01-PLAN.md — Shared guard helpers and workflow guard replacement (DEBT-02, DEBT-05)
+- [ ] 44-02-PLAN.md — Async init.ts migration (DEBT-04)
+- [x] 44-03-PLAN.md — LanceDB connection pool, parser cache, and MCP factory (PERF-01, DEBT-07, DEBT-03)
+- [ ] 44-04-PLAN.md — Batch deletions, token count dedup, and buildContext optimization (PERF-02, DEBT-06, PERF-03)
 
 ### Phase 45: Auto-Index Retry Test and withGuards Extraction
 **Goal**: The MCP auto-index retry path is tested and preserved through the withGuards wrapper extraction, and the MCP server is instantiated via a factory function
@@ -226,12 +231,12 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 43. Correctness and Security | v3.4 | 2/2 | Complete   | 2026-04-06 |
-| 44. Debt Reduction and Performance | v3.4 | 0/TBD | Not started | - |
+| 43. Correctness and Security | v3.4 | 2/2 | Complete    | 2026-04-06 |
+| 44. Debt Reduction and Performance | v3.4 | 2/4 | In Progress|  |
 | 45. Auto-Index Retry Test and withGuards Extraction | v3.4 | 0/2 | Planning complete | - |
 | 46. Missing Features | v3.4 | 0/TBD | Not started | - |
 | 47. Test Coverage and Structural Refactoring | v3.4 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-06 — Phase 45 planned (2 plans)*
+*Last updated: 2026-04-06 — Phase 44 planned (4 plans)*

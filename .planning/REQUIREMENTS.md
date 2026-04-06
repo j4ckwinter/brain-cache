@@ -17,10 +17,10 @@ Requirements for Codebase Hardening milestone. Each maps to roadmap phases.
 ### Tech Debt
 
 - [ ] **DEBT-01**: MCP tool handlers use a shared `withGuards()` wrapper for profile/Ollama checks and auto-index retry
-- [ ] **DEBT-02**: Workflow functions use shared `requireProfile()` and `requireOllama()` guard helpers
+- [x] **DEBT-02**: Workflow functions use shared `requireProfile()` and `requireOllama()` guard helpers
 - [ ] **DEBT-03**: MCP server is instantiated via `createMcpServer()` factory function (not module-level singleton)
 - [ ] **DEBT-04**: `init.ts` uses async `fs/promises` instead of synchronous file operations
-- [ ] **DEBT-05**: stderr monkey-patch in `runIndex` is documented or replaced with LanceDB log config
+- [x] **DEBT-05**: stderr monkey-patch in `runIndex` is documented or replaced with LanceDB log config
 - [ ] **DEBT-06**: Token counting per chunk happens once during the filter step (no redundant calls)
 - [ ] **DEBT-07**: Parser instances are cached per language in a module-level Map (not created per file)
 
@@ -87,10 +87,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COR-02 | Phase 43 | Complete |
 | COR-03 | Phase 43 | Complete |
 | COR-04 | Phase 43 | Complete |
-| DEBT-02 | Phase 44 | Pending |
+| DEBT-02 | Phase 44 | Complete |
 | DEBT-03 | Phase 45 | Pending |
 | DEBT-04 | Phase 44 | Pending |
-| DEBT-05 | Phase 44 | Pending |
+| DEBT-05 | Phase 44 | Complete |
 | DEBT-06 | Phase 44 | Pending |
 | DEBT-07 | Phase 44 | Pending |
 | PERF-01 | Phase 44 | Pending |
