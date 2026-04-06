@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import type { Table } from '@lancedb/lancedb';
 import { requireProfile, requireOllama } from '../lib/guards.js';
@@ -27,7 +27,7 @@ import {
 } from '../services/lancedb.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
-import type { CodeChunk, CallEdge } from '../lib/types.js';
+import type { CodeChunk, CallEdge, FileStatEntry } from '../lib/types.js';
 import { formatTokenSavings } from '../lib/format.js';
 
 /**
@@ -35,6 +35,68 @@ import { formatTokenSavings } from '../lib/format.js';
  */
 function hashContent(content: string): string {
   return createHash('sha256').update(content, 'utf-8').digest('hex');
+}
+
+/**
+ * Stat all files concurrently with capped concurrency (same batch size as readFile loop).
+ * Returns a Map from file path to { size, mtimeMs }.
+ * Failures are silently omitted — partitionByStatChange treats missing entries as changed.
+ */
+async function statAllFiles(
+  files: string[],
+  concurrency: number,
+): Promise<Map<string, { size: number; mtimeMs: number }>> {
+  const result = new Map<string, { size: number; mtimeMs: number }>();
+  for (let groupStart = 0; groupStart < files.length; groupStart += concurrency) {
+    const group = files.slice(groupStart, groupStart + concurrency);
+    const entries = await Promise.all(
+      group.map(async (filePath) => {
+        try {
+          const s = await stat(filePath);
+          return { filePath, size: s.size, mtimeMs: s.mtimeMs };
+        } catch {
+          return null;
+        }
+      })
+    );
+    for (const entry of entries) {
+      if (entry !== null) {
+        result.set(entry.filePath, { size: entry.size, mtimeMs: entry.mtimeMs });
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Partitions files into those whose stat fingerprint (size + mtimeMs) matches the stored
+ * manifest and those that differ or are new.
+ *
+ * Files missing from either `currentStats` or `storedStats` are classified as statChanged.
+ * This is exported for unit testing and for callers that need access to the partition sets.
+ */
+export function partitionByStatChange(
+  files: string[],
+  currentStats: ReadonlyMap<string, { size: number; mtimeMs: number }>,
+  storedStats: Record<string, FileStatEntry>,
+): { statUnchanged: string[]; statChanged: string[] } {
+  const statUnchanged: string[] = [];
+  const statChanged: string[] = [];
+  for (const f of files) {
+    const cur = currentStats.get(f);
+    const stored = storedStats[f];
+    if (
+      cur !== undefined &&
+      stored !== undefined &&
+      cur.size === stored.size &&
+      cur.mtimeMs === stored.mtimeMs
+    ) {
+      statUnchanged.push(f);
+    } else {
+      statChanged.push(f);
+    }
+  }
+  return { statUnchanged, statChanged };
 }
 
 export interface FileDiffResult {
