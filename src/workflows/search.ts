@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { requireProfile, requireOllama } from "../lib/guards.js";
-import { openDatabase, readIndexState } from "../services/lancedb.js";
+import { getConnection, readIndexState } from "../services/lancedb.js";
 import { embedBatchWithRetry } from "../services/embedder.js";
 import {
   searchChunks,
@@ -33,7 +33,7 @@ export async function runSearch(
   }
 
   // 4. Open database and table
-  const db = await openDatabase(rootDir);
+  const db = await getConnection(rootDir);
   const tableNames = await db.tableNames();
   if (!tableNames.includes("chunks")) {
     throw new Error("No chunks table found. Run 'brain-cache index' first.");

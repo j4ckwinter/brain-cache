@@ -10,14 +10,14 @@ import { childLogger, setLogLevel } from '../services/logger.js';
 
 const log = childLogger('index');
 import {
-  openDatabase,
+  getConnection,
   openOrCreateChunkTable,
   insertChunks,
   createVectorIndexIfNeeded,
   writeIndexState,
   readFileHashes,
   writeFileHashes,
-  deleteChunksByFilePath,
+  deleteChunksByFilePaths,
   openOrCreateEdgesTable,
   insertEdges,
   withWriteLock,
@@ -104,7 +104,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   }
 
   // Step 5: Open LanceDB
-  const db = await openDatabase(rootDir);
+  const db = await getConnection(rootDir, force);
   const table = await openOrCreateChunkTable(db, rootDir, profile.embeddingModel, dim);
   const edgesTable = await openOrCreateEdgesTable(db);
 
@@ -136,7 +136,9 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   }
 
   // Step 6c: Load stored hashes (skip if force)
-  const storedHashes = force ? {} : await readFileHashes(rootDir);
+  const { hashes: storedHashes, tokenCounts: existingTokenCounts } = force
+    ? { hashes: {} as Record<string, string>, tokenCounts: {} as Record<string, number> }
+    : await readFileHashes(rootDir);
   const crawledSet = new Set(files);
 
   // Step 6d: Compute diff sets
@@ -168,13 +170,14 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     `${removedFiles.length} removed (${unchangedFiles.length} unchanged)\n`
   );
 
-  // Step 6f: Delete chunks for removed + changed files
-  for (const filePath of [...removedFiles, ...changedFiles]) {
-    await deleteChunksByFilePath(table, filePath);
-    // Also delete edges for this file
+  // Step 6f: Delete chunks for removed + changed files (batch — PERF-02)
+  const filesToDelete = [...removedFiles, ...changedFiles];
+  if (filesToDelete.length > 0) {
+    await deleteChunksByFilePaths(table, filesToDelete);
+    // Batch edge deletion with single IN predicate
     await withWriteLock(async () => {
-      const escaped = filePath.replace(/'/g, "''");
-      await edgesTable.delete(`from_file = '${escaped}'`);
+      const escaped = filesToDelete.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+      await edgesTable.delete(`from_file IN (${escaped})`);
     });
   }
 
@@ -200,7 +203,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     for (const filePath of files) {
       updatedHashes[filePath] = currentHashes[filePath];
     }
-    await writeFileHashes(rootDir, updatedHashes);
+    await writeFileHashes(rootDir, { hashes: updatedHashes, tokenCounts: existingTokenCounts });
 
     // Update index state with current totals
     const totalFiles = unchangedFiles.length;
@@ -231,6 +234,8 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   let processedFiles = 0;
   let processedChunks = 0;
   let skippedChunks = 0;
+  // Per-file token counts for file-hashes.json (PERF-03)
+  const tokenCounts: Record<string, number> = {};
 
   for (let groupStart = 0; groupStart < filesToProcess.length; groupStart += FILE_READ_CONCURRENCY) {
     const group = filesToProcess.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
@@ -239,7 +244,9 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
 
     for (const filePath of group) {
       const content = contentMap.get(filePath)!;
-      totalRawTokens += countChunkTokens(content);
+      const rawTokens = countChunkTokens(content);
+      totalRawTokens += rawTokens;
+      tokenCounts[filePath] = rawTokens;
       try {
         const { chunks, edges } = await chunkFile(filePath, content);
         groupChunks.push(...chunks);
@@ -266,19 +273,21 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       // llama.cpp with a BERT tokenizer that produces ~1.4x more tokens for code,
       // so EMBED_MAX_TOKENS is set conservatively (1400 Anthropic ≈ 1960 BERT < 2048
       // real context limit). truncate: true in ollama.embed() is a hard safety net.
-      const embeddableBatch = batch.filter((chunk) => {
+      // DEBT-06: single-pass token counting — count once per chunk, not in filter + sum.
+      const embeddableBatch: Array<{ chunk: CodeChunk; tokens: number }> = [];
+      for (const chunk of batch) {
         const tokens = countChunkTokens(chunk.content);
         if (tokens > EMBED_MAX_TOKENS) {
           skippedChunks++;
-          return false;
+          continue;
         }
-        return true;
-      });
+        embeddableBatch.push({ chunk, tokens });
+      }
 
       if (embeddableBatch.length === 0) continue;
 
-      const texts = embeddableBatch.map((chunk) => chunk.content);
-      totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
+      const texts = embeddableBatch.map(({ chunk }) => chunk.content);
+      totalChunkTokens += embeddableBatch.reduce((sum, { tokens }) => sum + tokens, 0);
       const { embeddings: vectors, skipped, zeroVectorIndices } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
       skippedChunks += skipped;
 
@@ -289,7 +298,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       // Build rows, skipping any chunk whose embedding fell back to a zero vector.
       // vectors[i] corresponds to embeddableBatch[i] — zeroVectorIndices tracks which are zero.
       const rows: ChunkRow[] = embeddableBatch
-        .map((chunk, i) => ({ chunk, i }))
+        .map(({ chunk }, i) => ({ chunk, i }))
         .filter(({ i }) => !zeroVectorIndices.has(i))
         .map(({ chunk, i }) => ({
           id: chunk.id,
@@ -342,7 +351,13 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   for (const filePath of unchangedFiles) {
     updatedHashes[filePath] = currentHashes[filePath];
   }
-  await writeFileHashes(rootDir, updatedHashes);
+  // Carry forward token counts for unchanged files (PERF-03)
+  for (const [fp, count] of Object.entries(existingTokenCounts)) {
+    if (!(fp in tokenCounts) && fp in updatedHashes) {
+      tokenCounts[fp] = count;
+    }
+  }
+  await writeFileHashes(rootDir, { hashes: updatedHashes, tokenCounts });
 
   // Step 9b: Write index state
   const totalFiles = files.length;

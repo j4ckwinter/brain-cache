@@ -27,7 +27,7 @@ vi.mock('../../src/services/indexLock.js', () => ({
 }));
 
 vi.mock('../../src/services/lancedb.js', () => ({
-  openDatabase: vi.fn(),
+  getConnection: vi.fn(),
   openOrCreateChunkTable: vi.fn(),
   openOrCreateEdgesTable: vi.fn(),
   insertChunks: vi.fn(),
@@ -35,7 +35,7 @@ vi.mock('../../src/services/lancedb.js', () => ({
   writeIndexState: vi.fn(),
   readFileHashes: vi.fn(),
   writeFileHashes: vi.fn(),
-  deleteChunksByFilePath: vi.fn(),
+  deleteChunksByFilePaths: vi.fn(),
   createVectorIndexIfNeeded: vi.fn(),
   withWriteLock: vi.fn(),
   classifyFileType: vi.fn((filePath: string) => filePath.includes('.test.') ? 'test' : 'source'),
@@ -60,7 +60,7 @@ import { crawlSourceFiles } from '../../src/services/crawler.js';
 import { chunkFile } from '../../src/services/chunker.js';
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
-  openDatabase,
+  getConnection,
   openOrCreateChunkTable,
   openOrCreateEdgesTable,
   insertChunks,
@@ -68,7 +68,7 @@ import {
   writeIndexState,
   readFileHashes,
   writeFileHashes,
-  deleteChunksByFilePath,
+  deleteChunksByFilePaths,
   createVectorIndexIfNeeded,
   withWriteLock,
   classifyFileType,
@@ -83,7 +83,7 @@ const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
 const mockCrawlSourceFiles = vi.mocked(crawlSourceFiles);
 const mockChunkFile = vi.mocked(chunkFile);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
-const mockOpenDatabase = vi.mocked(openDatabase);
+const mockGetConnection = vi.mocked(getConnection);
 const mockOpenOrCreateChunkTable = vi.mocked(openOrCreateChunkTable);
 const mockOpenOrCreateEdgesTable = vi.mocked(openOrCreateEdgesTable);
 const mockInsertChunks = vi.mocked(insertChunks);
@@ -91,7 +91,7 @@ const mockInsertEdges = vi.mocked(insertEdges);
 const mockWriteIndexState = vi.mocked(writeIndexState);
 const mockReadFileHashes = vi.mocked(readFileHashes);
 const mockWriteFileHashes = vi.mocked(writeFileHashes);
-const mockDeleteChunksByFilePath = vi.mocked(deleteChunksByFilePath);
+const mockDeleteChunksByFilePaths = vi.mocked(deleteChunksByFilePaths);
 const mockCreateVectorIndexIfNeeded = vi.mocked(createVectorIndexIfNeeded);
 const mockWithWriteLock = vi.mocked(withWriteLock);
 const mockReadFile = vi.mocked(readFile);
@@ -165,16 +165,16 @@ describe('runIndex', () => {
     // chunkFile now returns { chunks, edges } — provide that shape
     mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
-    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
     mockOpenOrCreateEdgesTable.mockResolvedValue({ delete: vi.fn(), countRows: vi.fn().mockResolvedValue(0) } as any);
     mockInsertChunks.mockResolvedValue(undefined);
     mockInsertEdges.mockResolvedValue(undefined);
     mockWriteIndexState.mockResolvedValue(undefined);
     // Incremental indexing: empty stored hashes = full index on first run
-    mockReadFileHashes.mockResolvedValue({});
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
     mockWriteFileHashes.mockResolvedValue(undefined);
-    mockDeleteChunksByFilePath.mockResolvedValue(undefined);
+    mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
     mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
     // withWriteLock: just call the callback
     mockWithWriteLock.mockImplementation(async (fn) => fn());

@@ -10,8 +10,9 @@ vi.mock('../../src/services/ollama.js', () => ({
 }));
 
 vi.mock('../../src/services/lancedb.js', () => ({
-  openDatabase: vi.fn(),
+  getConnection: vi.fn(),
   readIndexState: vi.fn(),
+  readFileHashes: vi.fn(),
 }));
 
 vi.mock('../../src/services/embedder.js', () => ({
@@ -45,7 +46,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 import { readProfile } from '../../src/services/capability.js';
 import { isOllamaRunning } from '../../src/services/ollama.js';
-import { openDatabase, readIndexState } from '../../src/services/lancedb.js';
+import { getConnection, readIndexState, readFileHashes } from '../../src/services/lancedb.js';
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
@@ -57,7 +58,8 @@ import { readFile } from 'node:fs/promises';
 
 const mockReadProfile = vi.mocked(readProfile);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
-const mockOpenDatabase = vi.mocked(openDatabase);
+const mockGetConnection = vi.mocked(getConnection);
+const mockReadFileHashes = vi.mocked(readFileHashes);
 const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
@@ -134,7 +136,9 @@ describe('runBuildContext', () => {
     mockReadProfile.mockResolvedValue({ ...mockProfile });
     mockIsOllamaRunning.mockResolvedValue(true);
     mockReadIndexState.mockResolvedValue({ ...mockIndexState });
-    mockOpenDatabase.mockResolvedValue(mockDb);
+    mockGetConnection.mockResolvedValue(mockDb);
+    // Return empty tokenCounts by default — exercises the fallback disk-read path
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
