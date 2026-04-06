@@ -129,8 +129,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REFAC-01 | Phase 47 | Complete |
 | REFAC-02 | Phase 47 | Complete |
 | REFAC-03 | Phase 47 | Complete |
-| DAILY-01 | Phase 48 | Planned |
-| DAILY-02 | Phase 49 | Planned |
+| DAILY-01 | Phase 48 | Complete |
+| DAILY-02 | Phase 49 | Complete |
 | DAILY-03 | Phase 52 | Complete |
 | DAILY-04 | Phase 53 | Complete |
 
@@ -140,4 +140,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-07 — DAILY-03 closed via phase 52 verification; DAILY-04 closed via phase 53 verification*
+*Last updated: 2026-04-07 — DAILY-01..DAILY-04 closure traceability synchronized for v3.5 milestone shipment*
