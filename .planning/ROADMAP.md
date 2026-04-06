@@ -160,7 +160,7 @@
 **Milestone Goal:** Make brain-cache something developers use daily — cheap incremental indexing on large repos, a watch path so the index tracks the working tree, and git history in the index for “why” queries.
 
 - [x] **Phase 48: Incremental Index I/O** — Reduce full-file reads on incremental index using stat/mtime (or equivalent) so unchanged files skip `readFile`+hash when the manifest says they are unchanged (3/3 plans)
-- [ ] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned)
+- [x] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned) (completed 2026-04-06)
 - [ ] **Phase 50: Background Service Install** — Optional `init` path or subcommand to install LaunchAgent/systemd user unit (document Windows separately) (planned)
 - [ ] **Phase 51: Git History Indexing** — Ingest commit messages and touched paths; same embed pipeline; search/build_context return provenance for history vs file chunks (planned)
 
@@ -268,7 +268,7 @@ Plans:
   1. `brain-cache watch [path]` exists and schedules `runIndex` after a debounce window
   2. Rapid saves coalesce to a single index pass within the debounce window
   3. Concurrent `brain-cache index` and watch serialize via existing index lock — no LanceDB corruption
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 ### Phase 50: Background Service Install
 **Goal**: Optional installation as a user-level background service so the watcher runs without a dedicated terminal (macOS LaunchAgent + Linux systemd documented; Windows documented).
@@ -299,7 +299,7 @@ Plans:
 | 46. Missing Features | v3.4 | 3/3 | Complete | 2026-04-06 |
 | 47. Test Coverage and Structural Refactoring | v3.4 | 3/3 | Complete | 2026-04-06 |
 | 48. Incremental Index I/O | v3.5 | 3/3 | Complete    | 2026-04-06 |
-| 49. File Watcher | v3.5 | 1/2 | In Progress|  |
+| 49. File Watcher | v3.5 | 2/2 | Complete   | 2026-04-06 |
 | 50. Background Service Install | v3.5 | 0/? | Planned | — |
 | 51. Git History Indexing | v3.5 | 0/? | Planned | — |
 
