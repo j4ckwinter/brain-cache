@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { requireProfile, requireOllama } from '../lib/guards.js';
-import { openDatabase, readIndexState } from '../services/lancedb.js';
+import { getConnection, readIndexState, readFileHashes } from '../services/lancedb.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import {
   searchChunks,
@@ -35,7 +35,7 @@ export async function runBuildContext(
   }
 
   // 4. Open database and table
-  const db = await openDatabase(rootDir);
+  const db = await getConnection(rootDir);
   const tableNames = await db.tableNames();
   if (!tableNames.includes('chunks')) {
     throw new Error("No chunks table found. Run 'brain-cache index' first.");
@@ -71,15 +71,22 @@ export async function runBuildContext(
   //
   // Baseline represents what Claude would spend without this tool: one tool call
   // to find relevant files, then one full Read per matched file.
+  // PERF-03: read per-file token counts from file-hashes.json instead of disk reads.
+  const { tokenCounts } = await readFileHashes(rootDir);
   const uniqueFiles = [...new Set(assembled.chunks.map((c) => c.filePath))];
   const numFiles = uniqueFiles.length;
   let fileContentTokens = 0;
-  for (const filePath of uniqueFiles) {
-    try {
-      const fileContent = await readFile(filePath, 'utf-8');
-      fileContentTokens += countChunkTokens(fileContent);
-    } catch {
-      // File may have been deleted since indexing — skip
+  for (const fp of uniqueFiles) {
+    if (tokenCounts[fp] !== undefined) {
+      fileContentTokens += tokenCounts[fp];
+    } else {
+      // Fallback: read from disk if token count not in manifest (older index)
+      try {
+        const fileContent = await readFile(resolve(rootDir, fp), 'utf-8');
+        fileContentTokens += countChunkTokens(fileContent);
+      } catch {
+        // file may have been removed since indexing
+      }
     }
   }
 
