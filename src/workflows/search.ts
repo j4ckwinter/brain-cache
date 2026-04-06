@@ -1,6 +1,5 @@
 import { resolve } from "node:path";
-import { readProfile } from "../services/capability.js";
-import { isOllamaRunning } from "../services/ollama.js";
+import { requireProfile, requireOllama } from "../lib/guards.js";
 import { openDatabase, readIndexState } from "../services/lancedb.js";
 import { embedBatchWithRetry } from "../services/embedder.js";
 import {
@@ -20,21 +19,11 @@ export async function runSearch(
   query: string,
   opts?: SearchRunOptions,
 ): Promise<RetrievedChunk[]> {
-  // 1. Read profile
-  const profile = await readProfile();
-  if (profile === null) {
-    throw new Error("No profile found. Run 'brain-cache init' first.");
-  }
+  // 1. Read profile and check Ollama
+  const profile = await requireProfile();
+  await requireOllama();
 
-  // 2. Check Ollama
-  const running = await isOllamaRunning();
-  if (!running) {
-    throw new Error(
-      "Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.",
-    );
-  }
-
-  // 3. Resolve project root and read index state
+  // 2. Resolve project root and read index state
   const rootDir = resolve(opts?.path ?? ".");
   const indexState = await readIndexState(rootDir);
   if (indexState === null) {

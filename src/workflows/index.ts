@@ -1,8 +1,7 @@
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { readProfile } from '../services/capability.js';
-import { isOllamaRunning } from '../services/ollama.js';
+import { requireProfile, requireOllama } from '../lib/guards.js';
 import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
@@ -60,33 +59,41 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   const previousLogLevel = process.env.BRAIN_CACHE_LOG ?? 'warn';
   setLogLevel('silent');
 
-  // Filter LanceDB Rust-layer warnings that write directly to stderr.
+  // Suppress LanceDB Rust-layer log lines that write directly to stderr via the
+  // native NAPI bindings. LanceDB's TypeScript SDK has no log level configuration
+  // API -- this monkey-patch is the only available suppression mechanism.
+  //
+  // Pattern matched: ISO-8601 timestamp prefix followed by "WARN lance" or "INFO lance"
+  // (e.g. "[2024-01-15T10:30:00Z WARN lance::dataset] ...")
+  // Only these two known patterns are suppressed -- other stderr writes pass through.
+  // DEBT-05: tighten regex to avoid swallowing unrelated warnings.
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: any, ...args: any[]) => {
-    const str = typeof chunk === 'string' ? chunk : chunk.toString();
-    if (/^\[[\d\-T:Z]+ WARN lance/.test(str) || /^\[[\d\-T:Z]+ INFO lance/.test(str)) {
-      return true; // swallow
+  process.stderr.write = ((
+    chunk: string | Uint8Array,
+    encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
+    cb?: (err?: Error | null) => void,
+  ): boolean => {
+    const str = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8');
+    if (/^\[\d{4}-\d{2}-\d{2}T[\d:.]+Z (WARN|INFO) lance/.test(str)) {
+      const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
+      callback?.(null);
+      return true;
     }
-    return originalStderrWrite(chunk, ...args);
+    if (typeof encodingOrCb === 'function') {
+      return originalStderrWrite(chunk as string, encodingOrCb);
+    }
+    return originalStderrWrite(chunk as string, encodingOrCb as BufferEncoding, cb);
   }) as typeof process.stderr.write;
 
   try {
   // Step 1: Resolve path
   const rootDir = resolve(targetPath ?? '.');
 
-  // Step 2: Read profile
-  const profile = await readProfile();
-  if (profile === null) {
-    throw new Error("No profile found. Run 'brain-cache init' first.");
-  }
+  // Step 2: Read profile and check Ollama
+  const profile = await requireProfile();
+  await requireOllama();
 
-  // Step 3: Check Ollama is running
-  const running = await isOllamaRunning();
-  if (!running) {
-    throw new Error("Ollama is not running. Start it with 'ollama serve' or run 'brain-cache init'.");
-  }
-
-  // Step 4: Determine dimensions
+  // Step 3: Determine dimensions
   const dim = EMBEDDING_DIMENSIONS[profile.embeddingModel] ?? DEFAULT_EMBEDDING_DIMENSION;
   if (!(profile.embeddingModel in EMBEDDING_DIMENSIONS)) {
     process.stderr.write(
