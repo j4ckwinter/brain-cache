@@ -330,9 +330,9 @@ Plans:
   1. `v3.5-MILESTONE-AUDIT.md` is refreshed and reports no unsatisfied requirement gaps for DAILY-01 through DAILY-04.
   2. Main roadmap, v3.5 archived roadmap, requirements traceability, and state metadata all show a consistent closure/shipped truth for v3.5.
   3. No planning artifact still reports the v3.5 re-audit as pending once phase 54 execution is complete.
-**Plans:** 0/1 plans complete
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] [54-01-PLAN.md](phases/54-v35-milestone-reaudit-and-ship/54-01-PLAN.md) — Milestone-level closure audit refresh and metadata synchronization for v3.5 shipment
+- [x] [54-01-PLAN.md](phases/54-v35-milestone-reaudit-and-ship/54-01-PLAN.md) — Milestone-level closure audit refresh and metadata synchronization for v3.5 shipment
 
 ## Progress
 
