@@ -83,28 +83,49 @@ describe('readFileHashes', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  it('returns empty object when file-hashes.json does not exist', async () => {
+  it('returns empty manifest when file-hashes.json does not exist', async () => {
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual({});
+    expect(result).toEqual({ hashes: {}, tokenCounts: {} });
   });
 
-  it('returns parsed hashes when file-hashes.json exists with valid JSON', async () => {
-    const hashes = {
+  it('returns parsed manifest when file-hashes.json exists in new format', async () => {
+    const manifest = {
+      hashes: {
+        '/project/src/foo.ts': 'abc123',
+        '/project/src/bar.ts': 'def456',
+      },
+      tokenCounts: {
+        '/project/src/foo.ts': 100,
+        '/project/src/bar.ts': 200,
+      },
+    };
+    await writeFile(
+      join(testDir, '.brain-cache', 'file-hashes.json'),
+      JSON.stringify(manifest),
+      'utf-8'
+    );
+    const { readFileHashes } = await import('../../src/services/lancedb.js');
+    const result = await readFileHashes(testDir);
+    expect(result).toEqual(manifest);
+  });
+
+  it('migrates legacy format (plain hashes object) to FileHashManifest with empty tokenCounts', async () => {
+    const legacyHashes = {
       '/project/src/foo.ts': 'abc123',
       '/project/src/bar.ts': 'def456',
     };
     await writeFile(
       join(testDir, '.brain-cache', 'file-hashes.json'),
-      JSON.stringify(hashes),
+      JSON.stringify(legacyHashes),
       'utf-8'
     );
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual(hashes);
+    expect(result).toEqual({ hashes: legacyHashes, tokenCounts: {} });
   });
 
-  it('returns empty object when file-hashes.json contains invalid JSON', async () => {
+  it('returns empty manifest when file-hashes.json contains invalid JSON', async () => {
     await writeFile(
       join(testDir, '.brain-cache', 'file-hashes.json'),
       'not valid json!!!',
@@ -112,7 +133,7 @@ describe('readFileHashes', () => {
     );
     const { readFileHashes } = await import('../../src/services/lancedb.js');
     const result = await readFileHashes(testDir);
-    expect(result).toEqual({});
+    expect(result).toEqual({ hashes: {}, tokenCounts: {} });
   });
 });
 
@@ -130,24 +151,24 @@ describe('writeFileHashes', () => {
 
   it('creates .brain-cache directory if needed and writes JSON', async () => {
     const { writeFileHashes, readFileHashes } = await import('../../src/services/lancedb.js');
-    const hashes = { '/project/src/foo.ts': 'abc123' };
-    await writeFileHashes(testDir, hashes);
+    const manifest = { hashes: { '/project/src/foo.ts': 'abc123' }, tokenCounts: { '/project/src/foo.ts': 42 } };
+    await writeFileHashes(testDir, manifest);
     const result = await readFileHashes(testDir);
-    expect(result).toEqual(hashes);
+    expect(result).toEqual(manifest);
   });
 
   it('overwrites existing file-hashes.json', async () => {
     await mkdir(join(testDir, '.brain-cache'), { recursive: true });
     await writeFile(
       join(testDir, '.brain-cache', 'file-hashes.json'),
-      JSON.stringify({ '/old/file.ts': 'oldhash' }),
+      JSON.stringify({ hashes: { '/old/file.ts': 'oldhash' }, tokenCounts: {} }),
       'utf-8'
     );
     const { writeFileHashes, readFileHashes } = await import('../../src/services/lancedb.js');
-    const newHashes = { '/new/file.ts': 'newhash' };
-    await writeFileHashes(testDir, newHashes);
+    const newManifest = { hashes: { '/new/file.ts': 'newhash' }, tokenCounts: { '/new/file.ts': 99 } };
+    await writeFileHashes(testDir, newManifest);
     const result = await readFileHashes(testDir);
-    expect(result).toEqual(newHashes);
+    expect(result).toEqual(newManifest);
   });
 });
 
