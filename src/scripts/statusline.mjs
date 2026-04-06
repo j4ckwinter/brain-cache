@@ -75,7 +75,18 @@ export function renderOutput(stats) {
     Math.round((1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100),
   );
   if (pct <= 0 || saved <= 0) return IDLE_OUTPUT;
-  return `\ud83e\udde0 brain-cache \u2192 saved ${formatTokenCount(saved)} tokens (${pct}% less)\n`;
+
+  let line = `\ud83e\udde0 brain-cache \u2192 saved ${formatTokenCount(saved)} tokens (${pct}% less)`;
+
+  // Append last-call savings when available
+  if (stats.lastEstimatedWithoutBraincache > 0 && stats.lastTokensSent >= 0) {
+    const lastSaved = stats.lastEstimatedWithoutBraincache - stats.lastTokensSent;
+    if (lastSaved > 0) {
+      line += ` \u00b7 last: ${formatTokenCount(lastSaved)}`;
+    }
+  }
+
+  return line + '\n';
 }
 
 // Stdin/stdout protocol — only when executed directly (not imported for testing)

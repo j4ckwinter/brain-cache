@@ -51,6 +51,8 @@ describe('sessionStats', () => {
     expect(typeof parsed.lastUpdatedAt).toBe('string');
     // lastUpdatedAt should be a valid ISO date
     expect(new Date(parsed.lastUpdatedAt).toISOString()).toBe(parsed.lastUpdatedAt);
+    expect(parsed.lastTokensSent).toBe(100);
+    expect(parsed.lastEstimatedWithoutBraincache).toBe(400);
   });
 
   it('Test 2: accumulates onto existing file', async () => {
@@ -65,6 +67,9 @@ describe('sessionStats', () => {
     expect(parsed.tokensSent).toBe(200);
     expect(parsed.estimatedWithoutBraincache).toBe(600);
     expect(parsed.callCount).toBe(2);
+    // last-call fields reflect the most recent delta only
+    expect(parsed.lastTokensSent).toBe(100);
+    expect(parsed.lastEstimatedWithoutBraincache).toBe(300);
   });
 
   it('Test 3: concurrent calls produce sum of both deltas', async () => {
@@ -152,7 +157,7 @@ describe('sessionStats', () => {
     const parsed = JSON.parse(raw);
     const keys = Object.keys(parsed).sort();
     expect(keys).toEqual(
-      ['callCount', 'estimatedWithoutBraincache', 'lastUpdatedAt', 'tokensSent']
+      ['callCount', 'estimatedWithoutBraincache', 'lastEstimatedWithoutBraincache', 'lastTokensSent', 'lastUpdatedAt', 'tokensSent']
     );
   });
 

@@ -67,6 +67,8 @@ describe("statusline.mjs subprocess integration", () => {
         estimatedWithoutBraincache: 2727,
         callCount: 5,
         lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 100,
+        lastEstimatedWithoutBraincache: 600,
       }),
       "utf-8",
     );
@@ -78,7 +80,7 @@ describe("statusline.mjs subprocess integration", () => {
 
     expect(code).toBe(0);
     expect(stdout).toBe(
-      "\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less)\n",
+      "\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less) \u00b7 last: 500\n",
     );
   });
 
@@ -159,6 +161,8 @@ describe("statusline.mjs subprocess integration", () => {
         estimatedWithoutBraincache: 2727,
         callCount: 5,
         lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 100,
+        lastEstimatedWithoutBraincache: 600,
       }),
       "utf-8",
     );

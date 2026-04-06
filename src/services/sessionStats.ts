@@ -24,6 +24,8 @@ export interface SessionStats {
   estimatedWithoutBraincache: number;
   callCount: number;
   lastUpdatedAt: string;
+  lastTokensSent: number;
+  lastEstimatedWithoutBraincache: number;
 }
 
 // ── Mutex ──────────────────────────────────────────────────────────────────
@@ -79,6 +81,8 @@ async function _doAccumulate(delta: StatsDelta, ttlMs?: number): Promise<void> {
     estimatedWithoutBraincache: base.estimatedWithoutBraincache + delta.estimatedWithoutBraincache,
     callCount: base.callCount + 1,
     lastUpdatedAt: new Date(now).toISOString(),
+    lastTokensSent: delta.tokensSent,
+    lastEstimatedWithoutBraincache: delta.estimatedWithoutBraincache,
   };
 
   const tmpPath = SESSION_STATS_PATH + '.tmp';

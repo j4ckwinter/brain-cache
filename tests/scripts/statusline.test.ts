@@ -171,11 +171,49 @@ describe('statusline', () => {
         estimatedWithoutBraincache: 2727,
         callCount: 1,
         lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 371,
+        lastEstimatedWithoutBraincache: 2727,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less)\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less) \u00b7 last: 2k\n');
     });
 
     it('returns formatted savings string for tokensSent=500, estimatedWithoutBraincache=1000 (50%)', () => {
+      const stats = {
+        tokensSent: 500,
+        estimatedWithoutBraincache: 1000,
+        callCount: 1,
+        lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 500,
+        lastEstimatedWithoutBraincache: 1000,
+      };
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less) \u00b7 last: 500\n');
+    });
+
+    it('returns formatted savings string for tokensSent=200000, estimatedWithoutBraincache=2000000 (90%)', () => {
+      const stats = {
+        tokensSent: 200000,
+        estimatedWithoutBraincache: 2000000,
+        callCount: 1,
+        lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 200000,
+        lastEstimatedWithoutBraincache: 2000000,
+      };
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 1.8M tokens (90% less) \u00b7 last: 1.8M\n');
+    });
+
+    it('caps displayed percentage at 98% when raw reduction would be 99% or higher', () => {
+      const stats = {
+        tokensSent: 100,
+        estimatedWithoutBraincache: 10000,
+        callCount: 1,
+        lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 100,
+        lastEstimatedWithoutBraincache: 10000,
+      };
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 10k tokens (98% less) \u00b7 last: 10k\n');
+    });
+
+    it('omits last-call suffix when lastEstimatedWithoutBraincache is missing (legacy stats)', () => {
       const stats = {
         tokensSent: 500,
         estimatedWithoutBraincache: 1000,
@@ -185,24 +223,16 @@ describe('statusline', () => {
       expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less)\n');
     });
 
-    it('returns formatted savings string for tokensSent=200000, estimatedWithoutBraincache=2000000 (90%)', () => {
+    it('omits last-call suffix when last call had no savings', () => {
       const stats = {
-        tokensSent: 200000,
-        estimatedWithoutBraincache: 2000000,
-        callCount: 1,
+        tokensSent: 500,
+        estimatedWithoutBraincache: 1000,
+        callCount: 2,
         lastUpdatedAt: new Date().toISOString(),
+        lastTokensSent: 300,
+        lastEstimatedWithoutBraincache: 300,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 1.8M tokens (90% less)\n');
-    });
-
-    it('caps displayed percentage at 98% when raw reduction would be 99% or higher', () => {
-      const stats = {
-        tokensSent: 100,
-        estimatedWithoutBraincache: 10000,
-        callCount: 1,
-        lastUpdatedAt: new Date().toISOString(),
-      };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 10k tokens (98% less)\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less)\n');
     });
   });
 });
