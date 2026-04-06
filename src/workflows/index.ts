@@ -308,8 +308,8 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   }
 
   // Step 6c: Load stored hashes (skip if force)
-  const { hashes: storedHashes, tokenCounts: existingTokenCounts } = force
-    ? { hashes: {} as Record<string, string>, tokenCounts: {} as Record<string, number> }
+  const { hashes: storedHashes, tokenCounts: existingTokenCounts, stats: existingStats } = force
+    ? { hashes: {} as Record<string, string>, tokenCounts: {} as Record<string, number>, stats: {} as Record<string, import('../lib/types.js').FileStatEntry> }
     : await readFileHashes(rootDir);
 
   const { newFiles, changedFiles, removedFiles, unchangedFiles } = computeFileDiffs(files, currentHashes, storedHashes);
@@ -353,7 +353,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     for (const filePath of files) {
       updatedHashes[filePath] = currentHashes[filePath];
     }
-    await writeFileHashes(rootDir, { hashes: updatedHashes, tokenCounts: existingTokenCounts });
+    await writeFileHashes(rootDir, { hashes: updatedHashes, tokenCounts: existingTokenCounts, stats: existingStats });
 
     // Update index state with current totals
     const totalFiles = unchangedFiles.length;
@@ -434,7 +434,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
       tokenCounts[fp] = count;
     }
   }
-  await writeFileHashes(rootDir, { hashes: updatedHashes, tokenCounts });
+  await writeFileHashes(rootDir, { hashes: updatedHashes, tokenCounts, stats: existingStats });
 
   // Step 9b: Write index state
   const totalFiles = files.length;
