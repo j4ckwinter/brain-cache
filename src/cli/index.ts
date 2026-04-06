@@ -1,4 +1,6 @@
 import { Command } from "commander";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { formatTokenSavings } from "../lib/format.js";
 
 declare const __BRAIN_CACHE_VERSION__: string | undefined;
@@ -6,7 +8,7 @@ const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
   ? __BRAIN_CACHE_VERSION__
   : "dev";
 
-const program = new Command();
+export const program = new Command();
 
 program
   .name("brain-cache")
@@ -119,10 +121,16 @@ program
     );
   });
 
-(async () => {
-  await program.parseAsync();
-})().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`Error: ${message}\n`);
-  process.exit(1);
-});
+const thisFile = fileURLToPath(import.meta.url);
+const entryScript = process.argv[1] ? resolve(process.argv[1]) : "";
+const isMain = entryScript !== "" && entryScript === thisFile;
+
+if (isMain) {
+  (async () => {
+    await program.parseAsync();
+  })().catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`Error: ${message}\n`);
+    process.exit(1);
+  });
+}

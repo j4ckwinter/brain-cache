@@ -19,6 +19,16 @@ interface RawChunkRow {
   _distance: number;
 }
 
+/** LanceDB may return `vector` as a plain array, TypedArray, or Arrow-backed value without `.every`. */
+function isStoredVectorAllZero(vec: unknown): boolean {
+  if (vec == null) return false;
+  if (Array.isArray(vec)) {
+    return vec.every((v) => v === 0);
+  }
+  const arr = Array.from(vec as ArrayLike<number>);
+  return arr.every((v) => v === 0);
+}
+
 // Multi-word phrase patterns for trace mode — explicit call-path / flow queries
 const TRACE_KEYWORDS = [
   'trace the', 'trace flow', 'call path', 'flow of', 'follows from',
@@ -97,7 +107,7 @@ export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
  * Extracts meaningful tokens from a query for filename/name matching.
  * Splits on whitespace and punctuation, lowercases, and filters short tokens.
  */
-function extractQueryTokens(query: string): string[] {
+export function extractQueryTokens(query: string): string[] {
   return query
     .toLowerCase()
     .split(/[\s.,;:!?'"()\[\]{}/\\]+/)
@@ -133,7 +143,7 @@ function splitCamelCase(name: string): string[] {
  * - 0.8: Filename stem exact match — any query token equals the filename stem (without extension)
  * - fallback: Original partial token presence (matchCount / queryTokens.length)
  */
-function computeKeywordBoost(chunk: RetrievedChunk, queryTokens: string[]): number {
+export function computeKeywordBoost(chunk: RetrievedChunk, queryTokens: string[]): number {
   if (queryTokens.length === 0) return 0;
 
   const fileName = chunk.filePath.split('/').pop()?.toLowerCase() ?? '';
@@ -252,8 +262,8 @@ export async function searchChunks(
   const chunks = (rows as RawChunkRow[])
     .filter((r) => r._distance <= opts.distanceThreshold)
     .filter((r) => {
-      const vec = (r as unknown as { vector?: number[] }).vector;
-      return !vec || !vec.every(v => v === 0);
+      const vec = (r as unknown as { vector?: unknown }).vector;
+      return vec == null || !isStoredVectorAllZero(vec);
     })
     .map((r) => ({
       id: r.id,
@@ -302,4 +312,46 @@ export function deduplicateChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
     seen.add(c.id);
     return true;
   });
+}
+
+/**
+ * Keyword-only search fallback when Ollama is unavailable.
+ * Loads all chunks from LanceDB and scores them using computeKeywordBoost.
+ * Per FEAT-03: reuses existing keyword scoring logic, no new algorithm.
+ *
+ * SCALE: loads all chunks into memory — only suitable for indexes under ~10k rows.
+ * This is a degraded-mode emergency path, not a primary search path.
+ */
+export async function keywordSearchChunks(
+  table: Table,
+  query: string,
+  limit: number,
+): Promise<RetrievedChunk[]> {
+  const rows = await table.query().toArray();
+  const queryTokens = extractQueryTokens(query);
+
+  if (queryTokens.length === 0) return [];
+
+  const scored = rows.map((r: Record<string, unknown>) => {
+    const chunk: RetrievedChunk = {
+      id: r.id as string,
+      filePath: r.file_path as string,
+      chunkType: r.chunk_type as string,
+      scope: (r.scope as string) ?? null,
+      name: (r.name as string) ?? null,
+      content: r.content as string,
+      startLine: r.start_line as number,
+      endLine: r.end_line as number,
+      similarity: 0,
+      fileType: (r.file_type as string) ?? 'source',
+    };
+    const score = computeKeywordBoost(chunk, queryTokens);
+    return { chunk, score };
+  });
+
+  return scored
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ chunk }) => chunk);
 }

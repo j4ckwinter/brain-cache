@@ -100,6 +100,7 @@ export function createMcpServer(): McpServer {
     chunks: RetrievedChunk[],
     query: string,
     precomputed?: TokenSavingsResult,
+    options?: { fallback?: boolean },
   ) {
     const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } =
       precomputed ?? await computeTokenSavings(chunks);
@@ -112,10 +113,16 @@ export function createMcpServer(): McpServer {
     const pipeline = formatPipelineLabel(["embed", "search", "dedup"]);
     const footer = `---\n${savings}\nPipeline: ${pipeline}`;
     const summary = `Found ${chunks.length} result${chunks.length !== 1 ? "s" : ""} for "${query}".`;
+    const fallbackPrefix = options?.fallback
+      ? "[FALLBACK] Ollama is unavailable. Results are keyword-matched only — semantic search disabled.\n\n"
+      : "";
     return {
       content: [{
         type: "text" as const,
-        text: formatToolResponse(summary, `${formatSearchResults(chunks)}\n\n${footer}`),
+        text: formatToolResponse(
+          summary,
+          `${fallbackPrefix}${formatSearchResults(chunks)}\n\n${footer}`,
+        ),
       }],
     };
   }
@@ -165,15 +172,15 @@ export function createMcpServer(): McpServer {
       async ({ query, limit, path }) => {
         const resolvedPath = resolve(path ?? ".");
         validateIndexPath(resolvedPath);
-        const chunks = await runSearch(query, { limit, path: resolvedPath });
+        const { chunks, fallback } = await runSearch(query, { limit, path: resolvedPath });
         const savings = await computeTokenSavings(chunks);
         accumulateStats({
           tokensSent: savings.tokensSent,
           estimatedWithoutBraincache: savings.estimatedWithoutBraincache,
         }).catch((err) => log.warn({ err }, "stats accumulation failed"));
-        return buildSearchResponse(chunks, query, savings);
+        return buildSearchResponse(chunks, query, savings, { fallback });
       },
-      { autoIndex: true, operationName: "Search" },
+      { autoIndex: true, operationName: "Search", allowOllamaDown: true },
     ),
   );
 

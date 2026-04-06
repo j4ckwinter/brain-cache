@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import ollama from 'ollama';
 import {
   detectCapabilities,
@@ -10,6 +11,8 @@ import {
   modelMatches,
 } from '../services/ollama.js';
 import { PROFILE_PATH } from '../lib/config.js';
+import { readIndexState } from '../services/lancedb.js';
+import { checkIndexStaleness } from '../lib/staleness.js';
 
 /**
  * Reports system health: saved profile, live hardware detection, and Ollama status.
@@ -19,7 +22,7 @@ import { PROFILE_PATH } from '../lib/config.js';
  *
  * All output goes to stderr — zero stdout output (per D-16).
  */
-export async function runDoctor(): Promise<void> {
+export async function runDoctor(targetPath?: string): Promise<void> {
   // Step 1: Read saved profile
   const saved = await requireProfile();
 
@@ -67,4 +70,20 @@ export async function runDoctor(): Promise<void> {
         `       ollama pull ${saved.embeddingModel}\n`
       : '')
   );
+
+  // Step 6: Check index staleness (FEAT-01)
+  const rootDir = resolve(targetPath ?? '.');
+  const indexState = await readIndexState(rootDir);
+  if (indexState) {
+    const staleness = await checkIndexStaleness(rootDir, indexState.indexedAt);
+    if (staleness.stale) {
+      process.stderr.write(
+        '\nStaleness warning: Index may be out of date.\n' +
+          `  Last indexed:    ${indexState.indexedAt}\n` +
+          `  Modified file:   ${staleness.stalestFile}\n` +
+          `  File modified:   ${staleness.stalestMtime}\n` +
+          `  Run 'brain-cache index' to update.\n`,
+      );
+    }
+  }
 }

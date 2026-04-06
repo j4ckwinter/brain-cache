@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import type { Table } from '@lancedb/lancedb';
 import { requireProfile, requireOllama } from '../lib/guards.js';
 import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
@@ -34,6 +35,176 @@ import { formatTokenSavings } from '../lib/format.js';
  */
 function hashContent(content: string): string {
   return createHash('sha256').update(content, 'utf-8').digest('hex');
+}
+
+export interface FileDiffResult {
+  newFiles: string[];
+  changedFiles: string[];
+  removedFiles: string[];
+  unchangedFiles: string[];
+}
+
+/**
+ * Classifies crawled files against stored hashes into new / changed / removed / unchanged sets.
+ */
+export function computeFileDiffs(
+  files: string[],
+  currentHashes: Record<string, string>,
+  storedHashes: Record<string, string>,
+): FileDiffResult {
+  const newFiles: string[] = [];
+  const changedFiles: string[] = [];
+  const removedFiles: string[] = [];
+  const unchangedFiles: string[] = [];
+  const crawledSet = new Set(files);
+
+  for (const filePath of files) {
+    const currentHash = currentHashes[filePath];
+    if (!(filePath in storedHashes)) {
+      newFiles.push(filePath);
+    } else if (storedHashes[filePath] !== currentHash) {
+      changedFiles.push(filePath);
+    } else {
+      unchangedFiles.push(filePath);
+    }
+  }
+
+  for (const filePath of Object.keys(storedHashes)) {
+    if (!crawledSet.has(filePath)) {
+      removedFiles.push(filePath);
+    }
+  }
+
+  return { newFiles, changedFiles, removedFiles, unchangedFiles };
+}
+
+/** Mutable stats for the chunk+embed pipeline (REFAC-01). */
+export interface IndexGroupStats {
+  totalRawTokens: number;
+  totalChunkTokens: number;
+  totalChunks: number;
+  processedFiles: number;
+  processedChunks: number;
+  skippedChunks: number;
+}
+
+/**
+ * Chunks a batch of files, embeds in DEFAULT_BATCH_SIZE batches, inserts rows and edges.
+ */
+export async function processFileGroup(
+  group: string[],
+  contentMap: Map<string, string>,
+  table: Table,
+  edgesTable: Table,
+  profile: { embeddingModel: string },
+  dim: number,
+  stats: IndexGroupStats,
+  tokenCounts: Record<string, number>,
+  filesToProcessLength: number,
+): Promise<void> {
+  const groupChunks: CodeChunk[] = [];
+  const groupEdges: CallEdge[] = [];
+
+  for (const filePath of group) {
+    const content = contentMap.get(filePath)!;
+    const rawTokens = countChunkTokens(content);
+    stats.totalRawTokens += rawTokens;
+    tokenCounts[filePath] = rawTokens;
+    try {
+      const { chunks, edges } = await chunkFile(filePath, content);
+      groupChunks.push(...chunks);
+      groupEdges.push(...edges);
+    } catch (err) {
+      log.warn({ filePath, err }, 'Failed to chunk file, skipping');
+    }
+  }
+  stats.processedFiles += group.length;
+  stats.totalChunks += groupChunks.length;
+
+  if (stats.processedFiles % 10 === 0 || stats.processedFiles === filesToProcessLength) {
+    process.stderr.write(`brain-cache: chunked ${stats.processedFiles}/${filesToProcessLength} files\n`);
+  }
+
+  for (let offset = 0; offset < groupChunks.length; offset += DEFAULT_BATCH_SIZE) {
+    const batch = groupChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
+
+    const embeddableBatch: Array<{ chunk: CodeChunk; tokens: number }> = [];
+    for (const chunk of batch) {
+      const tokens = countChunkTokens(chunk.content);
+      if (tokens > EMBED_MAX_TOKENS) {
+        stats.skippedChunks++;
+        continue;
+      }
+      embeddableBatch.push({ chunk, tokens });
+    }
+
+    if (embeddableBatch.length === 0) continue;
+
+    const texts = embeddableBatch.map(({ chunk }) => chunk.content);
+    stats.totalChunkTokens += embeddableBatch.reduce((sum, { tokens }) => sum + tokens, 0);
+    const { embeddings: vectors, skipped, zeroVectorIndices } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
+    stats.skippedChunks += skipped;
+
+    if (zeroVectorIndices.size > 0) {
+      log.warn({ count: zeroVectorIndices.size }, 'Skipping zero-vector chunks (content too large to embed)');
+    }
+
+    const rows: ChunkRow[] = embeddableBatch
+      .map(({ chunk }, i) => ({ chunk, i }))
+      .filter(({ i }) => !zeroVectorIndices.has(i))
+      .map(({ chunk, i }) => ({
+        id: chunk.id,
+        file_path: chunk.filePath,
+        chunk_type: chunk.chunkType,
+        scope: chunk.scope,
+        name: chunk.name,
+        content: chunk.content,
+        start_line: chunk.startLine,
+        end_line: chunk.endLine,
+        file_type: classifyFileType(chunk.filePath),
+        vector: vectors[i],
+      }));
+
+    await insertChunks(table, rows);
+    stats.processedChunks += batch.length;
+    process.stderr.write(
+      `brain-cache: embedding ${stats.processedChunks}/${stats.totalChunks} chunks (${Math.round((stats.processedChunks / stats.totalChunks) * 100)}%)\n`,
+    );
+  }
+
+  if (groupEdges.length > 0) {
+    await insertEdges(edgesTable, groupEdges);
+  }
+}
+
+export function printSummary(params: {
+  totalFiles: number;
+  totalChunks: number;
+  embeddingModel: string;
+  totalChunkTokens: number;
+  totalRawTokens: number;
+  rootDir: string;
+}): void {
+  const { totalFiles, totalChunks, embeddingModel, totalChunkTokens, totalRawTokens, rootDir } = params;
+  const reductionPct = totalRawTokens > 0
+    ? Math.round((1 - totalChunkTokens / totalRawTokens) * 100)
+    : 0;
+
+  const savingsBlock = formatTokenSavings({
+    tokensSent: totalChunkTokens,
+    estimatedWithout: totalRawTokens,
+    reductionPct,
+    filesInContext: totalFiles,
+  }).split('\n').map(line => `  ${line}`).join('\n');
+
+  process.stderr.write(
+    `brain-cache: indexing complete\n` +
+    `  Files:                     ${totalFiles}\n` +
+    `  Chunks:                    ${totalChunks}\n` +
+    `  Model:                     ${embeddingModel}\n` +
+    `${savingsBlock}\n` +
+    `  Stored in:                 ${rootDir}/.brain-cache/\n`,
+  );
 }
 
 /**
@@ -139,30 +310,8 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   const { hashes: storedHashes, tokenCounts: existingTokenCounts } = force
     ? { hashes: {} as Record<string, string>, tokenCounts: {} as Record<string, number> }
     : await readFileHashes(rootDir);
-  const crawledSet = new Set(files);
 
-  // Step 6d: Compute diff sets
-  const newFiles: string[] = [];
-  const changedFiles: string[] = [];
-  const removedFiles: string[] = [];
-  const unchangedFiles: string[] = [];
-
-  for (const filePath of files) {
-    const currentHash = currentHashes[filePath];
-    if (!(filePath in storedHashes)) {
-      newFiles.push(filePath);
-    } else if (storedHashes[filePath] !== currentHash) {
-      changedFiles.push(filePath);
-    } else {
-      unchangedFiles.push(filePath);
-    }
-  }
-
-  for (const filePath of Object.keys(storedHashes)) {
-    if (!crawledSet.has(filePath)) {
-      removedFiles.push(filePath);
-    }
-  }
+  const { newFiles, changedFiles, removedFiles, unchangedFiles } = computeFileDiffs(files, currentHashes, storedHashes);
 
   // Step 6e: Log incremental stats
   process.stderr.write(
@@ -228,108 +377,35 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
   }
 
   // Steps 7+8: Group-based chunk + embed pipeline (PERF-02, DEBT-06)
-  let totalRawTokens = 0;
-  let totalChunkTokens = 0;
-  let totalChunks = 0;
-  let processedFiles = 0;
-  let processedChunks = 0;
-  let skippedChunks = 0;
-  // Per-file token counts for file-hashes.json (PERF-03)
+  const stats: IndexGroupStats = {
+    totalRawTokens: 0,
+    totalChunkTokens: 0,
+    totalChunks: 0,
+    processedFiles: 0,
+    processedChunks: 0,
+    skippedChunks: 0,
+  };
   const tokenCounts: Record<string, number> = {};
 
   for (let groupStart = 0; groupStart < filesToProcess.length; groupStart += FILE_READ_CONCURRENCY) {
     const group = filesToProcess.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
-    const groupChunks: CodeChunk[] = [];
-    const groupEdges: CallEdge[] = [];
-
-    for (const filePath of group) {
-      const content = contentMap.get(filePath)!;
-      const rawTokens = countChunkTokens(content);
-      totalRawTokens += rawTokens;
-      tokenCounts[filePath] = rawTokens;
-      try {
-        const { chunks, edges } = await chunkFile(filePath, content);
-        groupChunks.push(...chunks);
-        groupEdges.push(...edges);
-      } catch (err) {
-        log.warn({ filePath, err }, 'Failed to chunk file, skipping');
-      }
-    }
-    processedFiles += group.length;
-    totalChunks += groupChunks.length;
-
-    if (processedFiles % 10 === 0 || groupStart + FILE_READ_CONCURRENCY >= filesToProcess.length) {
-      process.stderr.write(`brain-cache: chunked ${processedFiles}/${filesToProcess.length} files\n`);
-    }
-
-    // Embed and store this group's chunks in DEFAULT_BATCH_SIZE batches
-    for (let offset = 0; offset < groupChunks.length; offset += DEFAULT_BATCH_SIZE) {
-      const batch = groupChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
-
-      // Pre-flight: skip chunks that exceed the embedding model's token limit.
-      // Sending oversized input causes Ollama to throw "input length exceeds the
-      // context length", crashing the entire indexing run.
-      // We count tokens with the Anthropic tokenizer. nomic-embed-text runs on
-      // llama.cpp with a BERT tokenizer that produces ~1.4x more tokens for code,
-      // so EMBED_MAX_TOKENS is set conservatively (1400 Anthropic ≈ 1960 BERT < 2048
-      // real context limit). truncate: true in ollama.embed() is a hard safety net.
-      // DEBT-06: single-pass token counting — count once per chunk, not in filter + sum.
-      const embeddableBatch: Array<{ chunk: CodeChunk; tokens: number }> = [];
-      for (const chunk of batch) {
-        const tokens = countChunkTokens(chunk.content);
-        if (tokens > EMBED_MAX_TOKENS) {
-          skippedChunks++;
-          continue;
-        }
-        embeddableBatch.push({ chunk, tokens });
-      }
-
-      if (embeddableBatch.length === 0) continue;
-
-      const texts = embeddableBatch.map(({ chunk }) => chunk.content);
-      totalChunkTokens += embeddableBatch.reduce((sum, { tokens }) => sum + tokens, 0);
-      const { embeddings: vectors, skipped, zeroVectorIndices } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
-      skippedChunks += skipped;
-
-      if (zeroVectorIndices.size > 0) {
-        log.warn({ count: zeroVectorIndices.size }, 'Skipping zero-vector chunks (content too large to embed)');
-      }
-
-      // Build rows, skipping any chunk whose embedding fell back to a zero vector.
-      // vectors[i] corresponds to embeddableBatch[i] — zeroVectorIndices tracks which are zero.
-      const rows: ChunkRow[] = embeddableBatch
-        .map(({ chunk }, i) => ({ chunk, i }))
-        .filter(({ i }) => !zeroVectorIndices.has(i))
-        .map(({ chunk, i }) => ({
-          id: chunk.id,
-          file_path: chunk.filePath,
-          chunk_type: chunk.chunkType,
-          scope: chunk.scope,
-          name: chunk.name,
-          content: chunk.content,
-          start_line: chunk.startLine,
-          end_line: chunk.endLine,
-          file_type: classifyFileType(chunk.filePath),
-          vector: vectors[i],
-        }));
-
-      await insertChunks(table, rows);
-      processedChunks += batch.length;
-      process.stderr.write(
-        `brain-cache: embedding ${processedChunks}/${totalChunks} chunks (${Math.round((processedChunks / totalChunks) * 100)}%)\n`
-      );
-    }
-
-    // Insert call/import edges for this group
-    if (groupEdges.length > 0) {
-      await insertEdges(edgesTable, groupEdges);
-    }
+    await processFileGroup(
+      group,
+      contentMap,
+      table,
+      edgesTable,
+      profile,
+      dim,
+      stats,
+      tokenCounts,
+      filesToProcess.length,
+    );
   }
-  if (skippedChunks > 0) {
-    process.stderr.write(`brain-cache: ${skippedChunks} chunks skipped (too large for model context)\n`);
+  if (stats.skippedChunks > 0) {
+    process.stderr.write(`brain-cache: ${stats.skippedChunks} chunks skipped (too large for model context)\n`);
   }
   process.stderr.write(
-    `brain-cache: ${totalChunks} chunks from ${filesToProcess.length} files\n`
+    `brain-cache: ${stats.totalChunks} chunks from ${filesToProcess.length} files\n`
   );
 
   // Log edge stats
@@ -361,37 +437,24 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
 
   // Step 9b: Write index state
   const totalFiles = files.length;
-  const chunkCount = await table.countRows();
   await writeIndexState(rootDir, {
     version: 1,
     embeddingModel: profile.embeddingModel,
     dimension: dim,
     indexedAt: new Date().toISOString(),
     fileCount: totalFiles,
-    chunkCount,
+    chunkCount: await table.countRows(),
     totalTokens: allFilesTotalTokens,
   });
 
-  // Step 10: Print summary with token savings stats
-  const reductionPct = totalRawTokens > 0
-    ? Math.round((1 - totalChunkTokens / totalRawTokens) * 100)
-    : 0;
-
-  const savingsBlock = formatTokenSavings({
-    tokensSent: totalChunkTokens,
-    estimatedWithout: totalRawTokens,
-    reductionPct,
-    filesInContext: totalFiles,
-  }).split('\n').map(line => `  ${line}`).join('\n');
-
-  process.stderr.write(
-    `brain-cache: indexing complete\n` +
-    `  Files:                     ${totalFiles}\n` +
-    `  Chunks:                    ${totalChunks}\n` +
-    `  Model:                     ${profile.embeddingModel}\n` +
-    `${savingsBlock}\n` +
-    `  Stored in:                 ${rootDir}/.brain-cache/\n`
-  );
+  printSummary({
+    totalFiles,
+    totalChunks: stats.totalChunks,
+    embeddingModel: profile.embeddingModel,
+    totalChunkTokens: stats.totalChunkTokens,
+    totalRawTokens: stats.totalRawTokens,
+    rootDir,
+  });
   } finally {
     // Restore pino log level and stderr write
     setLogLevel(previousLogLevel as Parameters<typeof setLogLevel>[0]);

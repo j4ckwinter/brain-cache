@@ -163,19 +163,32 @@ describe('chunkFile - Rust', () => {
   });
 });
 
-describe('chunkFile - unsupported', () => {
-  it('returns empty chunks for .txt extension', async () => {
-    const { chunks } = await chunkFile('readme.txt', 'some text here');
-    expect(chunks).toEqual([]);
+describe('chunkFile - documentation', () => {
+  it('chunks markdown with ## sections', async () => {
+    const { chunks, edges } = await chunkFile(
+      'readme.md',
+      '## Hello\n\nWorld\n\n## Bye\n\nLater',
+    );
+    expect(edges).toEqual([]);
+    expect(chunks.map((c) => c.name)).toContain('Hello');
+    expect(chunks.map((c) => c.name)).toContain('Bye');
   });
 
+  it('chunks plain text with paragraph breaks', async () => {
+    const { chunks, edges } = await chunkFile('notes.txt', 'para1\n\npara2');
+    expect(edges).toEqual([]);
+    expect(chunks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('returns empty chunks for unknown extension', async () => {
+    const { chunks } = await chunkFile('unknown.xyz', 'content');
+    expect(chunks).toEqual([]);
+  });
+});
+
+describe('chunkFile - unsupported', () => {
   it('returns empty chunks for .json extension', async () => {
     const { chunks } = await chunkFile('data.json', '{"key": "value"}');
-    expect(chunks).toEqual([]);
-  });
-
-  it('returns empty chunks for .md extension', async () => {
-    const { chunks } = await chunkFile('README.md', '# Title\n\nSome text.');
     expect(chunks).toEqual([]);
   });
 });

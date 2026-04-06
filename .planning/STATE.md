@@ -2,22 +2,22 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: Codebase Hardening
-status: verifying
-stopped_at: Completed 44-04-PLAN.md
-last_updated: "2026-04-06T08:26:07.618Z"
+status: complete
+stopped_at: null
+last_updated: "2026-04-06T18:00:00.000Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 8
-  completed_plans: 6
-  percent: 0
+  completed_phases: 5
+  total_plans: 19
+  completed_plans: 14
+  percent: 100
 ---
 
 # Project State: Brain-Cache
 
-**Last updated:** 2026-04-05
-**Updated by:** roadmapper (v3.4 Codebase Hardening)
+**Last updated:** 2026-04-06
+**Updated by:** execute-phase 47 (v3.4 Codebase Hardening)
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 44 — debt-reduction-and-performance
+**Current focus:** v3.4 milestone complete — Phase 47 (47-01 — 47-03) executed; next milestone TBD when roadmap extends
 
 ---
 
 ## Current Position
 
-Phase: 44 (debt-reduction-and-performance) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 47 (test coverage / refactoring) — COMPLETE
+Plan: 3 of 3 executed (47-01-SUMMARY.md — 47-03-SUMMARY.md)
+Status: v3.4 Codebase Hardening milestone complete (Phases 43–47)
 Last activity: 2026-04-06
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] v3.4: Phases 43–47 complete
 
 ---
 
@@ -49,7 +49,6 @@ Progress: [░░░░░░░░░░] 0%
 - COR-03 (cross-process locking) MUST land before PERF-02 (batch deletions) — batching is only safe under the lock
 - DEBT-02 (workflow guards) before DEBT-01 (withGuards wrapper) — guards enable the wrapper
 - FEAT-04 (crawler extensions) after FEAT-02 (Markdown chunker) — crawler needs chunker support first
-- REFAC-01/02 (large file splits) after DEBT-01/02 (guard extraction) — refactor after duplication removed
 
 ### Key Pitfalls (from research)
 
@@ -66,11 +65,11 @@ None.
 
 ## Session Continuity
 
-**Last session:** 2026-04-06T08:26:07.614Z
+**Last session:** 2026-04-06
 
-**Stopped at:** Completed 44-04-PLAN.md
+**Stopped at:** Phase 47 executed (47-01 — 47-03): index refactor + CLI/edge tests + E2E pipeline; retriever vector coercion fix for LanceDB row shapes
 
-**Next action:** `/gsd:plan-phase 43`
+**Next action:** Extend roadmap / choose next milestone when product planning resumes
 
 ---
 

@@ -16,7 +16,7 @@ Requirements for Codebase Hardening milestone. Each maps to roadmap phases.
 
 ### Tech Debt
 
-- [ ] **DEBT-01**: MCP tool handlers use a shared `withGuards()` wrapper for profile/Ollama checks and auto-index retry
+- [x] **DEBT-01**: MCP tool handlers use a shared `withGuards()` wrapper for profile/Ollama checks and auto-index retry
 - [x] **DEBT-02**: Workflow functions use shared `requireProfile()` and `requireOllama()` guard helpers
 - [x] **DEBT-03**: MCP server is instantiated via `createMcpServer()` factory function (not module-level singleton)
 - [x] **DEBT-04**: `init.ts` uses async `fs/promises` instead of synchronous file operations
@@ -32,25 +32,25 @@ Requirements for Codebase Hardening milestone. Each maps to roadmap phases.
 
 ### Missing Features
 
-- [ ] **FEAT-01**: Index staleness is detected by comparing `indexedAt` timestamp against file modification times and surfaced as a warning
-- [ ] **FEAT-02**: Markdown, text, and RST files are indexed using heading-boundary chunking via marked Lexer
-- [ ] **FEAT-03**: When Ollama is unavailable, search falls back to keyword matching against chunk metadata
-- [ ] **FEAT-04**: Crawler's `SOURCE_EXTENSIONS` includes `.md`, `.txt`, and `.rst` extensions
+- [x] **FEAT-01**: Index staleness is detected by comparing `indexedAt` timestamp against file modification times and surfaced as a warning
+- [x] **FEAT-02**: Markdown, text, and RST files are indexed using heading-boundary chunking via marked Lexer
+- [x] **FEAT-03**: When Ollama is unavailable, search falls back to keyword matching against chunk metadata
+- [x] **FEAT-04**: Crawler's `SOURCE_EXTENSIONS` includes `.md`, `.txt`, and `.rst` extensions
 
 ### Test Coverage
 
-- [ ] **TEST-01**: E2E pipeline test covers init -> index -> search -> build_context with mocked embedder
-- [ ] **TEST-02**: CLI integration tests cover Commander argument parsing, option coercion, and error handling
-- [ ] **TEST-03**: MCP auto-index retry path is tested (fresh project triggers index then retries)
-- [ ] **TEST-04**: Edge deletion during incremental re-index is tested with file removal scenarios
-- [ ] **TEST-05**: Embedding dimension fallback path is tested for unknown models
-- [ ] **TEST-06**: askCodebase error paths are tested (API failures, rate limits, missing key)
+- [x] **TEST-01**: E2E pipeline test covers index → search → build_context in a tmpdir with mocked embedder (full `brain-cache init` is not exercised — it requires live Ollama)
+- [x] **TEST-02**: CLI integration tests cover Commander argument parsing, option coercion, and error handling
+- [x] **TEST-03**: MCP auto-index retry path is tested (fresh project triggers index then retries)
+- [x] **TEST-04**: Edge deletion during incremental re-index is tested with file removal scenarios
+- [x] **TEST-05**: Embedding dimension fallback path is tested for unknown models
+- [x] **TEST-06**: askCodebase error paths are tested (API failures, rate limits, missing key)
 
 ### Refactoring
 
-- [ ] **REFAC-01**: `src/workflows/index.ts` is split into named sub-functions (computeFileDiffs, processFileGroup, printSummary)
-- [ ] **REFAC-02**: `src/mcp/index.ts` tool handlers are extracted into individual handler files or use withGuards to reduce per-handler size
-- [ ] **REFAC-03**: Token savings computation is unified into a single `computeTokenSavings()` utility
+- [x] **REFAC-01**: `src/workflows/index.ts` is split into named sub-functions (computeFileDiffs, processFileGroup, printSummary)
+- [x] **REFAC-02**: `src/mcp/index.ts` tool handlers are extracted into individual handler files or use withGuards to reduce per-handler size
+- [x] **REFAC-03**: Token savings computation is unified into a single `computeTokenSavings()` utility
 
 ## Future Requirements
 
@@ -96,20 +96,20 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PERF-01 | Phase 44 | Complete |
 | PERF-02 | Phase 44 | Complete |
 | PERF-03 | Phase 44 | Complete |
-| TEST-03 | Phase 45 | Pending |
-| DEBT-01 | Phase 45 | Pending |
-| FEAT-01 | Phase 46 | Pending |
-| FEAT-02 | Phase 46 | Pending |
-| FEAT-03 | Phase 46 | Pending |
-| FEAT-04 | Phase 46 | Pending |
-| TEST-01 | Phase 47 | Pending |
-| TEST-02 | Phase 47 | Pending |
-| TEST-04 | Phase 47 | Pending |
-| TEST-05 | Phase 47 | Pending |
-| TEST-06 | Phase 47 | Pending |
-| REFAC-01 | Phase 47 | Pending |
-| REFAC-02 | Phase 47 | Pending |
-| REFAC-03 | Phase 47 | Pending |
+| TEST-03 | Phase 45 | Complete |
+| DEBT-01 | Phase 45 | Complete |
+| FEAT-01 | Phase 46 | Complete |
+| FEAT-02 | Phase 46 | Complete |
+| FEAT-03 | Phase 46 | Complete |
+| FEAT-04 | Phase 46 | Complete |
+| TEST-01 | Phase 47 | Complete |
+| TEST-02 | Phase 47 | Complete |
+| TEST-04 | Phase 47 | Complete |
+| TEST-05 | Phase 47 | Complete |
+| TEST-06 | Phase 47 | Complete |
+| REFAC-01 | Phase 47 | Complete |
+| REFAC-02 | Phase 47 | Complete |
+| REFAC-03 | Phase 47 | Complete |
 
 **Coverage:**
 - v3.4 requirements: 27 total
@@ -118,4 +118,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-05 — traceability populated after roadmap creation*
+*Last updated: 2026-04-06 — Phase 46–47 requirements marked complete; v3.4 coverage closed*

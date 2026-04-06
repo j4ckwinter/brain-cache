@@ -28,6 +28,8 @@ export const VECTOR_INDEX_THRESHOLD = 256; // rows needed before creating IVF_PQ
 export const EMBED_TIMEOUT_MS = 30_000; // per-batch timeout
 export const COLD_START_RETRY_DELAY_MS = 2_000; // wait before retry on first Ollama call
 export const EMBED_MAX_TOKENS = 8192; // nomic-embed-text context window
+/** Max Anthropic tokens per doc chunk before paragraph sub-splitting (~2100 nomic tokens, under 8192). */
+export const DOC_CHUNK_SIZE_THRESHOLD = 1500;
 
 // ── Search defaults ────────────────────────────────────────────────────────
 export const DEFAULT_SEARCH_LIMIT = 10;

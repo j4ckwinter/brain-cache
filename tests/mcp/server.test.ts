@@ -119,6 +119,7 @@ const fakeChunk = (id: string) => ({
   startLine: 1,
   endLine: 5,
   similarity: 0.95,
+  fileType: 'source',
 });
 
 const fakeContextResult = {
@@ -217,21 +218,23 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain("brain-cache init");
     });
 
-    it('returns isError when Ollama is not running', async () => {
+    it('runs search when Ollama is not running (keyword fallback inside runSearch)', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(false);
+      mockRunSearch.mockResolvedValue({ chunks: [fakeChunk('1')], fallback: true });
 
       const { handler } = registeredTools.get('search_codebase')!;
       const result = await handler({ query: 'find auth functions' });
 
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Ollama is not running');
+      expect(result.isError).toBeUndefined();
+      expect(mockRunSearch).toHaveBeenCalled();
+      expect(result.content[0].text).toContain('[FALLBACK]');
     });
 
     it('returns formatted results text on success', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunSearch.mockResolvedValue([fakeChunk('1'), fakeChunk('2')]);
+      mockRunSearch.mockResolvedValue({ chunks: [fakeChunk('1'), fakeChunk('2')], fallback: false });
 
       const { handler } = registeredTools.get('search_codebase')!;
       const result = await handler({ query: 'find auth functions', limit: 10 });
@@ -247,7 +250,7 @@ describe('MCP tool handlers', () => {
     it('passes limit and path options to runSearch', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunSearch.mockResolvedValue([]);
+      mockRunSearch.mockResolvedValue({ chunks: [], fallback: false });
 
       const { handler } = registeredTools.get('search_codebase')!;
       await handler({ query: 'test query', limit: 20, path: '/my/project' });
@@ -271,7 +274,7 @@ describe('MCP tool handlers', () => {
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunSearch
         .mockRejectedValueOnce(new Error('No index found at /some/project'))
-        .mockResolvedValueOnce([fakeChunk('1')]);
+        .mockResolvedValueOnce({ chunks: [fakeChunk('1')], fallback: false });
       mockRunIndex.mockResolvedValue(undefined);
 
       const { handler } = registeredTools.get('search_codebase')!;

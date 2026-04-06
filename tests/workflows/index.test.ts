@@ -398,3 +398,184 @@ describe('runIndex', () => {
     );
   });
 });
+
+describe('computeFileDiffs', () => {
+  it('classifies new files when not in stored hashes', async () => {
+    const { computeFileDiffs } = await import('../../src/workflows/index.js');
+    const r = computeFileDiffs(['/a.ts'], { '/a.ts': 'h1' }, {});
+    expect(r.newFiles).toEqual(['/a.ts']);
+    expect(r.changedFiles).toEqual([]);
+    expect(r.removedFiles).toEqual([]);
+    expect(r.unchangedFiles).toEqual([]);
+  });
+
+  it('classifies changed files when hash differs', async () => {
+    const { computeFileDiffs } = await import('../../src/workflows/index.js');
+    const r = computeFileDiffs(['/a.ts'], { '/a.ts': 'new' }, { '/a.ts': 'old' });
+    expect(r.changedFiles).toEqual(['/a.ts']);
+    expect(r.newFiles).toEqual([]);
+  });
+
+  it('classifies unchanged files when hash matches', async () => {
+    const { computeFileDiffs } = await import('../../src/workflows/index.js');
+    const r = computeFileDiffs(['/a.ts'], { '/a.ts': 'same' }, { '/a.ts': 'same' });
+    expect(r.unchangedFiles).toEqual(['/a.ts']);
+  });
+
+  it('detects removed files present in stored but not crawled', async () => {
+    const { computeFileDiffs } = await import('../../src/workflows/index.js');
+    const r = computeFileDiffs(['/keep.ts'], { '/keep.ts': 'h' }, { '/keep.ts': 'h', '/gone.ts': 'x' });
+    expect(r.removedFiles).toEqual(['/gone.ts']);
+  });
+});
+
+describe('printSummary', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stderrOutput = [];
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    stderrWriteSpy.mockRestore();
+  });
+
+  it('writes completion lines and token savings labels', async () => {
+    const { printSummary } = await import('../../src/workflows/index.js');
+    printSummary({
+      totalFiles: 2,
+      totalChunks: 3,
+      embeddingModel: 'nomic-embed-text',
+      totalChunkTokens: 100,
+      totalRawTokens: 200,
+      rootDir: '/proj',
+    });
+    const out = stderrOutput.join('');
+    expect(out).toContain('indexing complete');
+    expect(out).toContain('Files:');
+    expect(out).toContain('Chunks:');
+    expect(out).toContain('Tokens sent to Claude:');
+  });
+});
+
+describe('incremental re-index file removal', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+  let runIndexLocal: (targetPath?: string, opts?: { force?: boolean }) => Promise<void>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+
+    mockAcquireIndexLock.mockResolvedValue(undefined);
+    mockReleaseIndexLock.mockResolvedValue(undefined);
+    mockReadProfile.mockResolvedValue({ ...mockProfile });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+    mockGetConnection.mockResolvedValue(mockDb);
+    mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
+    mockOpenOrCreateEdgesTable.mockResolvedValue({ delete: vi.fn(), countRows: vi.fn().mockResolvedValue(0) } as any);
+    mockInsertChunks.mockResolvedValue(undefined);
+    mockInsertEdges.mockResolvedValue(undefined);
+    mockWriteIndexState.mockResolvedValue(undefined);
+    mockWriteFileHashes.mockResolvedValue(undefined);
+    mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
+    mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
+    mockWithWriteLock.mockImplementation(async (fn) => fn());
+    (mockTable as any).countRows = vi.fn().mockResolvedValue(1);
+
+    const mod = await import('../../src/workflows/index.js');
+    runIndexLocal = mod.runIndex;
+  });
+
+  afterEach(() => {
+    stderrWriteSpy.mockRestore();
+    vi.clearAllMocks();
+  });
+
+  it('calls deleteChunksByFilePaths when a tracked file disappears from crawl', async () => {
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { '/proj/old.ts': 'abc', '/proj/keep.ts': 'def' },
+      tokenCounts: {},
+    });
+    mockCrawlSourceFiles.mockResolvedValue(['/proj/keep.ts']);
+    mockChunkFile.mockImplementation((fp, _c) => ({ chunks: [fakeChunk(fp, 1)], edges: [] }));
+
+    await runIndexLocal('/proj');
+
+    expect(mockDeleteChunksByFilePaths).toHaveBeenCalledWith(
+      mockTable,
+      expect.arrayContaining(['/proj/old.ts']),
+    );
+  });
+});
+
+describe('embedding dimension fallback', () => {
+  let stderrOutput: string[];
+  let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
+  let runIndexLocal: (targetPath?: string, opts?: { force?: boolean }) => Promise<void>;
+
+  beforeEach(async () => {
+    stderrOutput = [];
+    stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
+      stderrOutput.push(String(data));
+      return true;
+    });
+
+    mockAcquireIndexLock.mockResolvedValue(undefined);
+    mockReleaseIndexLock.mockResolvedValue(undefined);
+    mockReadProfile.mockResolvedValue({
+      ...mockProfile,
+      embeddingModel: 'unknown-model-xyz',
+    });
+    mockIsOllamaRunning.mockResolvedValue(true);
+    mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
+    mockReadFile.mockResolvedValue('const x = 1;' as any);
+    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
+    mockGetConnection.mockResolvedValue(mockDb);
+    mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
+    mockOpenOrCreateEdgesTable.mockResolvedValue({ delete: vi.fn(), countRows: vi.fn().mockResolvedValue(0) } as any);
+    mockInsertChunks.mockResolvedValue(undefined);
+    mockInsertEdges.mockResolvedValue(undefined);
+    mockWriteIndexState.mockResolvedValue(undefined);
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
+    mockWriteFileHashes.mockResolvedValue(undefined);
+    mockDeleteChunksByFilePaths.mockResolvedValue(undefined);
+    mockCreateVectorIndexIfNeeded.mockResolvedValue(undefined);
+    mockWithWriteLock.mockImplementation(async (fn) => fn());
+    (mockTable as any).countRows = vi.fn().mockResolvedValue(fakeFiles.length);
+
+    const mod = await import('../../src/workflows/index.js');
+    runIndexLocal = mod.runIndex;
+  });
+
+  afterEach(() => {
+    stderrWriteSpy.mockRestore();
+    vi.clearAllMocks();
+  });
+
+  it('warns and uses default 768 dimensions for unknown model', async () => {
+    await runIndexLocal('/project');
+
+    expect(mockOpenOrCreateChunkTable).toHaveBeenCalledWith(
+      mockDb,
+      '/project',
+      'unknown-model-xyz',
+      768,
+    );
+    const combined = stderrOutput.join('');
+    expect(combined).toContain("Unknown embedding model 'unknown-model-xyz'");
+    expect(combined).toContain('768');
+  });
+});

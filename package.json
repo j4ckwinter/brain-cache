@@ -44,6 +44,7 @@
     "dedent": "^1.7.2",
     "fast-glob": "^3.3.3",
     "ignore": "^7.0.5",
+    "marked": "^17.0.6",
     "ollama": "^0.6.3",
     "pino": "^9.0.0",
     "tree-sitter-wasms": "0.1.13",

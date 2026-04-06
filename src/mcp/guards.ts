@@ -12,6 +12,8 @@ export type McpResult = {
 export interface WithGuardsOptions {
   autoIndex?: boolean;
   operationName?: string;
+  /** When true, skip the Ollama-running check (search_codebase uses keyword fallback when Ollama is down). */
+  allowOllamaDown?: boolean;
 }
 
 /**
@@ -38,20 +40,22 @@ export function withGuards<T extends Record<string, unknown>>(
         ],
       };
     }
-    const running = await isOllamaRunning();
-    if (!running) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text" as const,
-            text: formatErrorEnvelope(
-              "Ollama is not running.",
-              "Start it with 'ollama serve'.",
-            ),
-          },
-        ],
-      };
+    if (!opts?.allowOllamaDown) {
+      const running = await isOllamaRunning();
+      if (!running) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: formatErrorEnvelope(
+                "Ollama is not running.",
+                "Start it with 'ollama serve'.",
+              ),
+            },
+          ],
+        };
+      }
     }
     try {
       return await handler(args);

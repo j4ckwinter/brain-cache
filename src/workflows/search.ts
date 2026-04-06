@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { requireProfile, requireOllama } from "../lib/guards.js";
+import { requireProfile } from "../lib/guards.js";
+import { isOllamaRunning } from "../services/ollama.js";
 import { getConnection, readIndexState } from "../services/lancedb.js";
 import { embedBatchWithRetry } from "../services/embedder.js";
 import {
@@ -7,6 +8,7 @@ import {
   deduplicateChunks,
   classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
+  keywordSearchChunks,
 } from "../services/retriever.js";
 import type { RetrievedChunk, SearchOptions } from "../lib/types.js";
 
@@ -15,15 +17,18 @@ export interface SearchRunOptions {
   path?: string;
 }
 
+export interface SearchResult {
+  chunks: RetrievedChunk[];
+  fallback: boolean;
+}
+
 export async function runSearch(
   query: string,
   opts?: SearchRunOptions,
-): Promise<RetrievedChunk[]> {
-  // 1. Read profile and check Ollama
-  const profile = await requireProfile();
-  await requireOllama();
+): Promise<SearchResult> {
+  await requireProfile();
+  const ollamaAvailable = await isOllamaRunning();
 
-  // 2. Resolve project root and read index state
   const rootDir = resolve(opts?.path ?? ".");
   const indexState = await readIndexState(rootDir);
   if (indexState === null) {
@@ -32,7 +37,6 @@ export async function runSearch(
     );
   }
 
-  // 4. Open database and table
   const db = await getConnection(rootDir);
   const tableNames = await db.tableNames();
   if (!tableNames.includes("chunks")) {
@@ -47,7 +51,22 @@ export async function runSearch(
     );
   }
 
-  // 5. Classify retrieval mode and determine search strategy
+  if (!ollamaAvailable) {
+    process.stderr.write(
+      "brain-cache: [FALLBACK] Ollama is unavailable. Using keyword search — results may be less relevant.\n",
+    );
+    const mode = classifyRetrievalMode(query);
+    const limit = opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit;
+    const results = await keywordSearchChunks(table, query, limit);
+    const deduped = deduplicateChunks(results);
+
+    process.stderr.write(
+      `brain-cache: found ${deduped.length} chunks via keyword fallback\n`,
+    );
+
+    return { chunks: deduped, fallback: true };
+  }
+
   const mode = classifyRetrievalMode(query);
   const strategy: SearchOptions = {
     limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
@@ -59,15 +78,12 @@ export async function runSearch(
     `brain-cache: searching (mode=${mode}, limit=${strategy.limit})\n`,
   );
 
-  // 6. Embed the query using the model from index state (not profile — prevents mismatch)
   const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
   const queryVector = vectors[0];
 
-  // 7. Search and deduplicate
   const results = await searchChunks(table, queryVector, strategy, query);
   const deduped = deduplicateChunks(results);
 
-  // 8. Print results summary to stderr
   process.stderr.write(
     `brain-cache: found ${deduped.length} chunks (${results.length} before dedup)\n`,
   );
@@ -77,5 +93,5 @@ export async function runSearch(
     );
   }
 
-  return deduped;
+  return { chunks: deduped, fallback: false };
 }

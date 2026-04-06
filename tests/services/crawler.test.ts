@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 describe('SOURCE_EXTENSIONS', () => {
-  it('contains .ts, .tsx, .js, .jsx, .py, .go, .rs', () => {
+  it('contains .ts, .tsx, .js, .jsx, .py, .go, .rs, .md, .txt, .rst', () => {
     expect(SOURCE_EXTENSIONS.has('.ts')).toBe(true);
     expect(SOURCE_EXTENSIONS.has('.tsx')).toBe(true);
     expect(SOURCE_EXTENSIONS.has('.js')).toBe(true);
@@ -26,6 +26,9 @@ describe('SOURCE_EXTENSIONS', () => {
     expect(SOURCE_EXTENSIONS.has('.py')).toBe(true);
     expect(SOURCE_EXTENSIONS.has('.go')).toBe(true);
     expect(SOURCE_EXTENSIONS.has('.rs')).toBe(true);
+    expect(SOURCE_EXTENSIONS.has('.md')).toBe(true);
+    expect(SOURCE_EXTENSIONS.has('.txt')).toBe(true);
+    expect(SOURCE_EXTENSIONS.has('.rst')).toBe(true);
   });
 });
 
@@ -53,7 +56,7 @@ describe('crawlSourceFiles', () => {
     expect(basenames).toContain('index.ts');
     expect(basenames).toContain('app.py');
     expect(basenames).toContain('main.go');
-    expect(basenames).not.toContain('README.md');
+    expect(basenames).toContain('README.md');
     expect(basenames).not.toContain('data.json');
     expect(basenames).not.toContain('image.png');
   });
@@ -120,13 +123,14 @@ describe('crawlSourceFiles', () => {
     }
   });
 
-  it('Test 5: returns empty array for directory with no source files', async () => {
-    // Only non-source files
+  it('Test 5: returns only doc files when no code files exist', async () => {
     await writeFile(join(tempDir, 'README.md'), '# readme');
     await writeFile(join(tempDir, 'config.json'), '{}');
 
     const files = await crawlSourceFiles(tempDir);
-    expect(files).toHaveLength(0);
+    const basenames = files.map(f => f.split('/').pop()!);
+    expect(basenames).toContain('README.md');
+    expect(basenames).not.toContain('config.json');
   });
 
   it('Test 6: excludes lock files (package-lock.json, yarn.lock, pnpm-lock.yaml, Cargo.lock)', async () => {

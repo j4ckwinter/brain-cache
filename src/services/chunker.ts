@@ -3,6 +3,7 @@ import { dirname, join, extname, resolve } from 'node:path';
 import { Parser, Language, type Node } from 'web-tree-sitter';
 import { childLogger } from './logger.js';
 import type { CodeChunk, CallEdge, ChunkResult } from '../lib/types.js';
+import { chunkDocFile } from './docChunker.js';
 
 // Captured at module scope — esbuild rewrites import.meta.url inside callbacks.
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -208,6 +209,10 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   const parser = await getParser(ext);
 
   if (!parser) {
+    if (ext === '.md' || ext === '.txt' || ext === '.rst') {
+      const chunks = chunkDocFile(filePath, content, ext);
+      return { chunks, edges: [] };
+    }
     return { chunks: [], edges: [] };
   }
 

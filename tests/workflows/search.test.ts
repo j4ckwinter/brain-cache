@@ -21,6 +21,7 @@ vi.mock('../../src/services/embedder.js', () => ({
 vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
+  keywordSearchChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
   RETRIEVAL_STRATEGIES: {
     lookup:  { limit: 5,  distanceThreshold: 0.4 },
@@ -36,6 +37,7 @@ import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
   deduplicateChunks,
+  keywordSearchChunks,
   classifyRetrievalMode,
 } from '../../src/services/retriever.js';
 
@@ -46,6 +48,7 @@ const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
+const mockKeywordSearchChunks = vi.mocked(keywordSearchChunks);
 const mockClassifyRetrievalMode = vi.mocked(classifyRetrievalMode);
 
 const mockProfile = {
@@ -78,6 +81,7 @@ const fakeChunk = (id: string) => ({
   startLine: 1,
   endLine: 5,
   similarity: 0.9,
+  fileType: 'source',
 });
 
 const queryVector = new Array(1024).fill(0.1);
@@ -126,7 +130,8 @@ describe('runSearch', () => {
     const rawChunks = [fakeChunk('a'), fakeChunk('b')];
     const dedupedChunks = [fakeChunk('a'), fakeChunk('b')];
     mockSearchChunks.mockResolvedValue(rawChunks);
-    mockDeduplicateChunks.mockReturnValue(dedupedChunks);
+    mockDeduplicateChunks.mockImplementation((c) => c);
+    mockKeywordSearchChunks.mockResolvedValue([fakeChunk('kw')]);
 
     // Dynamically import after mocks are in place
     const mod = await import('../../src/workflows/search.js');
@@ -177,11 +182,12 @@ describe('runSearch', () => {
     expect(mockDeduplicateChunks).toHaveBeenCalledWith(rawChunks);
   });
 
-  it('returns deduplicated chunks', async () => {
+  it('returns deduplicated chunks with fallback false when Ollama is up', async () => {
     const dedupedChunks = [fakeChunk('only-one')];
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     const result = await runSearch('test query');
-    expect(result).toEqual(dedupedChunks);
+    expect(result.fallback).toBe(false);
+    expect(result.chunks).toEqual(dedupedChunks);
   });
 
   it('writes search progress to stderr', async () => {
@@ -208,9 +214,32 @@ describe('runSearch', () => {
     await expect(runSearch('test query')).rejects.toThrow("No profile found. Run 'brain-cache init' first.");
   });
 
-  it('throws when Ollama is not running', async () => {
+  it('uses keyword fallback when Ollama is not running', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
-    await expect(runSearch('test query')).rejects.toThrow('Ollama is not running');
+    const kw = [fakeChunk('kw')];
+    mockKeywordSearchChunks.mockResolvedValue(kw);
+    mockDeduplicateChunks.mockReturnValue(kw);
+
+    const result = await runSearch('compression function test');
+
+    expect(result.fallback).toBe(true);
+    expect(result.chunks).toEqual(kw);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    expect(mockSearchChunks).not.toHaveBeenCalled();
+    expect(mockKeywordSearchChunks).toHaveBeenCalled();
+    const combined = stderrOutput.join('');
+    expect(combined).toContain('[FALLBACK]');
+  });
+
+  it('returns empty chunks with fallback true when Ollama is down and no keyword matches', async () => {
+    mockIsOllamaRunning.mockResolvedValue(false);
+    mockKeywordSearchChunks.mockResolvedValue([]);
+    mockDeduplicateChunks.mockReturnValue([]);
+
+    const result = await runSearch('x');
+
+    expect(result.fallback).toBe(true);
+    expect(result.chunks).toEqual([]);
   });
 
   it('throws when no index found', async () => {

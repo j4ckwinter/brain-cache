@@ -179,4 +179,24 @@ describe('runAskCodebase', () => {
     expect(typeof result.model).toBe('string');
     expect(result.model.length).toBeGreaterThan(0);
   });
+
+  describe('API error paths', () => {
+    it('throws when ANTHROPIC_API_KEY is empty string', async () => {
+      process.env.ANTHROPIC_API_KEY = '';
+      const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
+      await expect(runAskCodebase('q')).rejects.toThrow('ANTHROPIC_API_KEY');
+    });
+
+    it('propagates rate limit errors from Anthropic', async () => {
+      mockCreate.mockRejectedValue(new Error('rate_limit_error: Too many requests'));
+      const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
+      await expect(runAskCodebase('q')).rejects.toThrow(/Too many requests|rate/i);
+    });
+
+    it('propagates generic API failures', async () => {
+      mockCreate.mockRejectedValue(new Error('Internal server error'));
+      const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
+      await expect(runAskCodebase('q')).rejects.toThrow('Internal server error');
+    });
+  });
 });

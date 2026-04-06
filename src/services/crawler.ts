@@ -12,6 +12,9 @@ export const SOURCE_EXTENSIONS = new Set<string>([
   '.py', '.pyi',
   '.go',
   '.rs',
+  '.md',
+  '.txt',
+  '.rst',
 ]);
 
 export const ALWAYS_EXCLUDE_GLOBS: string[] = [

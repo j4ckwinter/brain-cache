@@ -20,7 +20,7 @@
 - ✅ **v3.1 Hook Adoption** — Phases 36-37 (shipped 2026-04-05) — [archive](milestones/v3.1-ROADMAP.md)
 - ✅ **v3.2 Test File Noise Reduction** — Phases 38-39 (shipped 2026-04-05)
 - ✅ **v3.3 Web Tree-Sitter Migration** — Phases 40-42 (shipped 2026-04-06)
-- 🚧 **v3.4 Codebase Hardening** — Phases 43-47 (in progress)
+- ✅ **v3.4 Codebase Hardening** — Phases 43-47 (shipped 2026-04-06)
 
 ## Phases
 
@@ -144,15 +144,15 @@
 
 </details>
 
-### v3.4 Codebase Hardening (In Progress)
+### v3.4 Codebase Hardening (Shipped 2026-04-06)
 
 **Milestone Goal:** Address all concerns from the codebase audit — eliminate tech debt, fix bugs, close security gaps, improve performance, strengthen test coverage, and add missing features.
 
 - [x] **Phase 43: Correctness and Security** — Fix zero-vector search pollution, MCP path traversal, concurrent index locking, and token savings consistency (completed 2026-04-06)
 - [x] **Phase 44: Debt Reduction and Performance** — Extract workflow guards, migrate async I/O, pool LanceDB connections, batch chunk deletions, cache parser instances (completed 2026-04-06)
-- [ ] **Phase 45: Auto-Index Retry Test and withGuards Extraction** — Write retry test against current structure first, then extract withGuards wrapper and MCP factory
-- [ ] **Phase 46: Missing Features** — Add index staleness detection, Markdown/text/RST indexing, Ollama keyword fallback, crawler extension support
-- [ ] **Phase 47: Test Coverage and Structural Refactoring** — E2E pipeline test, CLI integration tests, edge case tests, large file splits
+- [x] **Phase 45: Auto-Index Retry Test and withGuards Extraction** — Write retry test against current structure first, then extract withGuards wrapper and MCP factory (completed 2026-04-06)
+- [x] **Phase 46: Missing Features** — Add index staleness detection, Markdown/text/RST indexing, Ollama keyword fallback, crawler extension support (completed 2026-04-06)
+- [x] **Phase 47: Test Coverage and Structural Refactoring** — E2E pipeline test, CLI integration tests, edge case tests, index workflow split (completed 2026-04-06)
 
 ## Phase Details
 
@@ -198,10 +198,10 @@ Plans:
   4. All four MCP tool handlers use the withGuards wrapper and contain only business logic — boilerplate profile/Ollama checks are not duplicated in handler bodies
 
 Note: TEST-03 must be written and passing against the current (pre-refactor) structure BEFORE DEBT-01 extraction begins. This is a hard intra-phase ordering constraint.
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 45-01-PLAN.md — Auto-index retry tests for search_codebase and build_context (TEST-03)
-- [ ] 45-02-PLAN.md — withGuards extraction, createMcpServer factory, and file reorganization (DEBT-01, DEBT-03)
+- [x] 45-01-PLAN.md — Auto-index retry tests for search_codebase and build_context (TEST-03)
+- [x] 45-02-PLAN.md — withGuards extraction, createMcpServer factory, and file reorganization (DEBT-01, DEBT-03)
 
 ### Phase 46: Missing Features
 **Goal**: brain-cache indexes Markdown and plain-text documentation files, degrades gracefully when Ollama is unavailable, and warns users when the index is stale
@@ -210,9 +210,13 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Running `brain-cache index` on a project containing `.md`, `.txt`, and `.rst` files indexes those files using heading-boundary chunking — documentation appears in search results alongside code
   2. Running `brain-cache search` when Ollama is unavailable returns keyword-matched results with a visible fallback indicator rather than an error — partial value over no value
-  3. `brain-cache doctor` and `brain-cache status` display a staleness warning when the index was last built more than a configurable threshold ago or when files have been modified since indexing
+  3. `brain-cache doctor` and `brain-cache status` display a staleness warning when any crawled source file has an `mtime` newer than the index `indexedAt` timestamp (mtime comparison only — no separate “age of index” timer; see D-10 in phase context)
   4. The crawler's `SOURCE_EXTENSIONS` list includes `.md`, `.txt`, and `.rst` — these extensions are picked up automatically without user configuration
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+Plans:
+- [x] 46-01-PLAN.md — Documentation chunker (`marked`), chunker dispatch, crawler `SOURCE_EXTENSIONS` (FEAT-02, FEAT-04)
+- [x] 46-02-PLAN.md — Staleness module and status/doctor wiring (FEAT-01)
+- [x] 46-03-PLAN.md — Keyword search fallback when Ollama unavailable (FEAT-03)
 **UI hint**: no
 
 ### Phase 47: Test Coverage and Structural Refactoring
@@ -225,7 +229,11 @@ Plans:
   3. The incremental re-index edge deletion path is tested — removing a file from the project and re-indexing produces a clean index with no stale chunks from the deleted file
   4. `src/workflows/index.ts` is split into named sub-functions (`computeFileDiffs`, `processFileGroup`, `printSummary`) — no function in the file exceeds a readable size
   5. Token savings computation is unified into a single `computeTokenSavings()` utility used by all tools — no tool-specific savings logic remains scattered across files
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+Plans:
+- [x] 47-01-PLAN.md — REFAC-01/02/03: index workflow split (`computeFileDiffs`, `processFileGroup`, `printSummary`), token savings + MCP (`server.ts`) verification
+- [x] 47-02-PLAN.md — TEST-02/04/05/06: CLI Commander tests, file deletion re-index, dimension fallback, askCodebase errors
+- [x] 47-03-PLAN.md — TEST-01: E2E index → search → build_context with mocked embedder (`tests/e2e/pipeline.test.ts`); retriever vector coercion for LanceDB row shapes
 
 ## Progress
 
@@ -233,10 +241,10 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 43. Correctness and Security | v3.4 | 2/2 | Complete    | 2026-04-06 |
 | 44. Debt Reduction and Performance | v3.4 | 4/4 | Complete   | 2026-04-06 |
-| 45. Auto-Index Retry Test and withGuards Extraction | v3.4 | 0/2 | Planning complete | - |
-| 46. Missing Features | v3.4 | 0/TBD | Not started | - |
-| 47. Test Coverage and Structural Refactoring | v3.4 | 0/TBD | Not started | - |
+| 45. Auto-Index Retry Test and withGuards Extraction | v3.4 | 2/2 | Complete   | 2026-04-06 |
+| 46. Missing Features | v3.4 | 3/3 | Complete | 2026-04-06 |
+| 47. Test Coverage and Structural Refactoring | v3.4 | 3/3 | Complete | 2026-04-06 |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-06 — Phase 44 planned (4 plans)*
+*Last updated: 2026-04-06 — v3.4 complete; Phase 47 executed (3 plans + retriever E2E fix)*
