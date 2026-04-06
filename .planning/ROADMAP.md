@@ -163,7 +163,7 @@
 - [x] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned) (completed 2026-04-06)
 - [x] **Phase 50: Background Service Install** — Optional `init` path or subcommand to install LaunchAgent/systemd user unit (document Windows separately) (planned) (completed 2026-04-06)
 - [ ] **Phase 51: Git History Indexing** — Ingest commit messages and touched paths; same embed pipeline; search/build_context return provenance for history vs file chunks (planned)
-- [ ] **Phase 52: Service Install Closure and Verification** — Close DAILY-03 with missing verification artifact, docs lifecycle completeness, and auditable closure evidence (planned)
+- [x] **Phase 52: Service Install Closure and Verification** — Closed DAILY-03 with phase verification artifact, lifecycle docs, and synchronized traceability metadata (completed 2026-04-07)
 - [ ] **Phase 53: Git History Closure and Traceability Sync** — Close DAILY-04 with verification artifact and align milestone traceability metadata with implemented runtime wiring (planned)
 
 ## Phase Details
@@ -304,7 +304,9 @@ Plans:
   1. User-facing docs include service lifecycle commands for install, status, disable, and uninstall.
   2. `50-VERIFICATION.md` exists with DAILY-03 evidence and a clear pass/fail verdict.
   3. Phase 50 closure metadata is consistent across roadmap, requirements, and phase artifacts.
-**Plans:** 0/? plans (TBD at plan-phase)
+**Plans:** 1/1 plans planned
+Plans:
+- [ ] [52-01-PLAN.md](phases/52-service-install-closure-and-verification/52-01-PLAN.md) — DAILY-03 closure: README service lifecycle docs, 50 verification artifact, and traceability metadata sync
 
 ### Phase 53: Git History Closure and Traceability Sync
 **Goal**: DAILY-04 is auditable as complete by adding missing verification artifacts and synchronizing stale closure metadata.
@@ -330,9 +332,9 @@ Plans:
 | 49. File Watcher | v3.5 | 2/2 | Complete    | 2026-04-06 |
 | 50. Background Service Install | v3.5 | 2/2 | Complete   | 2026-04-06 |
 | 51. Git History Indexing | v3.5 | 0/3 | Planned | — |
-| 52. Service Install Closure and Verification | v3.5 | 0/? | Planned | — |
+| 52. Service Install Closure and Verification | v3.5 | 1/1 | Complete | 2026-04-07 |
 | 53. Git History Closure and Traceability Sync | v3.5 | 0/? | Planned | — |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-07 — added gap-closure phases 52-53 for v3.5 audit findings (DAILY-03, DAILY-04)*
+*Last updated: 2026-04-07 — phase 52 completed (DAILY-03 closed); phase 53 remains for DAILY-04 closure*

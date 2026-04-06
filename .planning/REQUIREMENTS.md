@@ -63,7 +63,7 @@ Requirements for **Daily Adoption** milestone (Phases 48–51). See [.planning/m
 ### Watch and services
 
 - [x] **DAILY-02**: `brain-cache watch [path]` runs a debounced file watcher that invokes incremental index and respects the project index lock
-- [ ] **DAILY-03**: Documented opt-in install for a user-level background service that runs the watcher; documented disable/uninstall
+- [x] **DAILY-03**: Documented opt-in install for a user-level background service that runs the watcher; documented disable/uninstall
 
 ### Git history
 
@@ -131,13 +131,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REFAC-03 | Phase 47 | Complete |
 | DAILY-01 | Phase 48 | Planned |
 | DAILY-02 | Phase 49 | Planned |
-| DAILY-03 | Phase 52 | Pending |
+| DAILY-03 | Phase 52 | Complete |
 | DAILY-04 | Phase 53 | Pending |
 
 **Coverage:**
 - v3.4 requirements: 27 total — mapped: 27 — complete
-- v3.5 requirements: 4 total — mapped: 4 — pending gap closure (Phases 52-53)
+- v3.5 requirements: 4 total — mapped: 4 — partial closure (DAILY-01/02/03 complete; DAILY-04 pending in Phase 53)
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-07 — DAILY-03/04 remapped to gap-closure phases 52-53 and reset to pending*
+*Last updated: 2026-04-07 — DAILY-03 closed via phase 52 verification; DAILY-04 remains pending in phase 53*
