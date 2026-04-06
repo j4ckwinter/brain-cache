@@ -149,7 +149,7 @@
 **Milestone Goal:** Address all concerns from the codebase audit — eliminate tech debt, fix bugs, close security gaps, improve performance, strengthen test coverage, and add missing features.
 
 - [x] **Phase 43: Correctness and Security** — Fix zero-vector search pollution, MCP path traversal, concurrent index locking, and token savings consistency (completed 2026-04-06)
-- [ ] **Phase 44: Debt Reduction and Performance** — Extract workflow guards, migrate async I/O, pool LanceDB connections, batch chunk deletions, cache parser instances
+- [x] **Phase 44: Debt Reduction and Performance** — Extract workflow guards, migrate async I/O, pool LanceDB connections, batch chunk deletions, cache parser instances (completed 2026-04-06)
 - [ ] **Phase 45: Auto-Index Retry Test and withGuards Extraction** — Write retry test against current structure first, then extract withGuards wrapper and MCP factory
 - [ ] **Phase 46: Missing Features** — Add index staleness detection, Markdown/text/RST indexing, Ollama keyword fallback, crawler extension support
 - [ ] **Phase 47: Test Coverage and Structural Refactoring** — E2E pipeline test, CLI integration tests, edge case tests, large file splits
@@ -180,12 +180,12 @@ Plans:
   3. Sequential MCP tool calls against an already-indexed project complete faster — LanceDB connections are reused from a module-level pool rather than opened per-call
   4. Incremental re-index completes faster on large projects — chunk deletions use batched SQL `IN` predicates instead of serial per-chunk deletes
   5. Parser instances are reused across files during indexing — the same language grammar is not loaded more than once per index run
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [x] 44-01-PLAN.md — Shared guard helpers and workflow guard replacement (DEBT-02, DEBT-05)
 - [x] 44-02-PLAN.md — Async init.ts migration (DEBT-04)
 - [x] 44-03-PLAN.md — LanceDB connection pool, parser cache, and MCP factory (PERF-01, DEBT-07, DEBT-03)
-- [ ] 44-04-PLAN.md — Batch deletions, token count dedup, and buildContext optimization (PERF-02, DEBT-06, PERF-03)
+- [x] 44-04-PLAN.md — Batch deletions, token count dedup, and buildContext optimization (PERF-02, DEBT-06, PERF-03)
 
 ### Phase 45: Auto-Index Retry Test and withGuards Extraction
 **Goal**: The MCP auto-index retry path is tested and preserved through the withGuards wrapper extraction, and the MCP server is instantiated via a factory function
@@ -232,7 +232,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 43. Correctness and Security | v3.4 | 2/2 | Complete    | 2026-04-06 |
-| 44. Debt Reduction and Performance | v3.4 | 3/4 | In Progress|  |
+| 44. Debt Reduction and Performance | v3.4 | 4/4 | Complete   | 2026-04-06 |
 | 45. Auto-Index Retry Test and withGuards Extraction | v3.4 | 0/2 | Planning complete | - |
 | 46. Missing Features | v3.4 | 0/TBD | Not started | - |
 | 47. Test Coverage and Structural Refactoring | v3.4 | 0/TBD | Not started | - |

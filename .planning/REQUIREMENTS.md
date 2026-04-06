@@ -21,14 +21,14 @@ Requirements for Codebase Hardening milestone. Each maps to roadmap phases.
 - [x] **DEBT-03**: MCP server is instantiated via `createMcpServer()` factory function (not module-level singleton)
 - [x] **DEBT-04**: `init.ts` uses async `fs/promises` instead of synchronous file operations
 - [x] **DEBT-05**: stderr monkey-patch in `runIndex` is documented or replaced with LanceDB log config
-- [ ] **DEBT-06**: Token counting per chunk happens once during the filter step (no redundant calls)
+- [x] **DEBT-06**: Token counting per chunk happens once during the filter step (no redundant calls)
 - [x] **DEBT-07**: Parser instances are cached per language in a module-level Map (not created per file)
 
 ### Performance
 
 - [x] **PERF-01**: LanceDB connections are cached in a module-level Map and reused across operations
-- [ ] **PERF-02**: Chunk deletions during incremental re-index use batched SQL predicates
-- [ ] **PERF-03**: `buildContext` reads per-file token counts from index state instead of re-reading files
+- [x] **PERF-02**: Chunk deletions during incremental re-index use batched SQL predicates
+- [x] **PERF-03**: `buildContext` reads per-file token counts from index state instead of re-reading files
 
 ### Missing Features
 
@@ -91,11 +91,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEBT-03 | Phase 45 | Complete |
 | DEBT-04 | Phase 44 | Complete |
 | DEBT-05 | Phase 44 | Complete |
-| DEBT-06 | Phase 44 | Pending |
+| DEBT-06 | Phase 44 | Complete |
 | DEBT-07 | Phase 44 | Complete |
 | PERF-01 | Phase 44 | Complete |
-| PERF-02 | Phase 44 | Pending |
-| PERF-03 | Phase 44 | Pending |
+| PERF-02 | Phase 44 | Complete |
+| PERF-03 | Phase 44 | Complete |
 | TEST-03 | Phase 45 | Pending |
 | DEBT-01 | Phase 45 | Pending |
 | FEAT-01 | Phase 46 | Pending |
