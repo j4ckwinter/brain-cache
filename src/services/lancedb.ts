@@ -78,6 +78,32 @@ export function edgeSchema(): Schema {
   ]);
 }
 
+// --- Connection pool (PERF-01) ---
+// Caches Connection only — NEVER cache Table handles.
+// Stale Table handles after --force reindex cause silent wrong-data bugs.
+const _connectionPool = new Map<string, lancedb.Connection>();
+
+/**
+ * Returns a cached LanceDB connection for the given project root.
+ * Opens a new connection if none is cached.
+ * Pass force=true to evict the cached connection (used after --force reindex).
+ *
+ * PERF-01: One Connection per project directory, reused across operations.
+ * D-03: Keys by project path only. D-04: Evicts on force flag.
+ */
+export async function getConnection(
+  projectRoot: string,
+  force?: boolean
+): Promise<lancedb.Connection> {
+  if (force) {
+    _connectionPool.delete(projectRoot);
+  }
+  if (!_connectionPool.has(projectRoot)) {
+    _connectionPool.set(projectRoot, await openDatabase(projectRoot));
+  }
+  return _connectionPool.get(projectRoot)!;
+}
+
 /**
  * Opens a LanceDB connection at <projectRoot>/.brain-cache/index.
  * Creates the .brain-cache directory if it does not exist.
