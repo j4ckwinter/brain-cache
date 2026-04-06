@@ -18,15 +18,15 @@ Requirements for Codebase Hardening milestone. Each maps to roadmap phases.
 
 - [ ] **DEBT-01**: MCP tool handlers use a shared `withGuards()` wrapper for profile/Ollama checks and auto-index retry
 - [x] **DEBT-02**: Workflow functions use shared `requireProfile()` and `requireOllama()` guard helpers
-- [ ] **DEBT-03**: MCP server is instantiated via `createMcpServer()` factory function (not module-level singleton)
-- [ ] **DEBT-04**: `init.ts` uses async `fs/promises` instead of synchronous file operations
+- [x] **DEBT-03**: MCP server is instantiated via `createMcpServer()` factory function (not module-level singleton)
+- [x] **DEBT-04**: `init.ts` uses async `fs/promises` instead of synchronous file operations
 - [x] **DEBT-05**: stderr monkey-patch in `runIndex` is documented or replaced with LanceDB log config
 - [ ] **DEBT-06**: Token counting per chunk happens once during the filter step (no redundant calls)
-- [ ] **DEBT-07**: Parser instances are cached per language in a module-level Map (not created per file)
+- [x] **DEBT-07**: Parser instances are cached per language in a module-level Map (not created per file)
 
 ### Performance
 
-- [ ] **PERF-01**: LanceDB connections are cached in a module-level Map and reused across operations
+- [x] **PERF-01**: LanceDB connections are cached in a module-level Map and reused across operations
 - [ ] **PERF-02**: Chunk deletions during incremental re-index use batched SQL predicates
 - [ ] **PERF-03**: `buildContext` reads per-file token counts from index state instead of re-reading files
 
@@ -88,12 +88,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COR-03 | Phase 43 | Complete |
 | COR-04 | Phase 43 | Complete |
 | DEBT-02 | Phase 44 | Complete |
-| DEBT-03 | Phase 45 | Pending |
-| DEBT-04 | Phase 44 | Pending |
+| DEBT-03 | Phase 45 | Complete |
+| DEBT-04 | Phase 44 | Complete |
 | DEBT-05 | Phase 44 | Complete |
 | DEBT-06 | Phase 44 | Pending |
-| DEBT-07 | Phase 44 | Pending |
-| PERF-01 | Phase 44 | Pending |
+| DEBT-07 | Phase 44 | Complete |
+| PERF-01 | Phase 44 | Complete |
 | PERF-02 | Phase 44 | Pending |
 | PERF-03 | Phase 44 | Pending |
 | TEST-03 | Phase 45 | Pending |
