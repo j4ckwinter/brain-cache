@@ -195,6 +195,7 @@ export function printSummary(params: {
     estimatedWithout: totalRawTokens,
     reductionPct,
     filesInContext: totalFiles,
+    indexEmbeddingMode: true,
   }).split('\n').map(line => `  ${line}`).join('\n');
 
   process.stderr.write(

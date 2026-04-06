@@ -30,6 +30,7 @@ export {
   type SearchOptions,
   type RetrievedChunk,
   type ContextMetadata,
+  type SavingsDisplayMode,
   type ContextResult,
   type FlowHop,
 } from './types.js';

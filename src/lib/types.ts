@@ -74,11 +74,24 @@ export interface RetrievedChunk {
   similarity: number; // 1 - _distance (higher = more similar)
 }
 
+/** How the footer explains savings (filtering-only when reduction would be misleading). */
+export type SavingsDisplayMode = 'full' | 'filtering_only';
+
 export interface ContextMetadata {
   tokensSent: number;
+  /**
+   * Grep-style counterfactual: keyword-ranked top files, full-file tokens + tool overhead.
+   * Replaces the old "Read every matched file from assembled context" baseline.
+   */
   estimatedWithoutBraincache: number;
+  /** Versus estimatedWithoutBraincache (clamped; never 100% when display mode is full). */
   reductionPct: number;
   filesInContext: number;
+  /** Sum of raw chunk content tokens in the deduped set before assembly (evidence pool). */
+  matchedPoolTokens: number;
+  /** Share of matched chunk tokens omitted or compressed by the token budget (0–100). */
+  filteringPct: number;
+  savingsDisplayMode: SavingsDisplayMode;
   localTasksPerformed: string[];
   cloudCallsMade: number;
 }

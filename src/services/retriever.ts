@@ -209,14 +209,55 @@ function computeNoisePenalty(chunk: RetrievedChunk, query: string): number {
   return 0;
 }
 
-/** Keywords that signal the user wants test-related results. */
-const TEST_INTENT_KEYWORDS = ['test', 'spec', 'coverage', 'tested'];
-
 /**
  * Score penalty subtracted from blended score for test file chunks.
- * Range 0.3-0.5 per RANK-01. Set to 0.4 as initial value.
+ * Range 0.3-0.5 per RANK-01; increased so impl files win over specs for generic queries.
  */
-const TEST_FILE_NOISE_PENALTY = 0.4;
+const TEST_FILE_NOISE_PENALTY = 0.55;
+
+/** True when the query likely targets tests (skip test-file down-ranking / filtering). */
+export function querySignalsTestIntent(query: string): boolean {
+  const lower = query.toLowerCase();
+  if (/\btests?\b/.test(lower)) return true;
+  if (/\bspec\b/.test(lower)) return true;
+  const phrases = [
+    'coverage',
+    'tested',
+    'how to test',
+    'jest',
+    'vitest',
+    'mock',
+    '__tests__',
+  ];
+  return phrases.some((kw) => lower.includes(kw));
+}
+
+/**
+ * For build_context: drop test chunks when the query is not test-focused and enough
+ * non-test chunks exist; otherwise pad with test chunks to preserve a minimum count.
+ */
+export function filterDedupedForNonTestChunks(
+  chunks: RetrievedChunk[],
+  query: string,
+  minTotal = 3,
+): RetrievedChunk[] {
+  if (querySignalsTestIntent(query)) return chunks;
+
+  const isTestPath = (filePath: string): boolean =>
+    /\.test\.[jt]sx?$/.test(filePath) ||
+    /\.spec\.[jt]sx?$/.test(filePath) ||
+    filePath.includes('__tests__/');
+
+  const nonTest = chunks.filter((c) => !isTestPath(c.filePath));
+  const testChunks = chunks.filter((c) => isTestPath(c.filePath));
+
+  if (nonTest.length >= minTotal) return nonTest;
+  if (nonTest.length > 0) {
+    const pad = Math.min(minTotal - nonTest.length, testChunks.length);
+    return [...nonTest, ...testChunks.slice(0, pad)];
+  }
+  return chunks;
+}
 
 /**
  * Returns TEST_FILE_NOISE_PENALTY when the chunk belongs to a test file
@@ -236,8 +277,7 @@ function computeTestFilePenalty(chunk: RetrievedChunk, query: string): number {
 
   if (!isTestFile) return 0;
 
-  const lowerQuery = query.toLowerCase();
-  if (TEST_INTENT_KEYWORDS.some(kw => lowerQuery.includes(kw))) return 0;
+  if (querySignalsTestIntent(query)) return 0;
 
   return TEST_FILE_NOISE_PENALTY;
 }

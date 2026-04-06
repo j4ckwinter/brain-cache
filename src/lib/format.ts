@@ -1,11 +1,17 @@
 import dedent from 'dedent';
-import type { RetrievedChunk, ContextResult } from './types.js';
+import type { RetrievedChunk, ContextResult, SavingsDisplayMode } from './types.js';
 
 export interface TokenSavingsInput {
   tokensSent: number;
   estimatedWithout: number;
   reductionPct: number;
   filesInContext: number;
+  /** `brain-cache index` completion: raw vs chunked token stats (not Claude grep baseline). */
+  indexEmbeddingMode?: boolean;
+  /** Present for build_context / honest savings footer */
+  matchedPoolTokens?: number;
+  filteringPct?: number;
+  savingsDisplayMode?: SavingsDisplayMode;
 }
 
 export interface DoctorHealth {
@@ -40,13 +46,67 @@ export function formatErrorEnvelope(message: string, suggestion?: string): strin
   return lines.join('\n');
 }
 
+/**
+ * Human-readable token / savings footer for MCP and CLI.
+ * When `matchedPoolTokens` + `savingsDisplayMode` are set (build_context), shows
+ * filtering ratio and optional grep baseline; otherwise search_codebase-style lines.
+ */
 export function formatTokenSavings(input: TokenSavingsInput): string {
+  if (input.indexEmbeddingMode) {
+    return formatIndexEmbeddingFooter(input);
+  }
+  if (
+    input.matchedPoolTokens !== undefined &&
+    input.filteringPct !== undefined &&
+    input.savingsDisplayMode !== undefined
+  ) {
+    return formatContextTokenSavings(input);
+  }
+  return formatSearchTokenSavings(input);
+}
+
+function formatIndexEmbeddingFooter(input: TokenSavingsInput): string {
   const fileSuffix = input.filesInContext !== 1 ? 's' : '';
   return [
     `Tokens sent to Claude: ${input.tokensSent.toLocaleString()}`,
     `Estimated without: ~${input.estimatedWithout.toLocaleString()}  (${input.filesInContext} file${fileSuffix} + overhead)`,
     `Reduction: ${input.reductionPct}%`,
   ].join('\n');
+}
+
+function formatContextTokenSavings(input: TokenSavingsInput): string {
+  const lines: string[] = [
+    `Tokens sent to Claude: ${input.tokensSent.toLocaleString()}`,
+  ];
+  if (input.matchedPoolTokens! > 0) {
+    lines.push(
+      `Retrieved ~${input.tokensSent.toLocaleString()} of ~${input.matchedPoolTokens!.toLocaleString()} tokens from matched chunks (${input.filteringPct}% filtered by budget)`,
+    );
+  }
+  if (input.savingsDisplayMode === 'full') {
+    lines.push(
+      `Vs grep-style baseline (grep + read up to 5 files): ~${input.estimatedWithout.toLocaleString()} — Reduction vs baseline: ${input.reductionPct}%`,
+    );
+  }
+  lines.push(
+    'Value: semantic discovery — relevant code without knowing file paths upfront.',
+  );
+  return lines.join('\n');
+}
+
+function formatSearchTokenSavings(input: TokenSavingsInput): string {
+  const fileSuffix = input.filesInContext !== 1 ? 's' : '';
+  const lines = [
+    `Tokens sent to Claude: ${input.tokensSent.toLocaleString()}`,
+    `Vs grep-style baseline (grep + read up to 5 files): ~${input.estimatedWithout.toLocaleString()}  (${input.filesInContext} file${fileSuffix} + overhead)`,
+  ];
+  if (input.savingsDisplayMode !== 'filtering_only') {
+    lines.push(`Reduction vs baseline: ${input.reductionPct}%`);
+  }
+  lines.push(
+    'Value: semantic discovery — relevant code without knowing file paths upfront.',
+  );
+  return lines.join('\n');
 }
 
 export function formatDoctorOutput(health: DoctorHealth): string {

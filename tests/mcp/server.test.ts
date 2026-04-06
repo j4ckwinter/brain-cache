@@ -30,6 +30,7 @@ vi.mock('../../src/services/ollama.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   readIndexState: vi.fn(),
+  readFileHashes: vi.fn().mockResolvedValue({ hashes: {}, tokenCounts: {} }),
 }));
 
 vi.mock('../../src/workflows/index.js', () => ({
@@ -55,6 +56,18 @@ vi.mock('../../src/services/logger.js', () => ({
 
 vi.mock('../../src/services/sessionStats.js', () => ({
   accumulateStats: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/lib/tokenSavings.js', () => ({
+  computeTokenSavings: vi.fn().mockResolvedValue({
+    tokensSent: 100,
+    estimatedWithoutBraincache: 1000,
+    reductionPct: 90,
+    filesInContext: 2,
+    matchedPoolTokens: 100,
+    filteringPct: 0,
+    savingsDisplayMode: 'full',
+  }),
 }));
 
 import { readProfile, detectCapabilities } from '../../src/services/capability.js';
@@ -129,6 +142,10 @@ const fakeContextResult = {
     tokensSent: 150,
     estimatedWithoutBraincache: 1000,
     reductionPct: 85,
+    filesInContext: 2,
+    matchedPoolTokens: 800,
+    filteringPct: 40,
+    savingsDisplayMode: 'full' as const,
     localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'token_budget'],
     cloudCallsMade: 0,
   },

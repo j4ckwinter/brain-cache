@@ -24,11 +24,20 @@ vi.mock('../../src/services/retriever.js', () => ({
   deduplicateChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
   classifyQueryIntent: vi.fn(), // deprecated alias — kept for backward compat
+  filterDedupedForNonTestChunks: vi.fn((chunks: unknown[]) => chunks),
   RETRIEVAL_STRATEGIES: {
     lookup:  { limit: 5,  distanceThreshold: 0.4, keywordBoostWeight: 0.40 },
     trace:   { limit: 3,  distanceThreshold: 0.5, keywordBoostWeight: 0.20 },
     explore: { limit: 20, distanceThreshold: 0.6, keywordBoostWeight: 0.10 },
   },
+}));
+
+vi.mock('../../src/lib/grepStyleBaseline.js', () => ({
+  computeGrepStyleBaseline: async () => ({
+    grepBaselineTokens: 1900,
+    filesUsed: 2,
+  }),
+  GREP_BASELINE_TOP_FILES: 5,
 }));
 
 vi.mock('../../src/services/tokenCounter.js', () => ({
@@ -98,6 +107,7 @@ const fakeChunk = (id: string, filePath: string) => ({
   content: `function fn_${id}() {}`,
   startLine: 1,
   endLine: 5,
+  fileType: 'source',
   similarity: 0.85,
 });
 
@@ -150,7 +160,7 @@ describe('runBuildContext', () => {
       chunks: dedupedChunks,
       tokenCount: 150,
     });
-    // Each file has 500 tokens
+    // Per-chunk content token count (matched pool); file reads for grep baseline are mocked separately
     mockCountChunkTokens.mockReturnValue(500);
     mockReadFile.mockResolvedValue('file content here' as any);
 
@@ -164,7 +174,7 @@ describe('runBuildContext', () => {
     vi.resetModules();
   });
 
-  it('returns a ContextResult with all 5 metadata fields present', async () => {
+  it('returns a ContextResult with expected metadata fields present', async () => {
     const result = await runBuildContext('how does authentication work');
     expect(result).toHaveProperty('content');
     expect(result).toHaveProperty('chunks');
@@ -172,6 +182,9 @@ describe('runBuildContext', () => {
     expect(result.metadata).toHaveProperty('tokensSent');
     expect(result.metadata).toHaveProperty('estimatedWithoutBraincache');
     expect(result.metadata).toHaveProperty('reductionPct');
+    expect(result.metadata).toHaveProperty('matchedPoolTokens');
+    expect(result.metadata).toHaveProperty('filteringPct');
+    expect(result.metadata).toHaveProperty('savingsDisplayMode');
     expect(result.metadata).toHaveProperty('localTasksPerformed');
     expect(result.metadata).toHaveProperty('cloudCallsMade');
   });
@@ -207,45 +220,25 @@ describe('runBuildContext', () => {
     );
   });
 
-  it('reads unique source files for estimatedWithoutBraincache calculation', async () => {
-    await runBuildContext('test query');
-    // Two unique files: /project/src/auth.ts and /project/src/router.ts
-    expect(mockReadFile).toHaveBeenCalledWith('/project/src/auth.ts', 'utf-8');
-    expect(mockReadFile).toHaveBeenCalledWith('/project/src/router.ts', 'utf-8');
-  });
-
-  it('does not read the same file twice even if multiple chunks come from it', async () => {
-    const sameFileChunks = [
-      fakeChunk('c1', '/project/src/auth.ts'),
-      fakeChunk('c2', '/project/src/auth.ts'),
-      fakeChunk('c3', '/project/src/auth.ts'),
-    ];
-    mockAssembleContext.mockReturnValue({
-      content: 'assembled',
-      chunks: sameFileChunks,
-      tokenCount: 100,
-    });
-
-    await runBuildContext('test query');
-
-    const readFileCalls = mockReadFile.mock.calls.filter(
-      (call) => call[0] === '/project/src/auth.ts'
-    );
-    expect(readFileCalls).toHaveLength(1);
-  });
-
-  it('computes reductionPct as (1 - tokensSent/estimatedWithoutBraincache) * 100', async () => {
-    // tokenCount = 150
-    // 2 files, each 500 tokens → fileContentTokens = 1000
-    // toolCalls = 1 (initial) + 2 (files) = 3, overhead = 3 * 300 = 900
-    // estimatedWithoutBraincache = 1000 + 900 = 1900
-    // reductionPct = Math.round((1 - 150/1900) * 100) = 92
+  it('computes matchedPoolTokens from deduped chunk bodies', async () => {
     mockAssembleContext.mockReturnValue({
       content: 'assembled',
       chunks: dedupedChunks,
       tokenCount: 150,
     });
-    mockCountChunkTokens.mockReturnValue(500); // per file
+    mockCountChunkTokens.mockReturnValue(500);
+
+    const result = await runBuildContext('test query');
+    expect(result.metadata.matchedPoolTokens).toBe(1000);
+  });
+
+  it('computes reductionPct vs grep-style baseline (mocked)', async () => {
+    mockAssembleContext.mockReturnValue({
+      content: 'assembled',
+      chunks: dedupedChunks,
+      tokenCount: 150,
+    });
+    mockCountChunkTokens.mockReturnValue(500);
 
     const result = await runBuildContext('test query');
     expect(result.metadata.tokensSent).toBe(150);
@@ -253,27 +246,6 @@ describe('runBuildContext', () => {
     expect(result.metadata.reductionPct).toBe(92);
   });
 
-  it('returns reductionPct 0 when estimatedWithoutBraincache is 0', async () => {
-    // estimatedWithoutBraincache = 0 only if no files AND no tool overhead
-    // With current implementation (always has toolCallOverhead), just verify it doesn't crash
-    // and returns a non-negative reduction pct
-    mockReadFile.mockRejectedValue(new Error('ENOENT'));
-    const result = await runBuildContext('test query');
-    expect(result.metadata.reductionPct).toBeGreaterThanOrEqual(0);
-  });
-
-  it('skips files that cannot be read (gracefully handles missing files)', async () => {
-    mockReadFile.mockImplementation(async (path: any) => {
-      if (path === '/project/src/auth.ts') throw new Error('ENOENT');
-      return 'file content' as any;
-    });
-    // Should not throw
-    // auth.ts fails (0 tokens), router.ts succeeds (500 tokens)
-    // toolCalls = 1 + 2 = 3, overhead = 900
-    // estimatedWithoutBraincache = 500 + 900 = 1400
-    const result = await runBuildContext('test query');
-    expect(result.metadata.estimatedWithoutBraincache).toBe(1400);
-  });
 
   it('throws when no profile found', async () => {
     mockReadProfile.mockResolvedValue(null);

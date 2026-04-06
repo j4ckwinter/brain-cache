@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatTokenSavings } from "../lib/format.js";
@@ -95,7 +96,15 @@ program
           process.stdout.write("\n");
         }
         process.stderr.write(
-          `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.metadata.tokensSent, estimatedWithout: result.metadata.estimatedWithoutBraincache, reductionPct: result.metadata.reductionPct, filesInContext: result.metadata.filesInContext })}\n`,
+          `\n🧠 brain-cache\n${formatTokenSavings({
+            tokensSent: result.metadata.tokensSent,
+            estimatedWithout: result.metadata.estimatedWithoutBraincache,
+            reductionPct: result.metadata.reductionPct,
+            filesInContext: result.metadata.filesInContext,
+            matchedPoolTokens: result.metadata.matchedPoolTokens,
+            filteringPct: result.metadata.filteringPct,
+            savingsDisplayMode: result.metadata.savingsDisplayMode,
+          })}\n`,
         );
       }
     },
@@ -117,12 +126,35 @@ program
     });
     process.stderr.write(`\n${result.answer}\n`);
     process.stderr.write(
-      `\n🧠 brain-cache\n${formatTokenSavings({ tokensSent: result.contextMetadata.tokensSent, estimatedWithout: result.contextMetadata.estimatedWithoutBraincache, reductionPct: result.contextMetadata.reductionPct, filesInContext: result.contextMetadata.filesInContext })}\n`,
+      `\n🧠 brain-cache\n${formatTokenSavings({
+        tokensSent: result.contextMetadata.tokensSent,
+        estimatedWithout: result.contextMetadata.estimatedWithoutBraincache,
+        reductionPct: result.contextMetadata.reductionPct,
+        filesInContext: result.contextMetadata.filesInContext,
+        matchedPoolTokens: result.contextMetadata.matchedPoolTokens,
+        filteringPct: result.contextMetadata.filteringPct,
+        savingsDisplayMode: result.contextMetadata.savingsDisplayMode,
+      })}\n`,
     );
   });
 
-const thisFile = fileURLToPath(import.meta.url);
-const entryScript = process.argv[1] ? resolve(process.argv[1]) : "";
+/**
+ * Resolve to a canonical path so `isMain` matches when the CLI is invoked via
+ * a symlink (e.g. `node_modules/.bin/brain-cache`) or `/tmp` vs `/private/tmp`
+ * on macOS — otherwise `parseAsync` never runs and commands exit silently.
+ */
+function canonicalPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+const thisFile = canonicalPath(fileURLToPath(import.meta.url));
+const entryScript = process.argv[1]
+  ? canonicalPath(resolve(process.argv[1]))
+  : "";
 const isMain = entryScript !== "" && entryScript === thisFile;
 
 if (isMain) {

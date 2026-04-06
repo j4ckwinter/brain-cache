@@ -18,6 +18,8 @@ import {
   deduplicateChunks,
   classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
+  filterDedupedForNonTestChunks,
+  querySignalsTestIntent,
 } from '../../src/services/retriever.js';
 import type { RetrievedChunk } from '../../src/lib/types.js';
 
@@ -632,5 +634,48 @@ describe('PREC-01 / PREC-02: tiered keyword boost', () => {
 
     // Higher raw similarity wins when no name or file boost applies
     expect(results[0].id).toBe('high');
+  });
+});
+
+describe('querySignalsTestIntent', () => {
+  it('detects test-focused queries', () => {
+    expect(querySignalsTestIntent('how to test the parser')).toBe(true);
+    expect(querySignalsTestIntent('jest setup')).toBe(true);
+  });
+
+  it('returns false for generic behaviour questions', () => {
+    expect(querySignalsTestIntent('how does authentication work')).toBe(false);
+  });
+});
+
+describe('filterDedupedForNonTestChunks', () => {
+  const src = (id: string, path: string): RetrievedChunk => ({
+    id,
+    filePath: path,
+    chunkType: 'function',
+    scope: null,
+    name: 'f',
+    content: 'x',
+    startLine: 1,
+    endLine: 2,
+    fileType: 'source',
+    similarity: 0.9,
+  });
+
+  it('removes test chunks when enough source chunks remain', () => {
+    const chunks = [
+      src('1', 'src/a.ts'),
+      src('2', 'src/a.spec.ts'),
+      src('3', 'src/b.ts'),
+      src('4', 'src/c.ts'),
+    ];
+    const out = filterDedupedForNonTestChunks(chunks, 'how does it work');
+    expect(out.map((c) => c.filePath)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
+  });
+
+  it('keeps all chunks when query signals test intent', () => {
+    const chunks = [src('1', 'src/a.ts'), src('2', 'src/a.spec.ts')];
+    const out = filterDedupedForNonTestChunks(chunks, 'jest unit test');
+    expect(out).toHaveLength(2);
   });
 });

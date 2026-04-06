@@ -20,7 +20,7 @@ import {
   isOllamaRunning,
   getOllamaVersion,
 } from "../services/ollama.js";
-import { readIndexState } from "../services/lancedb.js";
+import { readIndexState, readFileHashes } from "../services/lancedb.js";
 import { runIndex } from "../workflows/index.js";
 import { runSearch } from "../workflows/search.js";
 import { runBuildContext } from "../workflows/buildContext.js";
@@ -99,16 +99,23 @@ export function createMcpServer(): McpServer {
   async function buildSearchResponse(
     chunks: RetrievedChunk[],
     query: string,
+    projectRoot: string,
     precomputed?: TokenSavingsResult,
     options?: { fallback?: boolean },
   ) {
-    const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext } =
-      precomputed ?? await computeTokenSavings(chunks);
+    const savingsResult =
+      precomputed ??
+      (await computeTokenSavings(chunks, {
+        rootDir: projectRoot,
+        query,
+        tokenCounts: (await readFileHashes(projectRoot)).tokenCounts,
+      }));
     const savings = formatTokenSavings({
-      tokensSent,
-      estimatedWithout: estimatedWithoutBraincache,
-      reductionPct,
-      filesInContext,
+      tokensSent: savingsResult.tokensSent,
+      estimatedWithout: savingsResult.estimatedWithoutBraincache,
+      reductionPct: savingsResult.reductionPct,
+      filesInContext: savingsResult.filesInContext,
+      savingsDisplayMode: savingsResult.savingsDisplayMode,
     });
     const pipeline = formatPipelineLabel(["embed", "search", "dedup"]);
     const footer = `---\n${savings}\nPipeline: ${pipeline}`;
@@ -128,13 +135,24 @@ export function createMcpServer(): McpServer {
   }
 
   function buildContextResponse(result: ContextResult, query: string) {
-    const { tokensSent, estimatedWithoutBraincache, reductionPct, filesInContext, localTasksPerformed } =
-      result.metadata;
+    const {
+      tokensSent,
+      estimatedWithoutBraincache,
+      reductionPct,
+      filesInContext,
+      matchedPoolTokens,
+      filteringPct,
+      savingsDisplayMode,
+      localTasksPerformed,
+    } = result.metadata;
     const savings = formatTokenSavings({
       tokensSent,
       estimatedWithout: estimatedWithoutBraincache,
       reductionPct,
       filesInContext,
+      matchedPoolTokens,
+      filteringPct,
+      savingsDisplayMode,
     });
     const pipeline = formatPipelineLabel(localTasksPerformed);
     const footer = `---\n${savings}\nPipeline: ${pipeline}`;
@@ -173,12 +191,17 @@ export function createMcpServer(): McpServer {
         const resolvedPath = resolve(path ?? ".");
         validateIndexPath(resolvedPath);
         const { chunks, fallback } = await runSearch(query, { limit, path: resolvedPath });
-        const savings = await computeTokenSavings(chunks);
+        const { tokenCounts } = await readFileHashes(resolvedPath);
+        const savings = await computeTokenSavings(chunks, {
+          rootDir: resolvedPath,
+          query,
+          tokenCounts,
+        });
         accumulateStats({
           tokensSent: savings.tokensSent,
           estimatedWithoutBraincache: savings.estimatedWithoutBraincache,
         }).catch((err) => log.warn({ err }, "stats accumulation failed"));
-        return buildSearchResponse(chunks, query, savings, { fallback });
+        return buildSearchResponse(chunks, query, resolvedPath, savings, { fallback });
       },
       { autoIndex: true, operationName: "Search", allowOllamaDown: true },
     ),

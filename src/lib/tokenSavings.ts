@@ -1,55 +1,84 @@
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { countChunkTokens } from '../services/tokenCounter.js';
-import { TOOL_CALL_OVERHEAD_TOKENS } from './config.js';
-import type { RetrievedChunk } from './types.js';
+import type { RetrievedChunk, SavingsDisplayMode } from './types.js';
+import {
+  computeGrepStyleBaselineFromChunks,
+} from './grepStyleBaseline.js';
 
 export interface TokenSavingsResult {
   tokensSent: number;
   estimatedWithoutBraincache: number;
   reductionPct: number;
   filesInContext: number;
+  /** Sum of raw chunk content tokens (search result pool). */
+  matchedPoolTokens: number;
+  /** Share of chunk-pool tokens not represented in tokensSent (search uses chunk bodies only). */
+  filteringPct: number;
+  savingsDisplayMode: SavingsDisplayMode;
+}
+
+export interface ComputeTokenSavingsOptions {
+  /** Project root for resolving file paths and reading file-hashes.json */
+  rootDir: string;
+  query: string;
+  /** From readFileHashes(rootDir).hashes or merged tokenCounts */
+  tokenCounts: Record<string, number>;
 }
 
 /**
- * Compute token savings by reading actual source files.
- * Matches the canonical pattern from buildContext.ts lines 82-97.
- * Replaces the `tokensSent * 3` magic multiplier in search handlers.
- *
- * Baseline represents what Claude would spend without this tool: one tool call
- * to find relevant files, then one full Read per matched file.
+ * Token savings for search_codebase: tokens sent vs grep-style baseline (top files
+ * among returned chunks by keyword match).
  */
 export async function computeTokenSavings(
   chunks: RetrievedChunk[],
+  options: ComputeTokenSavingsOptions,
 ): Promise<TokenSavingsResult> {
-  const tokensSent = Math.round(
-    chunks.reduce((sum, c) => sum + c.content.length, 0) / 4
+  const { rootDir, query, tokenCounts } = options;
+
+  const tokensSent = chunks.reduce(
+    (sum, c) => sum + countChunkTokens(c.content),
+    0,
   );
 
-  const uniqueFiles = [...new Set(chunks.map(c => c.filePath))];
+  const matchedPoolTokens = tokensSent;
+
+  const readFileTokens = async (fp: string): Promise<number> => {
+    try {
+      const fileContent = await readFile(resolve(rootDir, fp), 'utf-8');
+      return countChunkTokens(fileContent);
+    } catch {
+      return 0;
+    }
+  };
+
+  const { grepBaselineTokens } = await computeGrepStyleBaselineFromChunks(
+    chunks,
+    query,
+    tokenCounts,
+    readFileTokens,
+  );
+
+  const estimatedWithoutBraincache = grepBaselineTokens;
+
+  const uniqueFiles = [...new Set(chunks.map((c) => c.filePath))];
   const filesInContext = uniqueFiles.length;
 
-  let fileContentTokens = 0;
-  for (const filePath of uniqueFiles) {
-    try {
-      const content = await readFile(filePath, 'utf-8');
-      fileContentTokens += countChunkTokens(content);
-    } catch {
-      // File deleted since indexing — skip gracefully
-    }
+  const rawReductionPct =
+    estimatedWithoutBraincache > 0
+      ? Math.round((1 - tokensSent / estimatedWithoutBraincache) * 100)
+      : 0;
+
+  let savingsDisplayMode: SavingsDisplayMode = 'full';
+  if (rawReductionPct >= 99) {
+    savingsDisplayMode = 'filtering_only';
   }
 
-  const toolCalls = 1 + filesInContext;
-  const estimatedWithoutBraincache =
-    fileContentTokens + toolCalls * TOOL_CALL_OVERHEAD_TOKENS;
+  const reductionPct = Math.min(98, Math.max(0, rawReductionPct));
 
-  const reductionPct =
-    estimatedWithoutBraincache > 0
-      ? Math.max(
-          0,
-          Math.round(
-            (1 - tokensSent / estimatedWithoutBraincache) * 100
-          )
-        )
+  const filteringPct =
+    matchedPoolTokens > 0 && tokensSent < matchedPoolTokens
+      ? Math.round((1 - tokensSent / matchedPoolTokens) * 100)
       : 0;
 
   return {
@@ -57,5 +86,8 @@ export async function computeTokenSavings(
     estimatedWithoutBraincache,
     reductionPct,
     filesInContext,
+    matchedPoolTokens,
+    filteringPct,
+    savingsDisplayMode,
   };
 }

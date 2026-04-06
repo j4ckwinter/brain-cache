@@ -8,10 +8,15 @@ import {
   deduplicateChunks,
   classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
+  filterDedupedForNonTestChunks,
 } from '../services/retriever.js';
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
-import { DEFAULT_TOKEN_BUDGET, TOOL_CALL_OVERHEAD_TOKENS } from '../lib/config.js';
-import type { ContextResult, SearchOptions } from '../lib/types.js';
+import { DEFAULT_TOKEN_BUDGET } from '../lib/config.js';
+import { computeGrepStyleBaseline } from '../lib/grepStyleBaseline.js';
+import type { ContextResult, SearchOptions, SavingsDisplayMode } from '../lib/types.js';
+import { childLogger } from '../services/logger.js';
+
+const log = childLogger('build-context');
 
 export interface BuildContextOptions {
   maxTokens?: number;
@@ -23,18 +28,15 @@ export async function runBuildContext(
   query: string,
   opts?: BuildContextOptions
 ): Promise<ContextResult> {
-  // 1. Read profile and check Ollama
   const profile = await requireProfile();
   await requireOllama();
 
-  // 2. Resolve project root and read index state
   const rootDir = resolve(opts?.path ?? '.');
   const indexState = await readIndexState(rootDir);
   if (indexState === null) {
     throw new Error(`No index found at ${rootDir}. Run 'brain-cache index' first.`);
   }
 
-  // 4. Open database and table
   const db = await getConnection(rootDir);
   const tableNames = await db.tableNames();
   if (!tableNames.includes('chunks')) {
@@ -42,7 +44,6 @@ export async function runBuildContext(
   }
   const table = await db.openTable('chunks');
 
-  // 5. Classify intent and determine search strategy
   const mode = classifyRetrievalMode(query);
   const strategy: SearchOptions = {
     limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
@@ -56,66 +57,96 @@ export async function runBuildContext(
     `brain-cache: building context (intent=${mode}, budget=${maxTokens} tokens)\n`
   );
 
-  // 6. Embed query using model from index state
   const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
   const queryVector = vectors[0];
 
-  // 7. Search and deduplicate
   const results = await searchChunks(table, queryVector, strategy, query);
-  const deduped = deduplicateChunks(results);
+  let deduped = deduplicateChunks(results);
+  deduped = filterDedupedForNonTestChunks(deduped, query);
 
-  // 8. Assemble context within token budget
+  /** Raw chunk body tokens in the retrieval set (before formatting / budget assembly). */
+  const matchedPoolTokens = deduped.reduce(
+    (sum, c) => sum + countChunkTokens(c.content),
+    0,
+  );
+
   const assembled = assembleContext(deduped, { maxTokens });
 
-  // 9. Estimate tokens without brain-cache
-  //
-  // Baseline represents what Claude would spend without this tool: one tool call
-  // to find relevant files, then one full Read per matched file.
-  // PERF-03: read per-file token counts from file-hashes.json instead of disk reads.
   const { tokenCounts } = await readFileHashes(rootDir);
-  const uniqueFiles = [...new Set(assembled.chunks.map((c) => c.filePath))];
-  const numFiles = uniqueFiles.length;
-  let fileContentTokens = 0;
-  for (const fp of uniqueFiles) {
-    if (tokenCounts[fp] !== undefined) {
-      fileContentTokens += tokenCounts[fp];
-    } else {
-      // Fallback: read from disk if token count not in manifest (older index)
-      try {
-        const fileContent = await readFile(resolve(rootDir, fp), 'utf-8');
-        fileContentTokens += countChunkTokens(fileContent);
-      } catch {
-        // file may have been removed since indexing
-      }
+
+  const readFileTokens = async (fp: string): Promise<number> => {
+    try {
+      const fileContent = await readFile(resolve(rootDir, fp), 'utf-8');
+      return countChunkTokens(fileContent);
+    } catch {
+      return 0;
     }
-  }
+  };
 
-  const toolCalls = 1 + numFiles;
-  const toolCallOverhead = toolCalls * TOOL_CALL_OVERHEAD_TOKENS;
-  const estimatedWithoutBraincache = fileContentTokens + toolCallOverhead;
+  const { grepBaselineTokens } = await computeGrepStyleBaseline(
+    table,
+    query,
+    tokenCounts,
+    readFileTokens,
+  );
 
-  // 10. Compute reduction percentage
-  const reductionPct =
+  const estimatedWithoutBraincache = grepBaselineTokens;
+
+  const tokensSent = assembled.tokenCount;
+  const rawReductionPct =
     estimatedWithoutBraincache > 0
-      ? Math.max(0, Math.round((1 - assembled.tokenCount / estimatedWithoutBraincache) * 100))
+      ? Math.round((1 - tokensSent / estimatedWithoutBraincache) * 100)
       : 0;
 
-  // 11. Build result
+  let savingsDisplayMode: SavingsDisplayMode = 'full';
+  if (rawReductionPct >= 99) {
+    log.warn(
+      {
+        tokensSent,
+        estimatedWithoutBraincache,
+        rawReductionPct,
+        mode: 'grep_baseline',
+      },
+      'Token savings reduction >= 99% — showing filtering stats instead of reduction %',
+    );
+    savingsDisplayMode = 'filtering_only';
+  }
+
+  const reductionPct =
+    savingsDisplayMode === 'filtering_only'
+      ? Math.min(98, rawReductionPct)
+      : Math.min(98, Math.max(0, rawReductionPct));
+
+  let filteringPct = 0;
+  if (matchedPoolTokens > 0 && tokensSent < matchedPoolTokens) {
+    filteringPct = Math.round((1 - tokensSent / matchedPoolTokens) * 100);
+  }
+
+  const uniqueFiles = [...new Set(assembled.chunks.map((c) => c.filePath))];
+  const numFiles = uniqueFiles.length;
+
   const result: ContextResult = {
     content: assembled.content,
     chunks: assembled.chunks,
     metadata: {
-      tokensSent: assembled.tokenCount,
+      tokensSent,
       estimatedWithoutBraincache,
       reductionPct,
       filesInContext: numFiles,
+      matchedPoolTokens,
+      filteringPct,
+      savingsDisplayMode,
       localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'token_budget'],
       cloudCallsMade: 0,
     },
   };
 
+  const stderrNote =
+    savingsDisplayMode === 'filtering_only'
+      ? `${tokensSent} tokens, ${filteringPct}% of matched chunk pool filtered by budget`
+      : `${tokensSent} tokens, ~${reductionPct}% vs grep-style baseline, ${filteringPct}% of chunk pool filtered`;
   process.stderr.write(
-    `brain-cache: context assembled (${assembled.tokenCount} tokens, ${reductionPct}% reduction, ${assembled.chunks.length} chunks)\n`
+    `brain-cache: context assembled (${stderrNote}, ${assembled.chunks.length} chunks)\n`
   );
 
   return result;

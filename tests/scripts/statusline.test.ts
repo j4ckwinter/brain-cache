@@ -194,5 +194,15 @@ describe('statusline', () => {
       };
       expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 1.8M tokens (90% less)\n');
     });
+
+    it('caps displayed percentage at 98% when raw reduction would be 99% or higher', () => {
+      const stats = {
+        tokensSent: 100,
+        estimatedWithoutBraincache: 10000,
+        callCount: 1,
+        lastUpdatedAt: new Date().toISOString(),
+      };
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 10k tokens (98% less)\n');
+    });
   });
 });

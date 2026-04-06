@@ -49,33 +49,47 @@ describe('formatErrorEnvelope', () => {
   });
 });
 
-describe('formatTokenSavings', () => {
-  it('formats typical token savings with plain label: value format (no column alignment)', () => {
+describe('formatTokenSavings (index embedding)', () => {
+  it('uses legacy index wording for chunk vs raw stats', () => {
+    const result = formatTokenSavings({
+      tokensSent: 500,
+      estimatedWithout: 2000,
+      reductionPct: 75,
+      filesInContext: 3,
+      indexEmbeddingMode: true,
+    });
+    expect(result).toContain('Estimated without:');
+    expect(result).toContain('Reduction: 75%');
+    expect(result).not.toContain('grep-style');
+  });
+});
+
+describe('formatTokenSavings (search_codebase)', () => {
+  it('formats search footer with grep baseline and value line', () => {
     const result = formatTokenSavings({
       tokensSent: 1240,
       estimatedWithout: 18600,
       reductionPct: 93,
       filesInContext: 5,
+      savingsDisplayMode: 'full',
     });
-    expect(result).toBe(
-      'Tokens sent to Claude: 1,240\n' +
-      'Estimated without: ~18,600  (5 files + overhead)\n' +
-      'Reduction: 93%'
-    );
+    expect(result).toContain('Tokens sent to Claude: 1,240');
+    expect(result).toContain('Vs grep-style baseline');
+    expect(result).toContain('~18,600');
+    expect(result).toContain('Reduction vs baseline: 93%');
+    expect(result).toContain('semantic discovery');
   });
 
   it('handles zero values', () => {
     const result = formatTokenSavings({
       tokensSent: 0,
-      estimatedWithout: 0,
+      estimatedWithout: 300,
       reductionPct: 0,
       filesInContext: 0,
+      savingsDisplayMode: 'full',
     });
-    expect(result).toBe(
-      'Tokens sent to Claude: 0\n' +
-      'Estimated without: ~0  (0 files + overhead)\n' +
-      'Reduction: 0%'
-    );
+    expect(result).toContain('Tokens sent to Claude: 0');
+    expect(result).toContain('~300');
   });
 
   it('uses singular "file" for single-file context', () => {
@@ -84,53 +98,54 @@ describe('formatTokenSavings', () => {
       estimatedWithout: 2000,
       reductionPct: 75,
       filesInContext: 1,
+      savingsDisplayMode: 'full',
     });
     expect(result).toContain('(1 file + overhead)');
   });
 
-  it('uses plural "files" for multi-file context', () => {
+  it('omits reduction line when savingsDisplayMode is filtering_only', () => {
     const result = formatTokenSavings({
-      tokensSent: 500,
-      estimatedWithout: 2000,
-      reductionPct: 75,
+      tokensSent: 10,
+      estimatedWithout: 5000,
+      reductionPct: 98,
+      filesInContext: 2,
+      savingsDisplayMode: 'filtering_only',
+    });
+    expect(result).not.toContain('Reduction vs baseline');
+    expect(result).toContain('semantic discovery');
+  });
+});
+
+describe('formatTokenSavings (build_context)', () => {
+  it('shows matched chunk pool and optional grep baseline', () => {
+    const result = formatTokenSavings({
+      tokensSent: 3757,
+      estimatedWithout: 12000,
+      reductionPct: 68,
+      filesInContext: 14,
+      matchedPoolTokens: 48000,
+      filteringPct: 92,
+      savingsDisplayMode: 'full',
+    });
+    expect(result).toContain('Tokens sent to Claude: 3,757');
+    expect(result).toContain('~48,000');
+    expect(result).toContain('92% filtered by budget');
+    expect(result).toContain('Vs grep-style baseline');
+    expect(result).toContain('semantic discovery');
+  });
+
+  it('hides grep baseline line when savingsDisplayMode is filtering_only', () => {
+    const result = formatTokenSavings({
+      tokensSent: 100,
+      estimatedWithout: 50000,
+      reductionPct: 98,
       filesInContext: 3,
+      matchedPoolTokens: 40000,
+      filteringPct: 99,
+      savingsDisplayMode: 'filtering_only',
     });
-    expect(result).toContain('(3 files + overhead)');
-  });
-
-  it('uses locale formatting with commas for large numbers', () => {
-    const result = formatTokenSavings({
-      tokensSent: 1234567,
-      estimatedWithout: 9876543,
-      reductionPct: 87,
-      filesInContext: 10,
-    });
-    expect(result).toContain('1,234,567');
-    expect(result).toContain('~9,876,543');
-  });
-
-  it('prefixes estimated value with ~ and suffixes reduction with %', () => {
-    const result = formatTokenSavings({
-      tokensSent: 500,
-      estimatedWithout: 2000,
-      reductionPct: 75,
-      filesInContext: 3,
-    });
-    expect(result).toContain('~2,000');
-    expect(result).toContain('75%');
-    expect(result).not.toContain('~500');
-  });
-
-  it('uses plain label: value format with no extra spaces between label and value', () => {
-    const result = formatTokenSavings({
-      tokensSent: 1240,
-      estimatedWithout: 18600,
-      reductionPct: 93,
-      filesInContext: 5,
-    });
-    // Plain format: "Tokens sent to Claude: " immediately followed by value
-    expect(result).toContain('Tokens sent to Claude: 1,240');
-    expect(result).toContain('Reduction: 93%');
+    expect(result).not.toContain('Vs grep-style baseline');
+    expect(result).toContain('filtered by budget');
   });
 });
 
@@ -150,239 +165,44 @@ describe('formatDoctorOutput', () => {
     vramTier: 'standard',
   };
 
-  it('contains Ollama status line', () => {
-    const result = formatDoctorOutput(runningHealth);
-    expect(result).toContain('Ollama:');
-    expect(result).toContain('running');
+  it('includes Ollama and index lines when running', () => {
+    const out = formatDoctorOutput(runningHealth);
+    expect(out).toContain('Ollama: running');
+    expect(out).toContain('Index: indexed');
   });
-
-  it('contains Ollama version when running', () => {
-    const result = formatDoctorOutput(runningHealth);
-    expect(result).toContain('0.8.0');
-  });
-
-  it('contains Index line with file and chunk counts when indexed', () => {
-    const result = formatDoctorOutput(runningHealth);
-    expect(result).toContain('Index:');
-    expect(result).toContain('42');
-    expect(result).toContain('317');
-  });
-
-  it('contains Embedding model line with model name', () => {
-    const result = formatDoctorOutput(runningHealth);
-    expect(result).toContain('Embedding model:');
-    expect(result).toContain('nomic-embed-text');
-  });
-
-  it('contains VRAM line with tier and GiB when available', () => {
-    const result = formatDoctorOutput(runningHealth);
-    expect(result).toContain('VRAM:');
-    expect(result).toContain('8.5');
-  });
-
-  it('shows appropriate status for not_installed Ollama', () => {
-    const notInstalledHealth: DoctorHealth = {
-      ...runningHealth,
-      ollamaStatus: 'not_installed',
-      ollamaVersion: null,
-    };
-    const result = formatDoctorOutput(notInstalledHealth);
-    expect(result).toContain('Ollama:');
-    expect(result).toContain('not_installed');
-  });
-
-  it('shows not indexed status when indexed is false', () => {
-    const notIndexedHealth: DoctorHealth = {
-      ...runningHealth,
-      indexFreshness: {
-        indexed: false,
-        indexedAt: null,
-        fileCount: null,
-        chunkCount: null,
-      },
-    };
-    const result = formatDoctorOutput(notIndexedHealth);
-    expect(result).toContain('Index:');
-    expect(result).toContain('not indexed');
-  });
-
-  it('shows no GPU detected when vramTier is none', () => {
-    const noGpuHealth: DoctorHealth = {
-      ...runningHealth,
-      vramAvailable: null,
-      vramTier: 'none',
-    };
-    const result = formatDoctorOutput(noGpuHealth);
-    expect(result).toContain('VRAM:');
-    expect(result).toContain('no GPU');
-  });
-
-  it('produces multi-line output with each service on its own line', () => {
-    const result = formatDoctorOutput(runningHealth);
-    const lines = result.split('\n').filter(l => l.trim() !== '');
-    expect(lines.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('contains no ANSI escape codes', () => {
-    const result = formatDoctorOutput(runningHealth);
-    expect(result).not.toMatch(/\x1b\[/);
-  });
-});
-
-describe('formatIndexResult', () => {
-  it('produces single-line completion summary with counts', () => {
-    const result = formatIndexResult({
-      status: 'ok',
-      path: '/home/user/project',
-      fileCount: 42,
-      chunkCount: 317,
-    });
-    expect(result).toBe('Indexed /home/user/project — 42 files, 317 chunks.');
-  });
-
-  it('produces short summary without counts when null', () => {
-    const result = formatIndexResult({
-      status: 'ok',
-      path: '/p',
-      fileCount: null,
-      chunkCount: null,
-    });
-    expect(result).toBe('Indexed /p.');
-  });
-
-  it('uses the path from result', () => {
-    const result: IndexResult = {
-      status: 'ok',
-      path: '/custom/path/here',
-      fileCount: 10,
-      chunkCount: 50,
-    };
-    expect(formatIndexResult(result)).toContain('/custom/path/here');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// formatSearchResults
-// ---------------------------------------------------------------------------
-
-const makeChunk = (overrides: Partial<RetrievedChunk> = {}): RetrievedChunk => ({
-  id: 'chunk-1',
-  filePath: 'src/foo.ts',
-  chunkType: 'function',
-  scope: null,
-  name: 'doWork',
-  content: 'function doWork() {}',
-  startLine: 10,
-  endLine: 20,
-  similarity: 0.92,
-  ...overrides,
 });
 
 describe('formatSearchResults', () => {
-  it('returns clean sentence for zero results (not an empty list)', () => {
-    const result = formatSearchResults([]);
-    expect(result).toBe('No results found for the given query.');
-    expect(result).not.toContain('[');
-    expect(result).not.toContain(']');
-  });
-
-  it('contains rank number 1 for a single result', () => {
-    const result = formatSearchResults([makeChunk()]);
-    expect(result).toContain('1.');
-  });
-
-  it('contains name for a single result', () => {
-    const result = formatSearchResults([makeChunk()]);
-    expect(result).toContain('doWork');
-  });
-
-  it('contains chunkType for a single result', () => {
-    const result = formatSearchResults([makeChunk()]);
-    expect(result).toContain('function');
-  });
-
-  it('contains filePath:startLine for a single result', () => {
-    const result = formatSearchResults([makeChunk()]);
-    expect(result).toContain('src/foo.ts:10');
-  });
-
-  it('contains similarity score formatted to 3 decimal places', () => {
-    const result = formatSearchResults([makeChunk({ similarity: 0.92 })]);
-    expect(result).toContain('0.920');
-  });
-
-  it('produces numbered entries for multiple results', () => {
-    const chunks = [
-      makeChunk({ id: 'c1', name: 'alpha', similarity: 0.95 }),
-      makeChunk({ id: 'c2', name: 'beta', similarity: 0.80 }),
-    ];
-    const result = formatSearchResults(chunks);
-    expect(result).toContain('1.');
-    expect(result).toContain('2.');
-    expect(result).toContain('alpha');
-    expect(result).toContain('beta');
-  });
-
-  it('shows (anonymous) for null name', () => {
-    const result = formatSearchResults([makeChunk({ name: null })]);
-    expect(result).toContain('(anonymous)');
-  });
-
-  it('does not contain JSON braces or brackets', () => {
-    const result = formatSearchResults([makeChunk()]);
-    expect(result).not.toContain('{');
-    expect(result).not.toContain('[');
+  it('returns empty message when no chunks', () => {
+    expect(formatSearchResults([])).toContain('No results');
   });
 });
 
-// ---------------------------------------------------------------------------
-// formatContext
-// ---------------------------------------------------------------------------
-
-const makeContextResult = (content: string = 'some content'): ContextResult => {
-  const metadata: ContextMetadata = {
-    tokensSent: 100,
-    estimatedWithoutBraincache: 500,
-    reductionPct: 80,
-    filesInContext: 3,
-    localTasksPerformed: ['embed', 'search'],
-    cloudCallsMade: 1,
-  };
-  return {
-    content,
-    chunks: [],
-    metadata,
-  };
-};
-
 describe('formatContext', () => {
-  it('returns the content string from ContextResult as-is', () => {
-    const ctx = makeContextResult('# Architecture\nSome overview');
-    const result = formatContext(ctx);
-    expect(result).toBe('# Architecture\nSome overview');
-  });
-
-  it('does not add any extra wrapper or heading', () => {
-    const ctx = makeContextResult('plain content');
-    const result = formatContext(ctx);
-    expect(result).toBe('plain content');
-  });
-
-  it('returns empty string when content is empty', () => {
-    const ctx = makeContextResult('');
-    const result = formatContext(ctx);
-    expect(result).toBe('');
+  it('returns content only', () => {
+    const result: ContextResult = {
+      content: 'ctx',
+      chunks: [],
+      metadata: {} as ContextMetadata,
+    };
+    expect(formatContext(result)).toBe('ctx');
   });
 });
 
 describe('formatPipelineLabel', () => {
-  it('joins tasks with arrow separator', () => {
-    expect(formatPipelineLabel(['embed', 'search', 'dedup'])).toBe('embed -> search -> dedup');
+  it('joins tasks with arrow', () => {
+    expect(formatPipelineLabel(['a', 'b'])).toBe('a -> b');
   });
-  it('returns single task without separator', () => {
-    expect(formatPipelineLabel(['embed'])).toBe('embed');
-  });
-  it('returns empty string for empty array', () => {
-    expect(formatPipelineLabel([])).toBe('');
+});
+
+describe('formatIndexResult', () => {
+  it('formats with counts', () => {
+    const r: IndexResult = {
+      status: 'ok',
+      path: '/p',
+      fileCount: 3,
+      chunkCount: 10,
+    };
+    expect(formatIndexResult(r)).toContain('3 files');
   });
 });

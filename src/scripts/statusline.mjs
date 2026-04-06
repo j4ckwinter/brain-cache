@@ -69,8 +69,10 @@ export function readStats() {
 export function renderOutput(stats) {
   if (!stats) return IDLE_OUTPUT;
   const saved = stats.estimatedWithoutBraincache - stats.tokensSent;
-  const pct = Math.round(
-    (1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100,
+  // Cap at 98% — same as per-response token savings (avoids misleading 99–100%).
+  const pct = Math.min(
+    98,
+    Math.round((1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100),
   );
   if (pct <= 0 || saved <= 0) return IDLE_OUTPUT;
   return `\ud83e\udde0 brain-cache \u2192 saved ${formatTokenCount(saved)} tokens (${pct}% less)\n`;

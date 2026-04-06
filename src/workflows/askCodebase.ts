@@ -3,6 +3,7 @@ import { runBuildContext } from './buildContext.js';
 import type { BuildContextOptions } from './buildContext.js';
 import { childLogger } from '../services/logger.js';
 import { formatTokenSavings } from '../lib/format.js';
+import type { SavingsDisplayMode } from '../lib/types.js';
 
 const log = childLogger('ask-codebase');
 
@@ -29,6 +30,9 @@ export interface AskCodebaseResult {
     estimatedWithoutBraincache: number;
     reductionPct: number;
     filesInContext: number;
+    matchedPoolTokens: number;
+    filteringPct: number;
+    savingsDisplayMode: SavingsDisplayMode;
   };
   model: string;
 }
@@ -50,7 +54,15 @@ export async function runAskCodebase(
   const contextResult = await runBuildContext(question, buildOpts);
 
   process.stderr.write(
-    `brain-cache: context assembled\n${formatTokenSavings({ tokensSent: contextResult.metadata.tokensSent, estimatedWithout: contextResult.metadata.estimatedWithoutBraincache, reductionPct: contextResult.metadata.reductionPct, filesInContext: contextResult.metadata.filesInContext })}\n`
+    `brain-cache: context assembled\n${formatTokenSavings({
+      tokensSent: contextResult.metadata.tokensSent,
+      estimatedWithout: contextResult.metadata.estimatedWithoutBraincache,
+      reductionPct: contextResult.metadata.reductionPct,
+      filesInContext: contextResult.metadata.filesInContext,
+      matchedPoolTokens: contextResult.metadata.matchedPoolTokens,
+      filteringPct: contextResult.metadata.filteringPct,
+      savingsDisplayMode: contextResult.metadata.savingsDisplayMode,
+    })}\n`,
   );
 
   // 3. Send ONLY assembled content to Claude — NOT raw chunks (CLD-02)
@@ -90,6 +102,9 @@ export async function runAskCodebase(
       estimatedWithoutBraincache: contextResult.metadata.estimatedWithoutBraincache,
       reductionPct: contextResult.metadata.reductionPct,
       filesInContext: contextResult.metadata.filesInContext,
+      matchedPoolTokens: contextResult.metadata.matchedPoolTokens,
+      filteringPct: contextResult.metadata.filteringPct,
+      savingsDisplayMode: contextResult.metadata.savingsDisplayMode,
     },
     model,
   };
