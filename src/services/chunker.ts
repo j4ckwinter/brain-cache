@@ -60,6 +60,34 @@ async function loadLanguage(ext: string): Promise<Language | null> {
   }
 }
 
+// --- Parser cache (DEBT-07) ---
+// One Parser per WASM grammar file. Keyed by WASM filename so .ts and .mts
+// (both using tree-sitter-typescript.wasm) share the same Parser instance.
+// Safe for sequential use — web-tree-sitter Parser holds no state between parse() calls.
+const _parserCache = new Map<string, Parser>();
+
+/**
+ * Returns a cached Parser instance for the given file extension.
+ * Creates and caches a new Parser if none exists for this grammar.
+ * Returns null if no grammar is available for the extension.
+ */
+async function getParser(ext: string): Promise<Parser | null> {
+  const wasmFile = GRAMMAR_WASM[ext];
+  if (!wasmFile) return null;
+
+  if (_parserCache.has(wasmFile)) {
+    return _parserCache.get(wasmFile)!;
+  }
+
+  const lang = await loadLanguage(ext);
+  if (!lang) return null;
+
+  const parser = new Parser();
+  parser.setLanguage(lang);
+  _parserCache.set(wasmFile, parser);
+  return parser;
+}
+
 // web-tree-sitter Node type alias.
 type SyntaxNode = Node;
 
@@ -177,17 +205,15 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   const ext = extname(filePath);
 
   await ensureInit();
-  const lang = await loadLanguage(ext);
+  const parser = await getParser(ext);
 
-  if (!lang) {
+  if (!parser) {
     return { chunks: [], edges: [] };
   }
 
   const category = getLanguageCategory(ext);
   const nodeTypes = CHUNK_NODE_TYPES[category];
 
-  const parser = new Parser();
-  parser.setLanguage(lang);
   const tree = parser.parse(content);
 
   if (!tree) {
