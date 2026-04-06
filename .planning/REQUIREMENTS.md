@@ -63,7 +63,7 @@ Requirements for **Daily Adoption** milestone (Phases 48–51). See [.planning/m
 ### Watch and services
 
 - [x] **DAILY-02**: `brain-cache watch [path]` runs a debounced file watcher that invokes incremental index and respects the project index lock
-- [ ] **DAILY-03**: Documented opt-in install for a user-level background service that runs the watcher; documented disable/uninstall
+- [x] **DAILY-03**: Documented opt-in install for a user-level background service that runs the watcher; documented disable/uninstall
 
 ### Git history
 

@@ -161,7 +161,7 @@
 
 - [x] **Phase 48: Incremental Index I/O** — Reduce full-file reads on incremental index using stat/mtime (or equivalent) so unchanged files skip `readFile`+hash when the manifest says they are unchanged (3/3 plans)
 - [x] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned) (completed 2026-04-06)
-- [ ] **Phase 50: Background Service Install** — Optional `init` path or subcommand to install LaunchAgent/systemd user unit (document Windows separately) (planned)
+- [x] **Phase 50: Background Service Install** — Optional `init` path or subcommand to install LaunchAgent/systemd user unit (document Windows separately) (planned) (completed 2026-04-06)
 - [ ] **Phase 51: Git History Indexing** — Ingest commit messages and touched paths; same embed pipeline; search/build_context return provenance for history vs file chunks (planned)
 
 ## Phase Details
@@ -277,7 +277,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Documented, opt-in install path generates a valid unit file with correct `brain-cache watch` invocation and working directory
   2. Uninstall or disable path is documented
-**Plans:** 0/? plans (TBD at plan-phase)
+**Plans:** 2/2 plans complete
 
 ### Phase 51: Git History Indexing
 **Goal**: Commits (message + metadata) and touched paths are embedded and searchable alongside code chunks; results show whether a hit is source or history.
@@ -299,8 +299,8 @@ Plans:
 | 46. Missing Features | v3.4 | 3/3 | Complete | 2026-04-06 |
 | 47. Test Coverage and Structural Refactoring | v3.4 | 3/3 | Complete | 2026-04-06 |
 | 48. Incremental Index I/O | v3.5 | 3/3 | Complete    | 2026-04-06 |
-| 49. File Watcher | v3.5 | 2/2 | Complete   | 2026-04-06 |
-| 50. Background Service Install | v3.5 | 0/? | Planned | — |
+| 49. File Watcher | v3.5 | 2/2 | Complete    | 2026-04-06 |
+| 50. Background Service Install | v3.5 | 2/2 | Complete   | 2026-04-06 |
 | 51. Git History Indexing | v3.5 | 0/? | Planned | — |
 
 ---
