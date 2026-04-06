@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, appendFileSync, chmodSync, mkdirSync, copyFileSync } from 'node:fs';
+import { readFile, writeFile, appendFile, chmod, mkdir, copyFile, access } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -142,8 +142,13 @@ export async function runInit(): Promise<void> {
   };
   const mcpJsonPath = '.mcp.json';
 
-  if (existsSync(mcpJsonPath)) {
-    const mcpContent = readFileSync(mcpJsonPath, 'utf-8');
+  let mcpContent: string | null = null;
+  try {
+    mcpContent = await readFile(mcpJsonPath, 'utf-8');
+  } catch {
+    // file does not exist
+  }
+  if (mcpContent !== null) {
     const parsed = JSON.parse(mcpContent) as { mcpServers?: Record<string, { command: string; args: string[] }> };
     const existing = parsed.mcpServers?.['brain-cache'];
     if (existing && JSON.stringify(existing) === JSON.stringify(brainCacheMcpEntry)) {
@@ -151,12 +156,12 @@ export async function runInit(): Promise<void> {
     } else {
       parsed.mcpServers = parsed.mcpServers ?? {};
       parsed.mcpServers['brain-cache'] = brainCacheMcpEntry;
-      writeFileSync(mcpJsonPath, JSON.stringify(parsed, null, 2) + '\n');
+      await writeFile(mcpJsonPath, JSON.stringify(parsed, null, 2) + '\n');
       process.stderr.write('brain-cache: added brain-cache MCP server to .mcp.json.\n');
     }
   } else {
     const mcpConfig = { mcpServers: { 'brain-cache': brainCacheMcpEntry } };
-    writeFileSync(mcpJsonPath, JSON.stringify(mcpConfig, null, 2) + '\n');
+    await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2) + '\n');
     process.stderr.write('brain-cache: created .mcp.json with brain-cache MCP server.\n');
   }
 
@@ -164,16 +169,21 @@ export async function runInit(): Promise<void> {
   const claudeMdPath = 'CLAUDE.md';
   const { CLAUDE_MD_SECTION: brainCacheSection } = await import('../lib/claude-md-section.js');
 
-  if (existsSync(claudeMdPath)) {
-    const content = readFileSync(claudeMdPath, 'utf-8');
-    if (content.includes('## Brain-Cache MCP Tools')) {
+  let claudeMdContent: string | null = null;
+  try {
+    claudeMdContent = await readFile(claudeMdPath, 'utf-8');
+  } catch {
+    // file does not exist
+  }
+  if (claudeMdContent !== null) {
+    if (claudeMdContent.includes('## Brain-Cache MCP Tools')) {
       process.stderr.write('brain-cache: CLAUDE.md already contains Brain-Cache MCP Tools section, skipping.\n');
     } else {
-      appendFileSync(claudeMdPath, brainCacheSection);
+      await appendFile(claudeMdPath, brainCacheSection);
       process.stderr.write('brain-cache: appended Brain-Cache MCP Tools section to CLAUDE.md.\n');
     }
   } else {
-    writeFileSync(claudeMdPath, brainCacheSection.trimStart());
+    await writeFile(claudeMdPath, brainCacheSection.trimStart());
     process.stderr.write('brain-cache: created CLAUDE.md with Brain-Cache MCP Tools section.\n');
   }
 
@@ -181,20 +191,28 @@ export async function runInit(): Promise<void> {
   const currentFile = fileURLToPath(import.meta.url);
   // Walk up from current file to find package root (works regardless of tsup output structure)
   let packageRoot = dirname(currentFile);
-  while (!existsSync(join(packageRoot, 'package.json')) && packageRoot !== dirname(packageRoot)) {
+  while (packageRoot !== dirname(packageRoot)) {
+    let pkgExists = false;
+    try { await access(join(packageRoot, 'package.json')); pkgExists = true; } catch { /* not found */ }
+    if (pkgExists) break;
     packageRoot = dirname(packageRoot);
   }
   const skillSource = join(packageRoot, '.claude', 'skills', 'brain-cache', 'SKILL.md');
   const skillTargetDir = join(process.cwd(), '.claude', 'skills', 'brain-cache');
   const skillTarget = join(skillTargetDir, 'SKILL.md');
 
-  if (existsSync(skillTarget)) {
+  let skillTargetExists = false;
+  try { await access(skillTarget); skillTargetExists = true; } catch { /* not found */ }
+  let skillSourceExists = false;
+  try { await access(skillSource); skillSourceExists = true; } catch { /* not found */ }
+
+  if (skillTargetExists) {
     process.stderr.write('brain-cache: skill already installed at .claude/skills/brain-cache/SKILL.md, skipping.\n');
-  } else if (!existsSync(skillSource)) {
+  } else if (!skillSourceExists) {
     process.stderr.write('brain-cache: Warning: skill source not found in package. Copy .claude/skills/brain-cache/ manually from the repo.\n');
   } else {
-    mkdirSync(skillTargetDir, { recursive: true });
-    copyFileSync(skillSource, skillTarget);
+    await mkdir(skillTargetDir, { recursive: true });
+    await copyFile(skillSource, skillTarget);
     process.stderr.write('brain-cache: installed skill to .claude/skills/brain-cache/SKILL.md\n');
   }
 
@@ -202,8 +220,13 @@ export async function runInit(): Promise<void> {
   const { STATUSLINE_SCRIPT_CONTENT } = await import('../lib/statusline-script.js');
   const statuslinePath = join(homedir(), '.brain-cache', 'statusline.mjs');
 
-  if (existsSync(statuslinePath)) {
-    const existingScript = readFileSync(statuslinePath, 'utf-8');
+  let existingScript: string | null = null;
+  try {
+    existingScript = await readFile(statuslinePath, 'utf-8');
+  } catch {
+    // file does not exist
+  }
+  if (existingScript !== null) {
     if (existingScript === STATUSLINE_SCRIPT_CONTENT) {
       process.stderr.write('brain-cache: statusline.mjs already installed, skipping.\n');
     } else {
@@ -212,8 +235,8 @@ export async function runInit(): Promise<void> {
       );
     }
   } else {
-    writeFileSync(statuslinePath, STATUSLINE_SCRIPT_CONTENT, 'utf-8');
-    chmodSync(statuslinePath, 0o755);
+    await writeFile(statuslinePath, STATUSLINE_SCRIPT_CONTENT, 'utf-8');
+    await chmod(statuslinePath, 0o755);
     process.stderr.write('brain-cache: installed statusline.mjs to ~/.brain-cache/statusline.mjs\n');
   }
 
@@ -226,8 +249,13 @@ export async function runInit(): Promise<void> {
   };
 
   try {
-    if (existsSync(settingsPath)) {
-      const rawSettings = readFileSync(settingsPath, 'utf-8');
+    let rawSettings: string | null = null;
+    try {
+      rawSettings = await readFile(settingsPath, 'utf-8');
+    } catch {
+      // file does not exist
+    }
+    if (rawSettings !== null) {
       const parsed = JSON.parse(rawSettings) as Record<string, unknown>;
       if (parsed['statusLine']) {
         process.stderr.write(
@@ -236,13 +264,13 @@ export async function runInit(): Promise<void> {
         );
       } else {
         parsed['statusLine'] = statusLineEntry;
-        writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
+        await writeFile(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
         process.stderr.write('brain-cache: added statusLine to ~/.claude/settings.json\n');
       }
     } else {
-      mkdirSync(claudeDir, { recursive: true });
+      await mkdir(claudeDir, { recursive: true });
       const newSettings = { statusLine: statusLineEntry };
-      writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2) + '\n');
+      await writeFile(settingsPath, JSON.stringify(newSettings, null, 2) + '\n');
       process.stderr.write('brain-cache: created ~/.claude/settings.json with statusLine entry.\n');
     }
   } catch (err) {
@@ -255,9 +283,13 @@ export async function runInit(): Promise<void> {
 
   // Step 14: Add PreToolUse hooks to ~/.claude/settings.json (idempotent, safe merge per HOOK-01/02/03)
   try {
-    const rawSettings = existsSync(settingsPath)
-      ? readFileSync(settingsPath, 'utf-8')
-      : '{}';
+    let rawSettingsForHooks: string | null = null;
+    try {
+      rawSettingsForHooks = await readFile(settingsPath, 'utf-8');
+    } catch {
+      // file does not exist
+    }
+    const rawSettings = rawSettingsForHooks ?? '{}';
     const parsed = JSON.parse(rawSettings) as Record<string, unknown>;
     const hooks = (parsed['hooks'] ?? {}) as Record<string, unknown>;
     const preToolUse: HookEntry[] = Array.isArray(hooks['PreToolUse'])
@@ -273,8 +305,8 @@ export async function runInit(): Promise<void> {
     } else {
       hooks['PreToolUse'] = [...preserved, ...BRAIN_CACHE_PRETOOLUSE_HOOKS];
       parsed['hooks'] = hooks;
-      mkdirSync(claudeDir, { recursive: true });
-      writeFileSync(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
+      await mkdir(claudeDir, { recursive: true });
+      await writeFile(settingsPath, JSON.stringify(parsed, null, 2) + '\n');
       if (currentBC.length > 0) {
         process.stderr.write('brain-cache: updated PreToolUse hooks in ~/.claude/settings.json\n');
       } else {
