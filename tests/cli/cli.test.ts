@@ -77,6 +77,16 @@ describe('CLI Commander', () => {
     expect(mockRunIndex).toHaveBeenCalledWith('/some/path', { force: undefined });
   });
 
+  it('index --verify passes verify: true', async () => {
+    await program.parseAsync(['index', '--verify'], { from: 'user' });
+    expect(mockRunIndex).toHaveBeenCalledWith(undefined, { force: undefined, verify: true });
+  });
+
+  it('index --force --verify passes both flags (force wins at workflow level)', async () => {
+    await program.parseAsync(['index', '--force', '--verify'], { from: 'user' });
+    expect(mockRunIndex).toHaveBeenCalledWith(undefined, { force: true, verify: true });
+  });
+
   it('search passes query and default limit', async () => {
     await program.parseAsync(['search', 'hello world'], { from: 'user' });
     expect(mockRunSearch).toHaveBeenCalledWith('hello world', {
