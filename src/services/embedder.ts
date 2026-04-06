@@ -83,10 +83,10 @@ export async function embedBatchWithRetry(
   texts: string[],
   dimension: number = DEFAULT_EMBEDDING_DIMENSION,
   attempt = 0
-): Promise<{ embeddings: number[][], skipped: number }> {
+): Promise<{ embeddings: number[][], skipped: number, zeroVectorIndices: Set<number> }> {
   try {
     const embeddings = await embedBatch(model, texts);
-    return { embeddings, skipped: 0 };
+    return { embeddings, skipped: 0, zeroVectorIndices: new Set() };
   } catch (err) {
     if (attempt === 0 && isConnectionError(err)) {
       log.warn({ model }, 'Ollama cold-start suspected, retrying in 5s');
@@ -98,22 +98,24 @@ export async function embedBatchWithRetry(
     if (isContextLengthError(err)) {
       log.warn({ model, batchSize: texts.length }, 'Batch exceeded context length, falling back to individual embedding');
       const results: number[][] = [];
+      const zeroVectorIndices = new Set<number>();
       let skipped = 0;
-      for (const text of texts) {
+      for (let i = 0; i < texts.length; i++) {
         try {
-          const [vec] = await embedBatch(model, [text]);
+          const [vec] = await embedBatch(model, [texts[i]]);
           results.push(vec);
         } catch (innerErr) {
           if (isContextLengthError(innerErr)) {
-            // Count the skip — caller will report aggregate skip summary
+            // Track this index as a zero-vector — caller will skip inserting it
             skipped++;
+            zeroVectorIndices.add(i);
             results.push(new Array(dimension).fill(0));
           } else {
             throw innerErr;
           }
         }
       }
-      return { embeddings: results, skipped };
+      return { embeddings: results, skipped, zeroVectorIndices };
     }
 
     throw err;

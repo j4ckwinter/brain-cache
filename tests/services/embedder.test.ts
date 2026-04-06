@@ -78,7 +78,9 @@ describe('embedBatchWithRetry', () => {
     const result = await embedBatchWithRetry('nomic-embed-text', ['hello']);
 
     expect(mockOllama.embed).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ embeddings: fakeEmbeddings, skipped: 0 });
+    expect(result).toMatchObject({ embeddings: fakeEmbeddings, skipped: 0 });
+    expect(result.zeroVectorIndices).toBeInstanceOf(Set);
+    expect(result.zeroVectorIndices.size).toBe(0);
   });
 
   it('retries once on ECONNRESET connection error then succeeds', async () => {
@@ -101,7 +103,7 @@ describe('embedBatchWithRetry', () => {
     const result = await resultPromise;
 
     expect(mockOllama.embed).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ embeddings: fakeEmbeddings, skipped: 0 });
+    expect(result).toMatchObject({ embeddings: fakeEmbeddings, skipped: 0 });
   });
 
   it('throws on second failure (no infinite retry)', async () => {
@@ -134,5 +136,42 @@ describe('embedBatchWithRetry', () => {
       'Model not found'
     );
     expect(mockOllama.embed).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns zeroVectorIndices containing index of text that exceeded context length', async () => {
+    // Batch fails with context-length error, falls back to per-text embedding
+    // text[0] succeeds, text[1] still exceeds context
+    const contextLengthError = new Error('input length exceeds the context length');
+    const successEmbedding = [[0.1, 0.2, 0.3]];
+
+    mockOllama.embed
+      .mockRejectedValueOnce(contextLengthError) // batch call fails
+      .mockResolvedValueOnce({ embeddings: successEmbedding, model: 'nomic-embed-text', total_duration: 100, load_duration: 50, prompt_eval_count: 1 }) // text[0] succeeds
+      .mockRejectedValueOnce(contextLengthError); // text[1] still fails
+
+    const result = await embedBatchWithRetry('nomic-embed-text', ['short text', 'very long text that exceeds limit'], 3);
+
+    expect(result.zeroVectorIndices).toBeInstanceOf(Set);
+    expect(result.zeroVectorIndices.has(0)).toBe(false);
+    expect(result.zeroVectorIndices.has(1)).toBe(true);
+    expect(result.zeroVectorIndices.size).toBe(1);
+    // The zero-vector is still in embeddings array (for index alignment)
+    expect(result.embeddings[1]).toEqual([0, 0, 0]);
+  });
+
+  it('returns empty zeroVectorIndices when all texts embed successfully', async () => {
+    const fakeEmbeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+    mockOllama.embed.mockResolvedValue({
+      embeddings: fakeEmbeddings,
+      model: 'nomic-embed-text',
+      total_duration: 100,
+      load_duration: 50,
+      prompt_eval_count: 2,
+    });
+
+    const result = await embedBatchWithRetry('nomic-embed-text', ['hello', 'world']);
+
+    expect(result.zeroVectorIndices).toBeInstanceOf(Set);
+    expect(result.zeroVectorIndices.size).toBe(0);
   });
 });

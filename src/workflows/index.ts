@@ -270,21 +270,30 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
 
       const texts = embeddableBatch.map((chunk) => chunk.content);
       totalChunkTokens += texts.reduce((sum, t) => sum + countChunkTokens(t), 0);
-      const { embeddings: vectors, skipped } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
+      const { embeddings: vectors, skipped, zeroVectorIndices } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
       skippedChunks += skipped;
 
-      const rows: ChunkRow[] = embeddableBatch.map((chunk, i) => ({
-        id: chunk.id,
-        file_path: chunk.filePath,
-        chunk_type: chunk.chunkType,
-        scope: chunk.scope,
-        name: chunk.name,
-        content: chunk.content,
-        start_line: chunk.startLine,
-        end_line: chunk.endLine,
-        file_type: classifyFileType(chunk.filePath),
-        vector: vectors[i],
-      }));
+      if (zeroVectorIndices.size > 0) {
+        log.warn({ count: zeroVectorIndices.size }, 'Skipping zero-vector chunks (content too large to embed)');
+      }
+
+      // Build rows, skipping any chunk whose embedding fell back to a zero vector.
+      // vectors[i] corresponds to embeddableBatch[i] — zeroVectorIndices tracks which are zero.
+      const rows: ChunkRow[] = embeddableBatch
+        .map((chunk, i) => ({ chunk, i }))
+        .filter(({ i }) => !zeroVectorIndices.has(i))
+        .map(({ chunk, i }) => ({
+          id: chunk.id,
+          file_path: chunk.filePath,
+          chunk_type: chunk.chunkType,
+          scope: chunk.scope,
+          name: chunk.name,
+          content: chunk.content,
+          start_line: chunk.startLine,
+          end_line: chunk.endLine,
+          file_type: classifyFileType(chunk.filePath),
+          vector: vectors[i],
+        }));
 
       await insertChunks(table, rows);
       processedChunks += batch.length;

@@ -122,6 +122,40 @@ describe('searchChunks', () => {
     expect(testResult?.fileType).toBe('test');
   });
 
+  it('filters out rows where vector is all zeros (zero-vector belt-and-suspenders)', async () => {
+    const zeroVectorRow = makeRow({
+      id: 'zero-vec',
+      _distance: 0.1,
+      vector: new Array(768).fill(0),
+    });
+    const normalRow = makeRow({
+      id: 'normal',
+      _distance: 0.2,
+      vector: [0.1, 0.2, 0.3],
+    });
+    const table = makeMockTable([zeroVectorRow, normalRow]);
+
+    const results = await searchChunks(table, [0.1, 0.2], { limit: 10, distanceThreshold: 0.5 });
+
+    // zero-vector row should be excluded
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('normal');
+  });
+
+  it('passes through rows with non-zero vectors unchanged', async () => {
+    const normalRow = makeRow({
+      id: 'normal',
+      _distance: 0.1,
+      vector: [0.1, 0.0, 0.3],
+    });
+    const table = makeMockTable([normalRow]);
+
+    const results = await searchChunks(table, [0.1, 0.2], { limit: 10, distanceThreshold: 0.5 });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('normal');
+  });
+
   it('returns empty array when all rows are above distanceThreshold', async () => {
     const row = makeRow({ _distance: 0.9 });
     const table = makeMockTable([row]);

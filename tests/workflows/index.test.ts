@@ -152,7 +152,7 @@ describe('runIndex', () => {
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     // chunkFile now returns { chunks, edges } — provide that shape
     mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
-    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0 });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockOpenDatabase.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
     mockOpenOrCreateEdgesTable.mockResolvedValue({ delete: vi.fn(), countRows: vi.fn().mockResolvedValue(0) } as any);
@@ -183,7 +183,7 @@ describe('runIndex', () => {
     const callOrder: string[] = [];
     mockCrawlSourceFiles.mockImplementation(async () => { callOrder.push('crawl'); return fakeFiles; });
     mockChunkFile.mockImplementation((fp, _c) => { callOrder.push('chunk'); return { chunks: [fakeChunk(fp, 1)], edges: [] }; });
-    mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return { embeddings: [zeroVector768, zeroVector768], skipped: 0 }; });
+    mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return { embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() }; });
     mockInsertChunks.mockImplementation(async () => { callOrder.push('store'); });
     mockWriteIndexState.mockImplementation(async () => { callOrder.push('writeState'); });
 

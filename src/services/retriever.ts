@@ -251,6 +251,10 @@ export async function searchChunks(
 
   const chunks = (rows as RawChunkRow[])
     .filter((r) => r._distance <= opts.distanceThreshold)
+    .filter((r) => {
+      const vec = (r as unknown as { vector?: number[] }).vector;
+      return !vec || !vec.every(v => v === 0);
+    })
     .map((r) => ({
       id: r.id,
       filePath: r.file_path,
