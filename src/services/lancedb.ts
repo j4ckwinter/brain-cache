@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME } from '../lib/config.js';
 import { childLogger } from './logger.js';
-import type { CodeChunk, IndexState, CallEdge } from '../lib/types.js';
+import type { CodeChunk, IndexState, CallEdge, FileStatEntry } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
 
 const log = childLogger('lancedb');
@@ -308,12 +308,15 @@ export async function writeIndexState(projectRoot: string, state: IndexState): P
 
 /**
  * Manifest stored in file-hashes.json.
- * Extends the legacy format (plain Record<string, string>) with per-file token counts.
+ * Extends the legacy format (plain Record<string, string>) with per-file token counts
+ * and stat fingerprints for incremental I/O.
  * PERF-03: token counts cached here allow buildContext to skip disk reads.
+ * DAILY-01: stats map holds size + mtimeMs per path for the stat fast-path skip logic.
  */
 export interface FileHashManifest {
   hashes: Record<string, string>;
   tokenCounts: Record<string, number>;
+  stats: Record<string, FileStatEntry>;
 }
 
 /**
@@ -328,15 +331,16 @@ export async function readFileHashes(projectRoot: string): Promise<FileHashManif
     const parsed = JSON.parse(raw);
     // Graceful degradation: old format is just Record<string, string> without tokenCounts
     if (parsed && typeof parsed === 'object' && !parsed.hashes) {
-      // Old format — migrate: treat entire object as hashes, no token counts
-      return { hashes: parsed as Record<string, string>, tokenCounts: {} };
+      // Old format — migrate: treat entire object as hashes, no token counts, no stats
+      return { hashes: parsed as Record<string, string>, tokenCounts: {}, stats: {} };
     }
     return {
       hashes: parsed.hashes ?? {},
       tokenCounts: parsed.tokenCounts ?? {},
+      stats: parsed.stats ?? {},
     };
   } catch {
-    return { hashes: {}, tokenCounts: {} };
+    return { hashes: {}, tokenCounts: {}, stats: {} };
   }
 }
 
