@@ -24,6 +24,10 @@ export const SENSITIVE_DIRS: string[] = [
  */
 export function validateIndexPath(rawPath: string): void {
   const resolved = resolve(rawPath);
+  // macOS stores user temp dirs under /var/folders — not the same threat model as /var/log, /var/db, etc.
+  if (resolved === '/var/folders' || resolved.startsWith('/var/folders/')) {
+    return;
+  }
   for (const sensitive of SENSITIVE_DIRS) {
     if (resolved === sensitive || resolved.startsWith(sensitive + '/')) {
       throw new Error(

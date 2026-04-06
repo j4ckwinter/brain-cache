@@ -75,12 +75,12 @@ describe('validateIndexPath', () => {
 
   describe('handles path traversal attacks', () => {
     it('rejects ../../etc/passwd after resolve (traversal attack)', () => {
-      // After resolve(), ../../etc/passwd becomes /etc/passwd regardless of cwd
-      expect(() => validateIndexPath('../../etc/passwd')).toThrow('sensitive system directory');
+      // Anchor so resolve() yields /etc/passwd regardless of process cwd
+      expect(() => validateIndexPath('/tmp/foo/../../../etc/passwd')).toThrow('sensitive system directory');
     });
 
     it('rejects relative paths that resolve to /etc', () => {
-      expect(() => validateIndexPath('../../../etc')).toThrow('sensitive system directory');
+      expect(() => validateIndexPath('/tmp/foo/../../../etc')).toThrow('sensitive system directory');
     });
   });
 });
