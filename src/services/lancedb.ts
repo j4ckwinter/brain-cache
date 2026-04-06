@@ -307,21 +307,36 @@ export async function writeIndexState(projectRoot: string, state: IndexState): P
 }
 
 /**
- * Reads the file hash manifest from <projectRoot>/.brain-cache/file-hashes.json.
- * Returns a Record<string, string> (filePath -> sha256 hex) or empty object
- * if the file is missing or contains invalid JSON.
+ * Manifest stored in file-hashes.json.
+ * Extends the legacy format (plain Record<string, string>) with per-file token counts.
+ * PERF-03: token counts cached here allow buildContext to skip disk reads.
  */
-export async function readFileHashes(projectRoot: string): Promise<Record<string, string>> {
+export interface FileHashManifest {
+  hashes: Record<string, string>;
+  tokenCounts: Record<string, number>;
+}
+
+/**
+ * Reads the file hash manifest from <projectRoot>/.brain-cache/file-hashes.json.
+ * Returns a FileHashManifest with hashes and tokenCounts.
+ * Gracefully degrades from the legacy format (plain Record<string, string>).
+ */
+export async function readFileHashes(projectRoot: string): Promise<FileHashManifest> {
   const hashPath = join(projectRoot, PROJECT_DATA_DIR, FILE_HASHES_FILENAME);
   try {
     const raw = await readFile(hashPath, 'utf-8');
     const parsed = JSON.parse(raw);
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-      return parsed as Record<string, string>;
+    // Graceful degradation: old format is just Record<string, string> without tokenCounts
+    if (parsed && typeof parsed === 'object' && !parsed.hashes) {
+      // Old format — migrate: treat entire object as hashes, no token counts
+      return { hashes: parsed as Record<string, string>, tokenCounts: {} };
     }
-    return {};
+    return {
+      hashes: parsed.hashes ?? {},
+      tokenCounts: parsed.tokenCounts ?? {},
+    };
   } catch {
-    return {};
+    return { hashes: {}, tokenCounts: {} };
   }
 }
 
@@ -331,12 +346,12 @@ export async function readFileHashes(projectRoot: string): Promise<Record<string
  */
 export async function writeFileHashes(
   projectRoot: string,
-  hashes: Record<string, string>
+  manifest: FileHashManifest
 ): Promise<void> {
   const dataDir = join(projectRoot, PROJECT_DATA_DIR);
   await mkdir(dataDir, { recursive: true });
   const hashPath = join(dataDir, FILE_HASHES_FILENAME);
-  await writeFile(hashPath, JSON.stringify(hashes, null, 2), 'utf-8');
+  await writeFile(hashPath, JSON.stringify(manifest, null, 2), 'utf-8');
 }
 
 /**
@@ -351,6 +366,23 @@ export async function deleteChunksByFilePath(
   const escaped = filePath.replace(/'/g, "''");
   await withWriteLock(async () => {
     await table.delete(`file_path = '${escaped}'`);
+  });
+}
+
+/**
+ * Deletes all chunk rows where file_path is in the given set.
+ * Uses a single SQL IN predicate — one write lock acquire vs N serial acquires.
+ * No-ops if filePaths is empty. Each path is single-quote escaped.
+ * PERF-02: batch deletion for incremental re-index.
+ */
+export async function deleteChunksByFilePaths(
+  table: lancedb.Table,
+  filePaths: string[]
+): Promise<void> {
+  if (filePaths.length === 0) return;
+  const escaped = filePaths.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+  await withWriteLock(async () => {
+    await table.delete(`file_path IN (${escaped})`);
   });
 }
 
