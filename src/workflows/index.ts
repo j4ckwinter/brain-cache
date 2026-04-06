@@ -6,6 +6,7 @@ import { isOllamaRunning } from '../services/ollama.js';
 import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
+import { acquireIndexLock, releaseIndexLock } from '../services/indexLock.js';
 import { childLogger, setLogLevel } from '../services/logger.js';
 
 const log = childLogger('index');
@@ -70,10 +71,11 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     return originalStderrWrite(chunk, ...args);
   }) as typeof process.stderr.write;
 
-  try {
-  // Step 1: Resolve path
+  // Step 1: Resolve path (before try so lock can be acquired and released)
   const rootDir = resolve(targetPath ?? '.');
+  await acquireIndexLock(rootDir);
 
+  try {
   // Step 2: Read profile
   const profile = await readProfile();
   if (profile === null) {
@@ -372,5 +374,6 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean }):
     // Restore pino log level and stderr write
     setLogLevel(previousLogLevel as Parameters<typeof setLogLevel>[0]);
     process.stderr.write = originalStderrWrite;
+    await releaseIndexLock(rootDir);
   }
 }

@@ -21,6 +21,11 @@ vi.mock('../../src/services/embedder.js', () => ({
   embedBatchWithRetry: vi.fn(),
 }));
 
+vi.mock('../../src/services/indexLock.js', () => ({
+  acquireIndexLock: vi.fn(),
+  releaseIndexLock: vi.fn(),
+}));
+
 vi.mock('../../src/services/lancedb.js', () => ({
   openDatabase: vi.fn(),
   openOrCreateChunkTable: vi.fn(),
@@ -50,6 +55,7 @@ vi.mock('../../src/services/tokenCounter.js', () => ({
 
 import { readProfile } from '../../src/services/capability.js';
 import { isOllamaRunning } from '../../src/services/ollama.js';
+import { acquireIndexLock, releaseIndexLock } from '../../src/services/indexLock.js';
 import { crawlSourceFiles } from '../../src/services/crawler.js';
 import { chunkFile } from '../../src/services/chunker.js';
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
@@ -70,6 +76,8 @@ import {
 import { readFile } from 'node:fs/promises';
 import { countChunkTokens } from '../../src/services/tokenCounter.js';
 
+const mockAcquireIndexLock = vi.mocked(acquireIndexLock);
+const mockReleaseIndexLock = vi.mocked(releaseIndexLock);
 const mockReadProfile = vi.mocked(readProfile);
 const mockIsOllamaRunning = vi.mocked(isOllamaRunning);
 const mockCrawlSourceFiles = vi.mocked(crawlSourceFiles);
@@ -144,6 +152,10 @@ describe('runIndex', () => {
     processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code?: unknown) => {
       throw new Error(`process.exit(${code})`);
     });
+
+    // Lock defaults: no-op (always succeeds)
+    mockAcquireIndexLock.mockResolvedValue(undefined);
+    mockReleaseIndexLock.mockResolvedValue(undefined);
 
     // Happy path defaults
     mockReadProfile.mockResolvedValue({ ...mockProfile });
@@ -337,6 +349,31 @@ describe('runIndex', () => {
     expect(combined).toContain('Tokens sent to Claude:');
     expect(combined).toContain('Estimated without:');
     expect(combined).toContain('Reduction:');
+  });
+
+  it('calls acquireIndexLock with the resolved project path before indexing begins', async () => {
+    await runIndex('/project');
+    expect(mockAcquireIndexLock).toHaveBeenCalledWith('/project');
+    expect(mockAcquireIndexLock).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls releaseIndexLock in finally even when indexing throws', async () => {
+    mockReadProfile.mockRejectedValue(new Error('profile read failed'));
+
+    try {
+      await runIndex('/project');
+    } catch {
+      // expected
+    }
+
+    expect(mockReleaseIndexLock).toHaveBeenCalledWith('/project');
+  });
+
+  it('propagates lock contention error immediately without calling crawlSourceFiles', async () => {
+    mockAcquireIndexLock.mockRejectedValue(new Error('Another index operation is in progress. Try again later.'));
+
+    await expect(runIndex('/project')).rejects.toThrow('Another index operation is in progress');
+    expect(mockCrawlSourceFiles).not.toHaveBeenCalled();
   });
 
   it('skips files that fail to chunk instead of crashing the run', async () => {
