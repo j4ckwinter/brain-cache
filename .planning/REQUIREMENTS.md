@@ -67,7 +67,7 @@ Requirements for **Daily Adoption** milestone (Phases 48–51). See [.planning/m
 
 ### Git history
 
-- [ ] **DAILY-04**: Git commits (messages + touched paths, within configured limits) are embedded and searchable; retrieval surfaces provenance distinguishing history chunks from file chunks
+- [x] **DAILY-04**: Git commits (messages + touched paths, within configured limits) are embedded and searchable; retrieval surfaces provenance distinguishing history chunks from file chunks
 
 ---
 
@@ -132,12 +132,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DAILY-01 | Phase 48 | Planned |
 | DAILY-02 | Phase 49 | Planned |
 | DAILY-03 | Phase 52 | Complete |
-| DAILY-04 | Phase 53 | Pending |
+| DAILY-04 | Phase 53 | Complete |
 
 **Coverage:**
 - v3.4 requirements: 27 total — mapped: 27 — complete
-- v3.5 requirements: 4 total — mapped: 4 — partial closure (DAILY-01/02/03 complete; DAILY-04 pending in Phase 53)
+- v3.5 requirements: 4 total — mapped: 4 — complete closure (DAILY-01/02/03/04 complete; DAILY-04 closed via Phase 53 verification)
 
 ---
 *Requirements defined: 2026-04-05*
-*Last updated: 2026-04-07 — DAILY-03 closed via phase 52 verification; DAILY-04 remains pending in phase 53*
+*Last updated: 2026-04-07 — DAILY-03 closed via phase 52 verification; DAILY-04 closed via phase 53 verification*
