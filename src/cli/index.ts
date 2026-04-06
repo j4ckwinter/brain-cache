@@ -37,9 +37,10 @@ program
   .description("Index a codebase: parse, chunk, embed, and store in LanceDB")
   .argument("[path]", "Directory to index (defaults to current directory)")
   .option("-f, --force", "Force full reindex, ignoring cached file hashes")
-  .action(async (path: string | undefined, opts: { force?: boolean }) => {
+  .option("--verify", "Re-read and re-hash all files, bypassing stat fast-path (still incremental embeds). --force overrides --verify.")
+  .action(async (path: string | undefined, opts: { force?: boolean; verify?: boolean }) => {
     const { runIndex } = await import("../workflows/index.js");
-    await runIndex(path, { force: opts.force });
+    await runIndex(path, { force: opts.force, verify: opts.verify });
   });
 
 program
