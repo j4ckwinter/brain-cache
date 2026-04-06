@@ -34,7 +34,13 @@ const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
 
 const log = childLogger("mcp");
 
-const server = new McpServer({ name: "brain-cache", version: version });
+/**
+ * Creates and configures the MCP server with all tool handlers.
+ * DEBT-03: Factory function replaces module-level singleton.
+ * Callable from tests without side effects.
+ */
+export function createMcpServer(): McpServer {
+  const server = new McpServer({ name: "brain-cache", version: version });
 
 // Tool 1: index_repo (MCP-02)
 server.registerTool(
@@ -374,6 +380,12 @@ server.registerTool(
     }
   },
 );
+
+  return server;
+}
+
+// Module entry point — creates server and connects transport
+const server = createMcpServer();
 
 async function main() {
   const transport = new StdioServerTransport();
