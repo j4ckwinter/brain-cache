@@ -8,6 +8,7 @@ import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import { acquireIndexLock, releaseIndexLock } from '../services/indexLock.js';
 import { childLogger, setLogLevel } from '../services/logger.js';
+import { withStderrFilter } from '../lib/stderr.js';
 
 const log = childLogger('index');
 import {
@@ -354,6 +355,17 @@ async function runGitHistoryIngestion(params: {
  * @param opts.verify - If true (and force is false), re-read all files bypassing stat cache
  */
 export async function runIndex(targetPath?: string, opts?: { force?: boolean; verify?: boolean }): Promise<void> {
+  // Suppress LanceDB Rust-layer log lines that write directly to stderr via the
+  // native NAPI bindings. LanceDB's TypeScript SDK has no log level configuration
+  // API — withStderrFilter coordinates through a stack so nested calls compose correctly.
+  //
+  // Pattern matched: ISO-8601 timestamp prefix followed by "WARN lance" or "INFO lance"
+  // (e.g. "[2024-01-15T10:30:00Z WARN lance::dataset] ...")
+  // Only these two known patterns are suppressed -- other stderr writes pass through.
+  // DEBT-05: tighten regex to avoid swallowing unrelated warnings.
+  await withStderrFilter(
+    (line) => /^\[\d{4}-\d{2}-\d{2}T[\d:.]+Z (WARN|INFO) lance/.test(line),
+    async () => {
   const force = opts?.force ?? false;
   // D-48-05: --force wins over --verify
   const verifyEffective = (opts?.verify ?? false) && !force;
@@ -361,32 +373,6 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
   // Suppress pino JSON output during indexing — the workflow writes its own human-friendly messages.
   const previousLogLevel = process.env.BRAIN_CACHE_LOG ?? 'warn';
   setLogLevel('silent');
-
-  // Suppress LanceDB Rust-layer log lines that write directly to stderr via the
-  // native NAPI bindings. LanceDB's TypeScript SDK has no log level configuration
-  // API -- this monkey-patch is the only available suppression mechanism.
-  //
-  // Pattern matched: ISO-8601 timestamp prefix followed by "WARN lance" or "INFO lance"
-  // (e.g. "[2024-01-15T10:30:00Z WARN lance::dataset] ...")
-  // Only these two known patterns are suppressed -- other stderr writes pass through.
-  // DEBT-05: tighten regex to avoid swallowing unrelated warnings.
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((
-    chunk: string | Uint8Array,
-    encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
-    cb?: (err?: Error | null) => void,
-  ): boolean => {
-    const str = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8');
-    if (/^\[\d{4}-\d{2}-\d{2}T[\d:.]+Z (WARN|INFO) lance/.test(str)) {
-      const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
-      callback?.(null);
-      return true;
-    }
-    if (typeof encodingOrCb === 'function') {
-      return originalStderrWrite(chunk as string, encodingOrCb);
-    }
-    return originalStderrWrite(chunk as string, encodingOrCb as BufferEncoding, cb);
-  }) as typeof process.stderr.write;
 
   // Step 1: Resolve path (before try so lock can be acquired and released)
   const rootDir = resolve(targetPath ?? '.');
@@ -683,9 +669,9 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
     rootDir,
   });
   } finally {
-    // Restore pino log level and stderr write
+    // Restore pino log level; withStderrFilter handles stderr restore via stack pop
     setLogLevel(previousLogLevel as Parameters<typeof setLogLevel>[0]);
-    process.stderr.write = originalStderrWrite;
     await releaseIndexLock(rootDir);
   }
+  }); // end withStderrFilter
 }

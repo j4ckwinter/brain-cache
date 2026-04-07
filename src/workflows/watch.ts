@@ -5,6 +5,7 @@ import ignore from 'ignore';
 import { runIndex } from './index.js';
 import { SOURCE_EXTENSIONS } from '../services/crawler.js';
 import { childLogger } from '../services/logger.js';
+import { withStderrFilter } from '../lib/stderr.js';
 
 const log = childLogger('watch');
 
@@ -82,32 +83,17 @@ function scheduleReindex(rootDir: string): void {
  * @internal
  */
 async function triggerReindex(rootDir: string): Promise<void> {
-  // Capture stderr to suppress runIndex progress output (D-06)
-  // Must capture BEFORE calling runIndex — runIndex restores its own patch in finally,
-  // leaving process.stderr.write as the original once it returns.
-  const originalWrite = process.stderr.write.bind(process.stderr);
   const captured: string[] = [];
-
-  process.stderr.write = (
-    chunk: string | Uint8Array,
-    encodingOrCb?: BufferEncoding | ((err?: Error | null) => void),
-    cb?: (err?: Error | null) => void,
-  ): boolean => {
-    captured.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf-8'));
-    const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
-    callback?.(null);
-    return true;
-  };
-
   const start = Date.now();
   try {
-    await runIndex(rootDir);
-    process.stderr.write = originalWrite;
+    await withStderrFilter(
+      (line) => { captured.push(line); return true; },
+      () => runIndex(rootDir),
+    );
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
     const summary = buildSummary(captured, elapsed);
     process.stderr.write(`${summary}\n`);
   } catch (err) {
-    process.stderr.write = originalWrite;
     if (err instanceof Error && err.message.includes('Try again later')) {
       // D-07/D-08: lock held by concurrent indexer — skip and log
       process.stderr.write('brain-cache: Index in progress, skipping (will retry on next change)\n');
