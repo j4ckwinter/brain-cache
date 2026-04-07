@@ -41,7 +41,7 @@ export async function runAskCodebase(
   question: string,
   opts?: AskCodebaseOptions
 ): Promise<AskCodebaseResult> {
-  // 1. Check ANTHROPIC_API_KEY early
+  // 1. Check ANTHROPIC_API_KEY early — before any context building or Ollama calls (SEC-03)
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY environment variable is not set.');
   }
