@@ -148,35 +148,6 @@ program
     await runWatch(path);
   });
 
-const service = new Command('service')
-  .description('Manage brain-cache background watcher service for this project');
-
-service
-  .command('install')
-  .description('Install watcher as a user-level background service (macOS/Linux)')
-  .action(async () => {
-    const { runServiceInstall } = await import('../workflows/service.js');
-    await runServiceInstall();
-  });
-
-service
-  .command('uninstall')
-  .description('Stop and remove the background service for this project')
-  .action(async () => {
-    const { runServiceUninstall } = await import('../workflows/service.js');
-    await runServiceUninstall();
-  });
-
-service
-  .command('status')
-  .description('Show service status for this project and list active services')
-  .action(async () => {
-    const { runServiceStatus } = await import('../workflows/service.js');
-    await runServiceStatus();
-  });
-
-program.addCommand(service);
-
 /**
  * Resolve to a canonical path so `isMain` matches when the CLI is invoked via
  * a symlink (e.g. `node_modules/.bin/brain-cache`) or `/tmp` vs `/private/tmp`
