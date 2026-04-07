@@ -3,7 +3,7 @@ import { Index } from '@lancedb/lancedb';
 import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME } from '../lib/config.js';
+import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME, CONNECTION_POOL_TTL_MS } from '../lib/config.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState, CallEdge, FileStatEntry } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
@@ -82,7 +82,24 @@ export function edgeSchema(): Schema {
 // --- Connection pool (PERF-01) ---
 // Caches Connection only — NEVER cache Table handles.
 // Stale Table handles after --force reindex cause silent wrong-data bugs.
-const _connectionPool = new Map<string, lancedb.Connection>();
+interface PoolEntry {
+  connection: lancedb.Connection;
+  createdAt: number;
+}
+
+const _connectionPool = new Map<string, PoolEntry>();
+
+/**
+ * Injects a connection entry into the pool at the given key.
+ * FOR TESTING ONLY — allows unit tests to inject mock connections without real disk I/O.
+ */
+export function _setPoolEntryForTest(
+  projectRoot: string,
+  connection: lancedb.Connection,
+  createdAt: number
+): void {
+  _connectionPool.set(projectRoot, { connection, createdAt });
+}
 
 /**
  * Returns a cached LanceDB connection for the given project root.
@@ -91,18 +108,35 @@ const _connectionPool = new Map<string, lancedb.Connection>();
  *
  * PERF-01: One Connection per project directory, reused across operations.
  * D-03: Keys by project path only. D-04: Evicts on force flag.
+ * DEBT-04: TTL eviction (30min) and isOpen() health validation prevent stale connections.
  */
 export async function getConnection(
   projectRoot: string,
   force?: boolean
 ): Promise<lancedb.Connection> {
   if (force) {
+    const entry = _connectionPool.get(projectRoot);
+    if (entry) {
+      if (entry.connection.isOpen()) entry.connection.close();
+      _connectionPool.delete(projectRoot);
+    }
+  }
+
+  const existing = _connectionPool.get(projectRoot);
+  if (existing) {
+    const expired = Date.now() - existing.createdAt > CONNECTION_POOL_TTL_MS;
+    const healthy = existing.connection.isOpen();
+    if (!expired && healthy) {
+      return existing.connection;
+    }
+    // Evict stale or unhealthy connection
+    if (healthy) existing.connection.close();
     _connectionPool.delete(projectRoot);
   }
-  if (!_connectionPool.has(projectRoot)) {
-    _connectionPool.set(projectRoot, await openDatabase(projectRoot));
-  }
-  return _connectionPool.get(projectRoot)!;
+
+  const connection = await openDatabase(projectRoot);
+  _connectionPool.set(projectRoot, { connection, createdAt: Date.now() });
+  return connection;
 }
 
 /**

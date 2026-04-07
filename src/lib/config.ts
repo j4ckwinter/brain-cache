@@ -63,3 +63,7 @@ export const HIGH_RELEVANCE_SIMILARITY_THRESHOLD = 0.85;
  * entire token budget.
  */
 export const COMPRESSION_HARD_LIMIT = 800;
+
+// ── Connection Pool ───────────────────────────────────────────────────────
+/** TTL for cached LanceDB connections (30 minutes). Evicted lazily on next getConnection call. */
+export const CONNECTION_POOL_TTL_MS = 30 * 60 * 1000;

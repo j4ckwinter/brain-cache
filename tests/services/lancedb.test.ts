@@ -413,6 +413,136 @@ describe('queryEdgesFrom', () => {
   });
 });
 
+// --- getConnection TTL and health tests ---
+// Strategy: use _setPoolEntryForTest to inject mock connections directly into the pool.
+// This bypasses openDatabase entirely — no disk I/O needed.
+// Each test uses a unique key so pool entries don't bleed between tests.
+
+describe('getConnection TTL and health', () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    // Create real temp dir — getConnection calls openDatabase for evicted/new entries
+    testDir = join(tmpdir(), `conn-pool-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(testDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await rm(testDir, { recursive: true, force: true }).catch(() => undefined);
+  });
+
+  it('returns cached connection when TTL not exceeded and isOpen() is true', async () => {
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+    const mockConn = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+
+    const key = join(testDir, 'cache-hit');
+    _setPoolEntryForTest(key, mockConn, Date.now());
+
+    const conn1 = await getConnection(key);
+    const conn2 = await getConnection(key);
+
+    expect(conn1).toBe(mockConn);
+    expect(conn2).toBe(mockConn);
+    expect(mockConn.isOpen).toHaveBeenCalled();
+  });
+
+  it('evicts and replaces connection when TTL is exceeded', async () => {
+    const { CONNECTION_POOL_TTL_MS } = await import('../../src/lib/config.js');
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+
+    const mockConn1 = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+
+    const key = join(testDir, 'ttl-evict');
+    _setPoolEntryForTest(key, mockConn1, Date.now());
+
+    // Verify the cached connection is returned before TTL expires
+    const connBefore = await getConnection(key);
+    expect(connBefore).toBe(mockConn1);
+
+    // Move time past TTL
+    vi.advanceTimersByTime(CONNECTION_POOL_TTL_MS + 1);
+
+    // Connection is expired — getConnection should evict mockConn1 and open a new one.
+    // We just verify mockConn1 was closed (eviction happened).
+    // The replacement is a real connection opened against testDir (real LanceDB).
+    const connAfter = await getConnection(key);
+    expect(connAfter).not.toBe(mockConn1);
+    expect(mockConn1.close).toHaveBeenCalledTimes(1); // healthy conn closed on TTL eviction
+  });
+
+  it('evicts and replaces connection when isOpen() returns false', async () => {
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+
+    const mockConn1 = { isOpen: vi.fn().mockReturnValue(false), close: vi.fn() } as any;
+
+    const key = join(testDir, 'health-evict');
+    _setPoolEntryForTest(key, mockConn1, Date.now());
+
+    // mockConn1.isOpen() returns false → evict and replace with a real connection
+    const conn = await getConnection(key);
+
+    expect(conn).not.toBe(mockConn1); // replaced
+    expect(mockConn1.close).not.toHaveBeenCalled(); // unhealthy → close NOT called on eviction
+  });
+
+  it('closes healthy connection before evicting on force=true', async () => {
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+
+    const mockConn1 = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+
+    const key = join(testDir, 'force-evict');
+    _setPoolEntryForTest(key, mockConn1, Date.now());
+
+    await getConnection(key, true); // force evicts mockConn1, closes it since isOpen=true
+
+    expect(mockConn1.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not throw when force=true called twice (entry already gone)', async () => {
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+
+    const mockConn = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+
+    const key = join(testDir, 'force-twice');
+    _setPoolEntryForTest(key, mockConn, Date.now());
+
+    // Two force evictions in a row — second should not throw (pool entry already gone after first)
+    await expect(getConnection(key, true)).resolves.toBeDefined();
+    // After first force, pool has a new real entry. Second force evicts that and opens another.
+    await expect(getConnection(key, true)).resolves.toBeDefined();
+  });
+
+  it('does not call close() on eviction when connection is already closed (isOpen=false)', async () => {
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+
+    const mockConn1 = { isOpen: vi.fn().mockReturnValue(false), close: vi.fn() } as any;
+
+    const key = join(testDir, 'no-close-unhealthy');
+    _setPoolEntryForTest(key, mockConn1, Date.now());
+
+    await getConnection(key); // health eviction: isOpen=false → evict, no close
+
+    expect(mockConn1.close).not.toHaveBeenCalled();
+  });
+
+  it('calls close() on TTL eviction only when connection is still healthy (isOpen=true)', async () => {
+    const { CONNECTION_POOL_TTL_MS } = await import('../../src/lib/config.js');
+    const { getConnection, _setPoolEntryForTest } = await import('../../src/services/lancedb.js');
+
+    const mockConn1 = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+
+    const key = join(testDir, 'ttl-close-healthy');
+    _setPoolEntryForTest(key, mockConn1, Date.now());
+
+    vi.advanceTimersByTime(CONNECTION_POOL_TTL_MS + 1);
+    await getConnection(key); // TTL evicts + closes mockConn1 (healthy=true → close called)
+
+    expect(mockConn1.close).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('withWriteLock', () => {
   it('serializes two concurrent async operations', async () => {
     const { withWriteLock } = await import('../../src/services/lancedb.js');
