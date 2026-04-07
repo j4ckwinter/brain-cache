@@ -209,10 +209,10 @@ Plans:
   2. `classifyQueryIntent` is no longer exported from the services barrel and no test references it directly
   3. `src/tools/` directory is either removed or populated with extracted handler code (no empty directory in source tree)
   4. LanceDB connection pool evicts connections that exceed a configured TTL and validates health before returning a connection
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 56-01-PLAN.md — Remove deprecated classifyQueryIntent export and delete empty src/tools/ directory
+- [x] 56-01-PLAN.md — Remove deprecated classifyQueryIntent export and delete empty src/tools/ directory
 - [ ] 56-02-PLAN.md — Add TTL-based eviction and health validation to LanceDB connection pool
 - [ ] 56-03-PLAN.md — Decompose runIndex monolith into named pipeline stage functions
 
@@ -272,7 +272,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 55. Critical Fixes | v3.6 | 2/2 | Complete   | 2026-04-07 |
-| 56. Technical Debt | v3.6 | 0/3 | Planned | - |
+| 56. Technical Debt | v3.6 | 1/3 | In Progress|  |
 | 57. Performance | v3.6 | 0/TBD | Not started | - |
 | 58. Security | v3.6 | 0/TBD | Not started | - |
 | 59. Missing Functionality | v3.6 | 0/TBD | Not started | - |

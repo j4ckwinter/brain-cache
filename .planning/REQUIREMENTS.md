@@ -15,8 +15,8 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 ### Technical Debt
 
 - [ ] **DEBT-01**: Index workflow (`runIndex`) is decomposed into named pipeline stage functions (stat-partition, file-diff, chunk-embed, git-history)
-- [ ] **DEBT-02**: Deprecated `classifyQueryIntent` export removed from services barrel and test references updated
-- [ ] **DEBT-03**: Empty `src/tools/` directory removed or populated with extracted tool handlers
+- [x] **DEBT-02**: Deprecated `classifyQueryIntent` export removed from services barrel and test references updated
+- [x] **DEBT-03**: Empty `src/tools/` directory removed or populated with extracted tool handlers
 - [ ] **DEBT-04**: LanceDB connection pool has TTL-based eviction and connection health validation
 
 ### Performance
@@ -70,8 +70,8 @@ None deferred — all concerns scoped to this milestone.
 | CRIT-01 | Phase 55 | Complete |
 | CRIT-02 | Phase 55 | Complete |
 | DEBT-01 | Phase 56 | Pending |
-| DEBT-02 | Phase 56 | Pending |
-| DEBT-03 | Phase 56 | Pending |
+| DEBT-02 | Phase 56 | Complete |
+| DEBT-03 | Phase 56 | Complete |
 | DEBT-04 | Phase 56 | Pending |
 | PERF-01 | Phase 57 | Pending |
 | PERF-02 | Phase 57 | Pending |
