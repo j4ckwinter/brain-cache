@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import type { Table } from '@lancedb/lancedb';
 import { requireProfile, requireOllama } from '../lib/guards.js';
@@ -9,6 +9,7 @@ import { embedBatchWithRetry } from '../services/embedder.js';
 import { acquireIndexLock, releaseIndexLock } from '../services/indexLock.js';
 import { childLogger, setLogLevel } from '../services/logger.js';
 import { withStderrFilter } from '../lib/stderr.js';
+import { statAllFiles } from '../lib/fsUtils.js';
 
 const log = childLogger('index');
 import {
@@ -110,37 +111,6 @@ export interface WriteManifestOpts {
  */
 function hashContent(content: string): string {
   return createHash('sha256').update(content, 'utf-8').digest('hex');
-}
-
-/**
- * Stat all files concurrently with capped concurrency (same batch size as readFile loop).
- * Returns a Map from file path to { size, mtimeMs }.
- * Failures are silently omitted — partitionByStatChange treats missing entries as changed.
- */
-async function statAllFiles(
-  files: string[],
-  concurrency: number,
-): Promise<Map<string, { size: number; mtimeMs: number }>> {
-  const result = new Map<string, { size: number; mtimeMs: number }>();
-  for (let groupStart = 0; groupStart < files.length; groupStart += concurrency) {
-    const group = files.slice(groupStart, groupStart + concurrency);
-    const entries = await Promise.all(
-      group.map(async (filePath) => {
-        try {
-          const s = await stat(filePath);
-          return { filePath, size: s.size, mtimeMs: s.mtimeMs };
-        } catch {
-          return null;
-        }
-      })
-    );
-    for (const entry of entries) {
-      if (entry !== null) {
-        result.set(entry.filePath, { size: entry.size, mtimeMs: entry.mtimeMs });
-      }
-    }
-  }
-  return result;
 }
 
 /**
