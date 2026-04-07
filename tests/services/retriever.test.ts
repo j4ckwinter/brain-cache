@@ -13,6 +13,12 @@ vi.mock('../../src/services/logger.js', () => ({
   })),
 }));
 
+// Mock lancedb service before importing retriever (needed for expandByEdges)
+vi.mock('../../src/services/lancedb.js', () => ({
+  queryEdgesFrom: vi.fn(),
+  escapeSqlLiteral: vi.fn((v: string) => v.replace(/'/g, "''")),
+}));
+
 import {
   searchChunks,
   deduplicateChunks,
@@ -20,8 +26,12 @@ import {
   RETRIEVAL_STRATEGIES,
   filterDedupedForNonTestChunks,
   querySignalsTestIntent,
+  expandByEdges,
 } from '../../src/services/retriever.js';
+import { queryEdgesFrom } from '../../src/services/lancedb.js';
 import type { RetrievedChunk } from '../../src/lib/types.js';
+
+const mockQueryEdgesFrom = vi.mocked(queryEdgesFrom);
 
 // Helper to create a mock LanceDB table
 function makeMockTable(rows: Record<string, unknown>[]) {
@@ -710,5 +720,199 @@ describe('filterDedupedForNonTestChunks', () => {
     const chunks = [src('1', 'src/a.ts'), src('2', 'src/a.spec.ts')];
     const out = filterDedupedForNonTestChunks(chunks, 'jest unit test');
     expect(out).toHaveLength(2);
+  });
+});
+
+describe('expandByEdges', () => {
+  /** Helper: builds a mock Table that returns `chunkRows` from .query().where().limit().toArray() */
+  function makeEdgesChunksTable(chunkRows: Record<string, unknown>[]): import('@lancedb/lancedb').Table {
+    const toArray = vi.fn().mockResolvedValue(chunkRows);
+    const limit = vi.fn().mockReturnValue({ toArray });
+    const where = vi.fn().mockReturnValue({ limit });
+    const query = vi.fn().mockReturnValue({ where });
+    return { query } as unknown as import('@lancedb/lancedb').Table;
+  }
+
+  /** A minimal seed chunk. */
+  function makeSeedChunk(id: string): RetrievedChunk {
+    return {
+      id,
+      filePath: 'src/seed.ts',
+      chunkType: 'function',
+      sourceKind: 'file',
+      scope: null,
+      name: 'seedFn',
+      content: 'function seedFn() {}',
+      startLine: 1,
+      endLine: 5,
+      fileType: 'source',
+      similarity: 0.9,
+    };
+  }
+
+  /** A minimal EdgeRow for a call edge. */
+  function makeEdge(overrides: Partial<{
+    from_chunk_id: string;
+    to_symbol: string;
+    to_file: string | null;
+    edge_type: 'call' | 'import';
+  }> = {}): Record<string, unknown> {
+    return {
+      from_chunk_id: 'seed-1',
+      from_file: 'src/seed.ts',
+      from_symbol: 'seedFn',
+      to_symbol: 'targetFn',
+      to_file: 'src/target.ts',
+      edge_type: 'call',
+      ...overrides,
+    };
+  }
+
+  /** A minimal chunk row as returned by LanceDB. */
+  function makeChunkRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+    return {
+      id: 'target-1',
+      file_path: 'src/target.ts',
+      chunk_type: 'function',
+      scope: null,
+      name: 'targetFn',
+      content: 'function targetFn() {}',
+      start_line: 10,
+      end_line: 20,
+      file_type: 'source',
+      source_kind: 'file',
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    mockQueryEdgesFrom.mockReset();
+  });
+
+  it('returns empty array when seedChunks is empty', async () => {
+    const chunksTable = makeEdgesChunksTable([]);
+    const edgesTable = makeEdgesChunksTable([]);
+    mockQueryEdgesFrom.mockResolvedValue([]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, []);
+    expect(result).toEqual([]);
+  });
+
+  it('returns empty array when maxHops is 0', async () => {
+    const seed = makeSeedChunk('seed-1');
+    const chunksTable = makeEdgesChunksTable([]);
+    const edgesTable = makeEdgesChunksTable([]);
+    mockQueryEdgesFrom.mockResolvedValue([]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed], 0);
+    expect(result).toEqual([]);
+  });
+
+  it('follows call edges and returns callee chunks', async () => {
+    const seed = makeSeedChunk('seed-1');
+    const chunkRow = makeChunkRow();
+    const chunksTable = makeEdgesChunksTable([chunkRow]);
+    const edgesTable = makeEdgesChunksTable([]);
+
+    mockQueryEdgesFrom.mockResolvedValue([makeEdge() as any]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed]);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('target-1');
+    expect(result[0].filePath).toBe('src/target.ts');
+    expect(result[0].name).toBe('targetFn');
+    expect(result[0].similarity).toBe(0.5);
+  });
+
+  it('skips edges where to_file is null (external calls)', async () => {
+    const seed = makeSeedChunk('seed-1');
+    const chunksTable = makeEdgesChunksTable([]);
+    const edgesTable = makeEdgesChunksTable([]);
+
+    mockQueryEdgesFrom.mockResolvedValue([makeEdge({ to_file: null }) as any]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed]);
+    expect(result).toEqual([]);
+  });
+
+  it('skips import edges (only follows call edges)', async () => {
+    const seed = makeSeedChunk('seed-1');
+    const chunksTable = makeEdgesChunksTable([]);
+    const edgesTable = makeEdgesChunksTable([]);
+
+    mockQueryEdgesFrom.mockResolvedValue([makeEdge({ edge_type: 'import' }) as any]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed]);
+    expect(result).toEqual([]);
+  });
+
+  it('deduplicates — does not return chunks already in seedChunks by id', async () => {
+    const seed = makeSeedChunk('seed-1');
+    // The callee chunk has the same id as the seed
+    const dupChunkRow = makeChunkRow({ id: 'seed-1' });
+    const chunksTable = makeEdgesChunksTable([dupChunkRow]);
+    const edgesTable = makeEdgesChunksTable([]);
+
+    mockQueryEdgesFrom.mockResolvedValue([makeEdge({ to_symbol: 'seedFn' }) as any]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed]);
+    expect(result).toEqual([]);
+  });
+
+  it('deduplicates within expanded results — same callee from multiple seeds returned once', async () => {
+    const seed1 = makeSeedChunk('seed-1');
+    const seed2 = makeSeedChunk('seed-2');
+    const chunkRow = makeChunkRow(); // id = 'target-1'
+    const chunksTable = makeEdgesChunksTable([chunkRow]);
+    const edgesTable = makeEdgesChunksTable([]);
+
+    // Both seeds point to same callee
+    mockQueryEdgesFrom.mockResolvedValue([makeEdge() as any]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed1, seed2]);
+    // target-1 should appear only once even though two seeds point to it
+    expect(result.filter((c) => c.id === 'target-1')).toHaveLength(1);
+  });
+
+  it('caps at MAX_EDGES_PER_CHUNK (5) edges followed per seed', async () => {
+    const seed = makeSeedChunk('seed-1');
+    // 8 call edges from the seed, each pointing to a different chunk
+    const manyEdges = Array.from({ length: 8 }, (_, i) =>
+      makeEdge({ to_symbol: `fn${i}`, to_file: `src/target${i}.ts` })
+    );
+    // The chunks table returns a unique row for each target
+    const chunksTableRows = Array.from({ length: 8 }, (_, i) =>
+      makeChunkRow({ id: `target-${i}`, file_path: `src/target${i}.ts`, name: `fn${i}` })
+    );
+
+    // Mock: query().where().limit(1).toArray() returns one row per call
+    let callIndex = 0;
+    const toArray = vi.fn().mockImplementation(() => {
+      const row = chunksTableRows[callIndex++];
+      return Promise.resolve(row ? [row] : []);
+    });
+    const limit = vi.fn().mockReturnValue({ toArray });
+    const where = vi.fn().mockReturnValue({ limit });
+    const query = vi.fn().mockReturnValue({ where });
+    const chunksTable = { query } as unknown as import('@lancedb/lancedb').Table;
+    const dummyEdgesTable = makeEdgesChunksTable([]);
+
+    mockQueryEdgesFrom.mockResolvedValue(manyEdges as any);
+
+    const result = await expandByEdges(chunksTable, dummyEdgesTable, [seed]);
+    // Should only have followed 5 edges (MAX_EDGES_PER_CHUNK)
+    expect(result.length).toBeLessThanOrEqual(5);
+  });
+
+  it('sets similarity to 0.5 for all expanded chunks', async () => {
+    const seed = makeSeedChunk('seed-1');
+    const chunkRow = makeChunkRow();
+    const chunksTable = makeEdgesChunksTable([chunkRow]);
+    const edgesTable = makeEdgesChunksTable([]);
+
+    mockQueryEdgesFrom.mockResolvedValue([makeEdge() as any]);
+
+    const result = await expandByEdges(chunksTable, edgesTable, [seed]);
+    expect(result.every((c) => c.similarity === 0.5)).toBe(true);
   });
 });

@@ -1,9 +1,13 @@
 import type { Table } from '@lancedb/lancedb';
 import { childLogger } from './logger.js';
+import { queryEdgesFrom, escapeSqlLiteral } from './lancedb.js';
+import type { EdgeRow } from './lancedb.js';
 import type { RetrievedChunk, SearchOptions, QueryIntent } from '../lib/types.js';
 import { HIGH_RELEVANCE_SIMILARITY_THRESHOLD } from '../lib/config.js';
 
 const log = childLogger('retriever');
+
+const MAX_EDGES_PER_CHUNK = 5;
 
 /** Shape of a raw row returned by LanceDB vector search. */
 interface RawChunkRow {
@@ -400,4 +404,81 @@ export async function keywordSearchChunks(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ chunk }) => chunk);
+}
+
+/**
+ * Expands a set of seed chunks by following call edges one hop out.
+ * For each seed chunk, queries the edges table for outgoing call edges,
+ * then looks up the callee chunk in the chunks table.
+ *
+ * Filters:
+ * - Only follows 'call' edges (not 'import')
+ * - Skips edges where to_file is null (external library calls)
+ * - Deduplicates against seed chunk IDs and within expanded results
+ * - Caps at MAX_EDGES_PER_CHUNK (5) edges per seed chunk
+ *
+ * Returns expanded chunks with similarity set to 0.5 (hop-expanded, no vector score).
+ */
+export async function expandByEdges(
+  chunksTable: Table,
+  edgesTable: Table,
+  seedChunks: RetrievedChunk[],
+  maxHops = 1
+): Promise<RetrievedChunk[]> {
+  if (maxHops <= 0 || seedChunks.length === 0) {
+    return [];
+  }
+
+  const seenIds = new Set(seedChunks.map((c) => c.id));
+  const expanded: RetrievedChunk[] = [];
+
+  for (const chunk of seedChunks) {
+    let edges: EdgeRow[];
+    try {
+      edges = await queryEdgesFrom(edgesTable, chunk.id);
+    } catch {
+      // Edges table may not exist on legacy indexes — skip gracefully
+      continue;
+    }
+
+    // Filter: only call edges to known files
+    const callEdges = edges
+      .filter((e) => e.edge_type === 'call' && e.to_file != null)
+      .slice(0, MAX_EDGES_PER_CHUNK);
+
+    for (const edge of callEdges) {
+      const toFile = edge.to_file as string;
+      const toSymbol = edge.to_symbol;
+      const predicate = `file_path = '${escapeSqlLiteral(toFile)}' AND name = '${escapeSqlLiteral(toSymbol)}'`;
+
+      let rows: Record<string, unknown>[];
+      try {
+        rows = await chunksTable.query().where(predicate).limit(1).toArray() as Record<string, unknown>[];
+      } catch {
+        continue;
+      }
+
+      if (rows.length === 0) continue;
+      const r = rows[0];
+      const id = r.id as string;
+      if (seenIds.has(id)) continue;
+
+      seenIds.add(id);
+      expanded.push({
+        id,
+        filePath: r.file_path as string,
+        chunkType: r.chunk_type as string,
+        sourceKind: r.source_kind === 'history' ? 'history' : 'file',
+        scope: (r.scope as string | null) ?? null,
+        name: (r.name as string | null) ?? null,
+        content: r.content as string,
+        startLine: r.start_line as number,
+        endLine: r.end_line as number,
+        fileType: (r.file_type as string) ?? 'source',
+        similarity: 0.5,
+      });
+    }
+  }
+
+  return expanded;
 }
