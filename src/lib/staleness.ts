@@ -1,5 +1,6 @@
-import { stat } from 'node:fs/promises';
 import { crawlSourceFiles } from '../services/crawler.js';
+import { statAllFiles } from './fsUtils.js';
+import { FILE_READ_CONCURRENCY } from './config.js';
 
 export interface StalenessResult {
   stale: boolean;
@@ -14,18 +15,17 @@ export async function checkIndexStaleness(
   const indexedAtMs = Date.parse(indexedAt);
   const files = await crawlSourceFiles(rootDir);
 
+  const statsMap = await statAllFiles(files, FILE_READ_CONCURRENCY);
+
   let stalestFile: string | undefined;
   let stalestMtimeMs = 0;
 
   for (const filePath of files) {
-    try {
-      const s = await stat(filePath);
-      if (s.mtimeMs > indexedAtMs && s.mtimeMs > stalestMtimeMs) {
-        stalestMtimeMs = s.mtimeMs;
-        stalestFile = filePath;
-      }
-    } catch {
-      // File disappeared between crawl and stat — skip
+    const entry = statsMap.get(filePath);
+    if (!entry) continue; // file vanished between crawl and stat
+    if (entry.mtimeMs > indexedAtMs && entry.mtimeMs > stalestMtimeMs) {
+      stalestMtimeMs = entry.mtimeMs;
+      stalestFile = filePath;
     }
   }
 
