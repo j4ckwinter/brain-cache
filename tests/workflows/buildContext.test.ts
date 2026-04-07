@@ -135,6 +135,7 @@ describe('runBuildContext', () => {
   const dedupedChunks = [chunk1, chunk2];
 
   beforeEach(async () => {
+    vi.clearAllMocks();
     stderrOutput = [];
 
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
