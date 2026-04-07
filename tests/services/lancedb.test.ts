@@ -580,3 +580,32 @@ describe('withWriteLock', () => {
     expect(results).toContain('executed after error');
   });
 });
+
+// --- escapeSqlLiteral tests ---
+
+describe('escapeSqlLiteral', () => {
+  it('returns safe strings unchanged', async () => {
+    const { escapeSqlLiteral } = await import('../../src/services/lancedb.js');
+    expect(escapeSqlLiteral('hello')).toBe('hello');
+  });
+
+  it('doubles single quotes in the input', async () => {
+    const { escapeSqlLiteral } = await import('../../src/services/lancedb.js');
+    expect(escapeSqlLiteral("it's")).toBe("it''s");
+  });
+
+  it('doubles already-doubled single quotes (idempotent SQL escaping)', async () => {
+    const { escapeSqlLiteral } = await import('../../src/services/lancedb.js');
+    expect(escapeSqlLiteral("it''s already")).toBe("it''''s already");
+  });
+
+  it('leaves slashes unchanged', async () => {
+    const { escapeSqlLiteral } = await import('../../src/services/lancedb.js');
+    expect(escapeSqlLiteral('path/to/file.ts')).toBe('path/to/file.ts');
+  });
+
+  it('handles empty string safely', async () => {
+    const { escapeSqlLiteral } = await import('../../src/services/lancedb.js');
+    expect(escapeSqlLiteral('')).toBe('');
+  });
+});
