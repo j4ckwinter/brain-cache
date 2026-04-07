@@ -55,7 +55,6 @@ export {
 } from './ollama.js';
 
 export {
-  classifyQueryIntent,
   searchChunks,
   deduplicateChunks,
   RETRIEVAL_STRATEGIES,

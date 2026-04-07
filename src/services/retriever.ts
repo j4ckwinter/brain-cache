@@ -95,9 +95,6 @@ export function classifyRetrievalMode(query: string): QueryIntent {
   return 'explore';
 }
 
-/** @deprecated Use classifyRetrievalMode instead */
-export const classifyQueryIntent = classifyRetrievalMode;
-
 export const RETRIEVAL_STRATEGIES: Record<QueryIntent, SearchOptions> = {
   lookup:  { limit: 5,  distanceThreshold: 0.4, keywordBoostWeight: 0.40 },
   trace:   { limit: 3,  distanceThreshold: 0.5, keywordBoostWeight: 0.20 },

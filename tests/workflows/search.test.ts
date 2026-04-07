@@ -143,7 +143,7 @@ describe('runSearch', () => {
     vi.resetModules();
   });
 
-  it('calls classifyQueryIntent with the query', async () => {
+  it('calls classifyRetrievalMode with the query', async () => {
     await runSearch('how does authentication work');
     expect(mockClassifyRetrievalMode).toHaveBeenCalledWith('how does authentication work');
   });

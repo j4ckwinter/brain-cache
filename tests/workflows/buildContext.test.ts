@@ -23,7 +23,6 @@ vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
-  classifyQueryIntent: vi.fn(), // deprecated alias — kept for backward compat
   filterDedupedForNonTestChunks: vi.fn((chunks: unknown[]) => chunks),
   RETRIEVAL_STRATEGIES: {
     lookup:  { limit: 5,  distanceThreshold: 0.4, keywordBoostWeight: 0.40 },
