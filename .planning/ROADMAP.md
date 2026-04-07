@@ -257,7 +257,7 @@ Plans:
 
 Plans:
 - [ ] 59-01-PLAN.md — Wire edge graph traversal into trace retrieval with expandByEdges
-- [ ] 59-02-PLAN.md — Add brain-cache clean command and document watch-mode MCP decision
+- [x] 59-02-PLAN.md — Add brain-cache clean command and document watch-mode MCP decision
 
 ### Phase 60: Dependency Upgrades
 **Goal**: apache-arrow, web-tree-sitter, vitest, and TypeScript are all on their current major versions with no regressions
@@ -296,7 +296,7 @@ Plans:
 | 56. Technical Debt | v3.6 | 3/3 | Complete    | 2026-04-07 |
 | 57. Performance | v3.6 | 3/3 | Complete    | 2026-04-07 |
 | 58. Security | v3.6 | 2/2 | Complete    | 2026-04-07 |
-| 59. Missing Functionality | v3.6 | 0/2 | Not started | - |
+| 59. Missing Functionality | v3.6 | 1/2 | In Progress|  |
 | 60. Dependency Upgrades | v3.6 | 0/TBD | Not started | - |
 | 61. Test Coverage | v3.6 | 0/TBD | Not started | - |
 

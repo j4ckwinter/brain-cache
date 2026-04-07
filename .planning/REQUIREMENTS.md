@@ -34,8 +34,8 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 ### Missing Functionality
 
 - [ ] **FEAT-01**: Edge graph traversal is wired into trace retrieval path, expanding results by following call edges from matched chunks
-- [ ] **FEAT-02**: `brain-cache clean` CLI command removes stale `.brain-cache/` directories
-- [ ] **FEAT-03**: Watch mode MCP design decision documented (CLI-only is intentional)
+- [x] **FEAT-02**: `brain-cache clean` CLI command removes stale `.brain-cache/` directories
+- [x] **FEAT-03**: Watch mode MCP design decision documented (CLI-only is intentional)
 
 ### Dependencies
 
@@ -80,8 +80,8 @@ None deferred — all concerns scoped to this milestone.
 | SEC-02 | Phase 58 | Complete |
 | SEC-03 | Phase 58 | Complete |
 | FEAT-01 | Phase 59 | Pending |
-| FEAT-02 | Phase 59 | Pending |
-| FEAT-03 | Phase 59 | Pending |
+| FEAT-02 | Phase 59 | Complete |
+| FEAT-03 | Phase 59 | Complete |
 | DEP-01 | Phase 60 | Pending |
 | DEP-02 | Phase 60 | Pending |
 | DEP-03 | Phase 60 | Pending |
