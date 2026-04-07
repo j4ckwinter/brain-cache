@@ -361,21 +361,30 @@ export function deduplicateChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
 
 /**
  * Keyword-only search fallback when Ollama is unavailable.
- * Loads all chunks from LanceDB and scores them using computeKeywordBoost.
- * Per FEAT-03: reuses existing keyword scoring logic, no new algorithm.
- *
- * SCALE: loads all chunks into memory — only suitable for indexes under ~10k rows.
- * This is a degraded-mode emergency path, not a primary search path.
+ * Uses SQL LIKE predicates to filter at the storage layer, avoiding full table scan.
+ * Per PERF-01: pushes filtering to LanceDB, excludes vector column, caps rows via .limit().
  */
 export async function keywordSearchChunks(
   table: Table,
   query: string,
   limit: number,
 ): Promise<RetrievedChunk[]> {
-  const rows = await table.query().toArray();
   const queryTokens = extractQueryTokens(query);
-
   if (queryTokens.length === 0) return [];
+
+  const predicate = queryTokens
+    .map(t => {
+      const escaped = t.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+      return `(file_path LIKE '%${escaped}%' OR name LIKE '%${escaped}%' OR content LIKE '%${escaped}%')`;
+    })
+    .join(' OR ');
+
+  const rows = await table
+    .query()
+    .where(predicate)
+    .select(['id', 'file_path', 'chunk_type', 'scope', 'name', 'content', 'start_line', 'end_line', 'file_type', 'source_kind'])
+    .limit(Math.min(limit * 10, 500))
+    .toArray();
 
   const scored = rows.map((r: Record<string, unknown>) => {
     const chunk: RetrievedChunk = {
