@@ -178,8 +178,8 @@
 
 - [x] **Phase 55: Critical Fixes** - Replace stderr monkey-patching with a centralized utility and string-based error detection with typed error classes (completed 2026-04-07)
 - [x] **Phase 56: Technical Debt** - Decompose index workflow monolith into pipeline stages, remove deprecated exports, clean empty dirs, add connection pool TTL eviction (completed 2026-04-07)
-- [ ] **Phase 57: Performance** - Fix keyword fallback memory usage, optimize staleness batching, improve embedding fallback with binary search
-- [ ] **Phase 58: Security** - Harden SQL predicate escaping, expand path blocklist to home/root, move API key check before context building
+- [x] **Phase 57: Performance** - Fix keyword fallback memory usage, optimize staleness batching, improve embedding fallback with binary search (completed 2026-04-07)
+- [x] **Phase 58: Security** - Harden SQL predicate escaping, expand path blocklist to home/root, move API key check before context building (completed 2026-04-07)
 - [ ] **Phase 59: Missing Functionality** - Wire edge graph traversal into trace retrieval, add brain-cache clean command, document watch MCP decision
 - [ ] **Phase 60: Dependency Upgrades** - Upgrade apache-arrow, web-tree-sitter, vitest, and TypeScript with compatibility verification
 - [ ] **Phase 61: Test Coverage** - Fill gaps for nested stderr patching, keyword fallback when Ollama unavailable, and keyword search at scale
@@ -224,12 +224,12 @@ Plans:
   1. Keyword fallback search does not load the full chunk table into memory — it uses SQL LIKE predicates or cursor-based pagination
   2. Staleness checking reuses the batched stat approach from the index workflow instead of issuing individual file stats
   3. Embedding batch fallback isolates a failing chunk via binary search rather than retrying one chunk at a time
-**Plans:** 1/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 57-01-PLAN.md — Replace keyword fallback full-table scan with SQL LIKE predicates
+- [x] 57-01-PLAN.md — Replace keyword fallback full-table scan with SQL LIKE predicates
 - [x] 57-02-PLAN.md — Extract statAllFiles and use batched stats in staleness checker
-- [ ] 57-03-PLAN.md — Replace linear embedding fallback with binary search isolation
+- [x] 57-03-PLAN.md — Replace linear embedding fallback with binary search isolation
 
 ### Phase 58: Security
 **Goal**: SQL operations are protected against injection, path validation rejects home and root directories, and API key validation happens before expensive context building
@@ -239,7 +239,11 @@ Plans:
   1. All LanceDB SQL predicates use comprehensive escaping or parameterized query patterns — no raw user input interpolated into SQL strings
   2. The path validation blocklist rejects attempts to access home directory root (`~/`) and filesystem root (`/`) in addition to existing sensitive paths
   3. `askCodebase` checks for a valid ANTHROPIC_API_KEY and throws a clear error before any context building or Ollama calls begin
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
+- [x] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
 
 ### Phase 59: Missing Functionality
 **Goal**: Trace retrieval uses stored call edges to expand results, users can clean stale index directories, and the watch-mode MCP design decision is documented
@@ -249,7 +253,11 @@ Plans:
   1. Trace retrieval follows call edges from matched chunks to expand results — `trace_flow` returns richer hop chains for functions with documented call relationships
   2. `brain-cache clean` CLI command removes `.brain-cache/` directories and confirms deletion to the user
   3. SKILL.md or equivalent documentation explains that watch mode is CLI-only by design and is not exposed as an MCP tool
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
+- [x] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
 
 ### Phase 60: Dependency Upgrades
 **Goal**: apache-arrow, web-tree-sitter, vitest, and TypeScript are all on their current major versions with no regressions
@@ -260,7 +268,11 @@ Plans:
   2. web-tree-sitter is upgraded to 0.26.x with WASM grammar files verified compatible and all 5 language parsers loading without error
   3. vitest is upgraded to v4 and the full test suite passes with no skipped or failing tests
   4. TypeScript is upgraded to 6.0 with all breaking changes resolved and `tsc --noEmit` reporting zero errors
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
+- [ ] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
 
 ### Phase 61: Test Coverage
 **Goal**: Integration tests cover nested stderr patching, keyword fallback when Ollama is unavailable, and keyword search behavior at scale
@@ -270,7 +282,11 @@ Plans:
   1. An integration test reproduces the watch-triggers-index scenario and asserts that nested stderr patching does not corrupt output
   2. An integration test verifies keyword fallback search returns ranked results when Ollama is not running
   3. A test seeding more than 10,000 chunk rows exercises keyword search and asserts acceptable memory usage and result correctness
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
+- [ ] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
 
 ## Progress
 
@@ -278,8 +294,8 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 55. Critical Fixes | v3.6 | 2/2 | Complete   | 2026-04-07 |
 | 56. Technical Debt | v3.6 | 3/3 | Complete    | 2026-04-07 |
-| 57. Performance | v3.6 | 1/3 | In Progress|  |
-| 58. Security | v3.6 | 0/TBD | Not started | - |
+| 57. Performance | v3.6 | 3/3 | Complete    | 2026-04-07 |
+| 58. Security | v3.6 | 2/2 | Complete   | 2026-04-07 |
 | 59. Missing Functionality | v3.6 | 0/TBD | Not started | - |
 | 60. Dependency Upgrades | v3.6 | 0/TBD | Not started | - |
 | 61. Test Coverage | v3.6 | 0/TBD | Not started | - |

@@ -21,15 +21,15 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 
 ### Performance
 
-- [ ] **PERF-01**: Keyword fallback search uses SQL LIKE predicates or cursor-based pagination instead of loading entire table
+- [x] **PERF-01**: Keyword fallback search uses SQL LIKE predicates or cursor-based pagination instead of loading entire table
 - [x] **PERF-02**: Staleness check reuses batched stat approach from index workflow instead of individual file stats
-- [ ] **PERF-03**: Embedding batch fallback uses binary search to isolate problematic chunks instead of one-at-a-time
+- [x] **PERF-03**: Embedding batch fallback uses binary search to isolate problematic chunks instead of one-at-a-time
 
 ### Security
 
-- [ ] **SEC-01**: SQL predicates in LanceDB operations use comprehensive escaping or parameterized queries
-- [ ] **SEC-02**: Path validation blocklist includes home directory root and filesystem root
-- [ ] **SEC-03**: `askCodebase` validates ANTHROPIC_API_KEY before context building begins
+- [x] **SEC-01**: SQL predicates in LanceDB operations use comprehensive escaping or parameterized queries
+- [x] **SEC-02**: Path validation blocklist includes home directory root and filesystem root
+- [x] **SEC-03**: `askCodebase` validates ANTHROPIC_API_KEY before context building begins
 
 ### Missing Functionality
 
@@ -73,12 +73,12 @@ None deferred — all concerns scoped to this milestone.
 | DEBT-02 | Phase 56 | Complete |
 | DEBT-03 | Phase 56 | Complete |
 | DEBT-04 | Phase 56 | Complete |
-| PERF-01 | Phase 57 | Pending |
+| PERF-01 | Phase 57 | Complete |
 | PERF-02 | Phase 57 | Complete |
-| PERF-03 | Phase 57 | Pending |
-| SEC-01 | Phase 58 | Pending |
-| SEC-02 | Phase 58 | Pending |
-| SEC-03 | Phase 58 | Pending |
+| PERF-03 | Phase 57 | Complete |
+| SEC-01 | Phase 58 | Complete |
+| SEC-02 | Phase 58 | Complete |
+| SEC-03 | Phase 58 | Complete |
 | FEAT-01 | Phase 59 | Pending |
 | FEAT-02 | Phase 59 | Pending |
 | FEAT-03 | Phase 59 | Pending |
