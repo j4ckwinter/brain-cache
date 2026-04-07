@@ -161,9 +161,9 @@
 
 - [x] **Phase 48: Incremental Index I/O** — Reduce full-file reads on incremental index using stat/mtime (or equivalent) so unchanged files skip `readFile`+hash when the manifest says they are unchanged (3/3 plans)
 - [x] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned) (completed 2026-04-06)
-- [x] **Phase 50: Background Service Install** — Optional `init` path or subcommand to install LaunchAgent/systemd user unit (document Windows separately) (planned) (completed 2026-04-06)
+- [x] ~~**Phase 50: Background Service Install**~~ — REMOVED (user decision: background service not wanted)
 - [x] **Phase 51: Git History Indexing** — Ingest commit messages and touched paths; same embed pipeline; search/build_context return provenance for history vs file chunks (runtime complete, closure verified 2026-04-07)
-- [x] **Phase 52: Service Install Closure and Verification** — Closed DAILY-03 with phase verification artifact, lifecycle docs, and synchronized traceability metadata (completed 2026-04-07)
+- [x] ~~**Phase 52: Service Install Closure and Verification**~~ — REMOVED (dependent on phase 50)
 - [x] **Phase 53: Git History Closure and Traceability Sync** — Close DAILY-04 with verification artifact and align milestone traceability metadata with implemented runtime wiring (completed 2026-04-07)
 - [x] **Phase 54: v3.5 Milestone Re-audit and Ship** — Re-ran v3.5 milestone audit post-closure and synchronized shipped-state metadata across roadmap, requirements, and state artifacts (completed 2026-04-07)
 
@@ -274,13 +274,7 @@ Plans:
 **Plans:** 2/2 plans complete
 
 ### Phase 50: Background Service Install
-**Goal**: Optional installation as a user-level background service so the watcher runs without a dedicated terminal (macOS LaunchAgent + Linux systemd documented; Windows documented).
-**Depends on**: Phase 49
-**Requirements**: DAILY-03
-**Success Criteria** (what must be TRUE):
-  1. Documented, opt-in install path generates a valid unit file with correct `brain-cache watch` invocation and working directory
-  2. Uninstall or disable path is documented
-**Plans:** 2/2 plans complete
+**REMOVED** — User decided background service install is not a good idea. Code, tests, CLI commands, and phase artifacts deleted.
 
 ### Phase 51: Git History Indexing
 **Goal**: Commits (message + metadata) and touched paths are embedded and searchable alongside code chunks; results show whether a hit is source or history.
@@ -297,17 +291,7 @@ Plans:
 - [x] [51-03-PLAN.md](phases/51-git-history-indexing/51-03-PLAN.md) — DAILY-04 retrieval/provenance: history penalty, formatter labels, build_context Git History section
 
 ### Phase 52: Service Install Closure and Verification
-**Goal**: DAILY-03 is verifiably closed via explicit verification artifacts, user-facing service lifecycle docs, and updated milestone closure metadata.
-**Depends on**: Phase 50
-**Requirements**: DAILY-03
-**Gap Closure:** Closes v3.5 audit gaps for DAILY-03 requirement orphaning, docs integration, and service install E2E docs flow.
-**Success Criteria** (what must be TRUE):
-  1. User-facing docs include service lifecycle commands for install, status, disable, and uninstall.
-  2. `50-VERIFICATION.md` exists with DAILY-03 evidence and a clear pass/fail verdict.
-  3. Phase 50 closure metadata is consistent across roadmap, requirements, and phase artifacts.
-**Plans:** 1/1 plans complete
-Plans:
-- [ ] [52-01-PLAN.md](phases/52-service-install-closure-and-verification/52-01-PLAN.md) — DAILY-03 closure: README service lifecycle docs, 50 verification artifact, and traceability metadata sync
+**REMOVED** — Dependent on Phase 50 which was removed.
 
 ### Phase 53: Git History Closure and Traceability Sync
 **Goal**: DAILY-04 is auditable as complete by adding missing verification artifacts and synchronizing stale closure metadata.
@@ -324,8 +308,8 @@ Plans:
 
 ### Phase 54: v3.5 Milestone Re-audit and Ship
 **Goal**: v3.5 Daily Adoption is auditable as shipped at milestone level, with no residual metadata drift after requirement closure phases.
-**Depends on**: Phase 52, Phase 53
-**Requirements**: DAILY-03, DAILY-04
+**Depends on**: Phase 53
+**Requirements**: DAILY-04
 **Success Criteria** (what must be TRUE):
   1. `v3.5-MILESTONE-AUDIT.md` is refreshed and reports no unsatisfied requirement gaps for DAILY-01 through DAILY-04.
   2. Main roadmap, v3.5 archived roadmap, requirements traceability, and state metadata all show a consistent closure/shipped truth for v3.5.
@@ -345,9 +329,9 @@ Plans:
 | 47. Test Coverage and Structural Refactoring | v3.4 | 3/3 | Complete | 2026-04-06 |
 | 48. Incremental Index I/O | v3.5 | 3/3 | Complete    | 2026-04-06 |
 | 49. File Watcher | v3.5 | 2/2 | Complete    | 2026-04-06 |
-| 50. Background Service Install | v3.5 | 2/2 | Complete   | 2026-04-06 |
+| 50. Background Service Install | v3.5 | 2/2 | Removed    | — |
 | 51. Git History Indexing | v3.5 | 3/3 | Complete | 2026-04-07 |
-| 52. Service Install Closure and Verification | v3.5 | 1/1 | Complete   | 2026-04-07 |
+| 52. Service Install Closure and Verification | v3.5 | 1/1 | Removed    | — |
 | 53. Git History Closure and Traceability Sync | v3.5 | 1/1 | Complete   | 2026-04-07 |
 | 54. v3.5 Milestone Re-audit and Ship | v3.5 | 1/1 | Complete   | 2026-04-07 |
 
