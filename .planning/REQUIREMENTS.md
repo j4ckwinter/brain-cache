@@ -33,7 +33,7 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 
 ### Missing Functionality
 
-- [ ] **FEAT-01**: Edge graph traversal is wired into trace retrieval path, expanding results by following call edges from matched chunks
+- [x] **FEAT-01**: Edge graph traversal is wired into trace retrieval path, expanding results by following call edges from matched chunks
 - [x] **FEAT-02**: `brain-cache clean` CLI command removes stale `.brain-cache/` directories
 - [x] **FEAT-03**: Watch mode MCP design decision documented (CLI-only is intentional)
 
@@ -41,8 +41,8 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 
 - [ ] **DEP-01**: apache-arrow upgraded from v18 to v21 with LanceDB compatibility verified
 - [ ] **DEP-02**: web-tree-sitter upgraded from ~0.25.10 to 0.26.x with WASM grammar compatibility verified
-- [ ] **DEP-03**: vitest upgraded from v2 to v4 with all tests passing
-- [ ] **DEP-04**: TypeScript upgraded from 5.9 to 6.0 with breaking changes resolved
+- [x] **DEP-03**: vitest upgraded from v2 to v4 with all tests passing
+- [x] **DEP-04**: TypeScript upgraded from 5.9 to 6.0 with breaking changes resolved
 
 ### Test Coverage
 
@@ -79,13 +79,13 @@ None deferred — all concerns scoped to this milestone.
 | SEC-01 | Phase 58 | Complete |
 | SEC-02 | Phase 58 | Complete |
 | SEC-03 | Phase 58 | Complete |
-| FEAT-01 | Phase 59 | Pending |
+| FEAT-01 | Phase 59 | Complete |
 | FEAT-02 | Phase 59 | Complete |
 | FEAT-03 | Phase 59 | Complete |
 | DEP-01 | Phase 60 | Pending |
 | DEP-02 | Phase 60 | Pending |
-| DEP-03 | Phase 60 | Pending |
-| DEP-04 | Phase 60 | Pending |
+| DEP-03 | Phase 60 | Complete |
+| DEP-04 | Phase 60 | Complete |
 | TEST-01 | Phase 61 | Pending |
 | TEST-02 | Phase 61 | Pending |
 | TEST-03 | Phase 61 | Pending |

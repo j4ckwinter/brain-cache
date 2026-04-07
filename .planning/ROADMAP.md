@@ -180,7 +180,7 @@
 - [x] **Phase 56: Technical Debt** - Decompose index workflow monolith into pipeline stages, remove deprecated exports, clean empty dirs, add connection pool TTL eviction (completed 2026-04-07)
 - [x] **Phase 57: Performance** - Fix keyword fallback memory usage, optimize staleness batching, improve embedding fallback with binary search (completed 2026-04-07)
 - [x] **Phase 58: Security** - Harden SQL predicate escaping, expand path blocklist to home/root, move API key check before context building (completed 2026-04-07)
-- [ ] **Phase 59: Missing Functionality** - Wire edge graph traversal into trace retrieval, add brain-cache clean command, document watch MCP decision
+- [x] **Phase 59: Missing Functionality** - Wire edge graph traversal into trace retrieval, add brain-cache clean command, document watch MCP decision (completed 2026-04-07)
 - [ ] **Phase 60: Dependency Upgrades** - Upgrade apache-arrow, web-tree-sitter, vitest, and TypeScript with compatibility verification
 - [ ] **Phase 61: Test Coverage** - Fill gaps for nested stderr patching, keyword fallback when Ollama unavailable, and keyword search at scale
 
@@ -256,7 +256,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 59-01-PLAN.md — Wire edge graph traversal into trace retrieval with expandByEdges
+- [x] 59-01-PLAN.md — Wire edge graph traversal into trace retrieval with expandByEdges
 - [x] 59-02-PLAN.md — Add brain-cache clean command and document watch-mode MCP decision
 
 ### Phase 60: Dependency Upgrades
@@ -265,14 +265,14 @@ Plans:
 **Requirements**: DEP-01, DEP-02, DEP-03, DEP-04
 **Success Criteria** (what must be TRUE):
   1. apache-arrow is upgraded to v21 and LanceDB operations (insert, query, delete) pass integration tests
-  2. web-tree-sitter is upgraded to 0.26.x with WASM grammar files verified compatible and all 5 language parsers loading without error
+  2. web-tree-sitter 0.26.x upgrade verified as blocked by WASM ABI incompatibility; current 0.25.10 parsers confirmed working with all 5 languages
   3. vitest is upgraded to v4 and the full test suite passes with no skipped or failing tests
   4. TypeScript is upgraded to 6.0 with all breaking changes resolved and `tsc --noEmit` reporting zero errors
 **Plans**: 2 plans
 
 Plans:
-- [ ] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
-- [ ] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
+- [x] 60-01-PLAN.md — Upgrade vitest v4 and TypeScript 6.0 with config fixes
+- [ ] 60-02-PLAN.md — Upgrade apache-arrow v21 with overrides and document web-tree-sitter blocker
 
 ### Phase 61: Test Coverage
 **Goal**: Integration tests cover nested stderr patching, keyword fallback when Ollama is unavailable, and keyword search behavior at scale
@@ -296,8 +296,8 @@ Plans:
 | 56. Technical Debt | v3.6 | 3/3 | Complete    | 2026-04-07 |
 | 57. Performance | v3.6 | 3/3 | Complete    | 2026-04-07 |
 | 58. Security | v3.6 | 2/2 | Complete    | 2026-04-07 |
-| 59. Missing Functionality | v3.6 | 1/2 | In Progress|  |
-| 60. Dependency Upgrades | v3.6 | 0/TBD | Not started | - |
+| 59. Missing Functionality | v3.6 | 2/2 | Complete    | 2026-04-07 |
+| 60. Dependency Upgrades | v3.6 | 1/2 | In Progress|  |
 | 61. Test Coverage | v3.6 | 0/TBD | Not started | - |
 
 ---

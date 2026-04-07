@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.6
 milestone_name: Concerns Cleanup
 status: executing
-stopped_at: Completed 59-02-PLAN.md
-last_updated: "2026-04-07T12:39:19.788Z"
+stopped_at: Completed 60-01-PLAN.md
+last_updated: "2026-04-07T13:18:26.588Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 7
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 11
+  completed_phases: 5
+  total_plans: 14
+  completed_plans: 13
 ---
 
 # Project State: Brain-Cache
@@ -25,18 +25,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 59 — missing-functionality
+**Current focus:** Phase 60 — dependency-upgrades
 
 ---
 
 ## Current Position
 
-Phase: 59 (missing-functionality) — EXECUTING
+Phase: 60 (dependency-upgrades) — EXECUTING
 Plan: 2 of 2
 Status: Ready to execute
 Last activity: 2026-04-07
 
-Progress: ░░░░░░░░░░ 0/7 phases complete
+Progress: [█████████░] 93% (13/14 plans complete)
 
 ---
 
@@ -62,14 +62,17 @@ None.
 
 - [55-01] Stack-based LIFO filter with single shared interceptor — avoids nested monkey-patch corruption (withStderrFilter)
 - [55-01] Object.setPrototypeOf in NoIndexError constructor — ensures instanceof works after TypeScript compilation
+- [60-01] ignoreDeprecations: '6.0' in tsup DTS config — workaround for tsup baseUrl injection bug until PR #1390 ships
+- [60-01] vi.clearAllMocks() in beforeEach for vitest v4 — restoreAllMocks no longer clears call history
+- [60-01] Regular function in vi.fn().mockImplementation() for constructor mocks — vitest v4 enforces function/class requirement
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-07T12:39:19.783Z
+**Last session:** 2026-04-07T13:18:26.581Z
 
-**Stopped at:** Completed 59-02-PLAN.md
+**Stopped at:** Completed 60-01-PLAN.md
 
 **Next action:** Execute 55-02 — wire withStderrFilter and NoIndexError into workflows and guards
 
