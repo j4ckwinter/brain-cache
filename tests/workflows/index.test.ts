@@ -40,6 +40,7 @@ vi.mock('../../src/services/lancedb.js', () => ({
   createVectorIndexIfNeeded: vi.fn(),
   withWriteLock: vi.fn(),
   classifyFileType: vi.fn((filePath: string) => filePath.includes('.test.') ? 'test' : 'source'),
+  escapeSqlLiteral: vi.fn((v: string) => v.replace(/'/g, "''")),
 }));
 
 vi.mock('../../src/services/gitHistory.js', () => ({
