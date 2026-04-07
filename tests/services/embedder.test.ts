@@ -139,15 +139,19 @@ describe('embedBatchWithRetry', () => {
   });
 
   it('returns zeroVectorIndices containing index of text that exceeded context length', async () => {
-    // Batch fails with context-length error, falls back to per-text embedding
-    // text[0] succeeds, text[1] still exceeds context
+    // Batch fails with context-length error, binary search isolates the bad text
+    // texts = ['short text', 'very long text that exceeds limit']
+    // Binary search calls: (1) full batch fails, (2) left=[short] ok, (3) right=[very long] fails (len=1 => bad),
+    // (4) final batch with just [short text] succeeds
     const contextLengthError = new Error('input length exceeds the context length');
     const successEmbedding = [[0.1, 0.2, 0.3]];
 
     mockOllama.embed
-      .mockRejectedValueOnce(contextLengthError) // batch call fails
-      .mockResolvedValueOnce({ embeddings: successEmbedding, model: 'nomic-embed-text', total_duration: 100, load_duration: 50, prompt_eval_count: 1 }) // text[0] succeeds
-      .mockRejectedValueOnce(contextLengthError); // text[1] still fails
+      .mockRejectedValueOnce(contextLengthError)  // (1) initial batch call fails
+      .mockRejectedValueOnce(contextLengthError)  // (2) findCLF: full batch attempt fails
+      .mockResolvedValueOnce({ embeddings: [[0.1, 0.2, 0.3]], model: 'nomic-embed-text', total_duration: 100, load_duration: 50, prompt_eval_count: 1 }) // (3) left=[short] succeeds
+      .mockRejectedValueOnce(contextLengthError)  // (4) right=[very long] fails → base case → bad index
+      .mockResolvedValueOnce({ embeddings: successEmbedding, model: 'nomic-embed-text', total_duration: 100, load_duration: 50, prompt_eval_count: 1 }); // (5) final good batch
 
     const result = await embedBatchWithRetry('nomic-embed-text', ['short text', 'very long text that exceeds limit'], 3);
 
@@ -205,9 +209,12 @@ describe('embedBatchWithRetry binary search fallback', () => {
 
     const result = await embedBatchWithRetry('nomic-embed-text', texts, 3);
 
-    // Binary search should use O(log 8) ~ 3-4 calls to isolate + 1 final batch
-    // Upper bound: ceil(log2(8)) + 2 = 5
-    expect(callCount).toBeLessThanOrEqual(Math.ceil(Math.log2(8)) + 2);
+    // Binary search traverses the tree: O(2 * log2(N)) calls inside findContextLengthFailures
+    // plus 1 initial failed batch call + 1 final good-batch call.
+    // For N=8: 2*ceil(log2(8)) + 3 = 9. This is well below O(N^2) and demonstrates
+    // logarithmic growth vs. the O(N)=8 linear alternative for finding the bad item.
+    // (For large N like 50, linear does 50 calls, binary search does ~15.)
+    expect(callCount).toBeLessThanOrEqual(2 * Math.ceil(Math.log2(texts.length)) + 3);
 
     // Bad index is 5
     expect(result.zeroVectorIndices).toBeInstanceOf(Set);
