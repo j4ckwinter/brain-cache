@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.6
 milestone_name: Concerns Cleanup
-status: executing
-stopped_at: Completed 60-01-PLAN.md
-last_updated: "2026-04-07T13:18:26.588Z"
+status: verifying
+stopped_at: Completed 60-02-PLAN.md
+last_updated: "2026-04-07T13:25:04.070Z"
 last_activity: 2026-04-07
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
+  percent: 100
 ---
 
 # Project State: Brain-Cache
@@ -33,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-04-07)
 
 Phase: 60 (dependency-upgrades) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-07
 
-Progress: [█████████░] 93% (13/14 plans complete)
+Progress: [██████████] 100% (14/14 plans complete)
 
 ---
 
@@ -51,7 +52,7 @@ Progress: [█████████░] 93% (13/14 plans complete)
 | 57 | Performance | PERF-01, PERF-02, PERF-03 | Not started |
 | 58 | Security | SEC-01, SEC-02, SEC-03 | Not started |
 | 59 | Missing Functionality | FEAT-01, FEAT-02, FEAT-03 | Not started |
-| 60 | Dependency Upgrades | DEP-01, DEP-02, DEP-03, DEP-04 | Not started |
+| 60 | Dependency Upgrades | DEP-01, DEP-02, DEP-03, DEP-04 | Complete |
 | 61 | Test Coverage | TEST-01, TEST-02, TEST-03 | Not started |
 
 ### Active Blockers
@@ -65,14 +66,16 @@ None.
 - [60-01] ignoreDeprecations: '6.0' in tsup DTS config — workaround for tsup baseUrl injection bug until PR #1390 ships
 - [60-01] vi.clearAllMocks() in beforeEach for vitest v4 — restoreAllMocks no longer clears call history
 - [60-01] Regular function in vi.fn().mockImplementation() for constructor mocks — vitest v4 enforces function/class requirement
+- [60-02] npm overrides bypasses LanceDB peer dep cap for apache-arrow v21 — arrow JS API stable across v18-v21 for Schema/Field/Utf8/Int32/Float32/FixedSizeList
+- [60-02] DEP-02 web-tree-sitter 0.26.x blocked — tree-sitter-wasms 0.1.13 WASM ABI (dylink) incompatible with 0.26.x runtime (dylink.0); stay on 0.25.10
 
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-07T13:18:26.581Z
+**Last session:** 2026-04-07T13:25:04.066Z
 
-**Stopped at:** Completed 60-01-PLAN.md
+**Stopped at:** Completed 60-02-PLAN.md
 
 **Next action:** Execute 55-02 — wire withStderrFilter and NoIndexError into workflows and guards
 

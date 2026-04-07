@@ -181,7 +181,7 @@
 - [x] **Phase 57: Performance** - Fix keyword fallback memory usage, optimize staleness batching, improve embedding fallback with binary search (completed 2026-04-07)
 - [x] **Phase 58: Security** - Harden SQL predicate escaping, expand path blocklist to home/root, move API key check before context building (completed 2026-04-07)
 - [x] **Phase 59: Missing Functionality** - Wire edge graph traversal into trace retrieval, add brain-cache clean command, document watch MCP decision (completed 2026-04-07)
-- [ ] **Phase 60: Dependency Upgrades** - Upgrade apache-arrow, web-tree-sitter, vitest, and TypeScript with compatibility verification
+- [x] **Phase 60: Dependency Upgrades** - Upgrade apache-arrow, web-tree-sitter, vitest, and TypeScript with compatibility verification (completed 2026-04-07)
 - [ ] **Phase 61: Test Coverage** - Fill gaps for nested stderr patching, keyword fallback when Ollama unavailable, and keyword search at scale
 
 ## Phase Details
@@ -272,7 +272,7 @@ Plans:
 
 Plans:
 - [x] 60-01-PLAN.md — Upgrade vitest v4 and TypeScript 6.0 with config fixes
-- [ ] 60-02-PLAN.md — Upgrade apache-arrow v21 with overrides and document web-tree-sitter blocker
+- [x] 60-02-PLAN.md — Upgrade apache-arrow v21 with overrides and document web-tree-sitter blocker
 
 ### Phase 61: Test Coverage
 **Goal**: Integration tests cover nested stderr patching, keyword fallback when Ollama is unavailable, and keyword search behavior at scale
@@ -297,7 +297,7 @@ Plans:
 | 57. Performance | v3.6 | 3/3 | Complete    | 2026-04-07 |
 | 58. Security | v3.6 | 2/2 | Complete    | 2026-04-07 |
 | 59. Missing Functionality | v3.6 | 2/2 | Complete    | 2026-04-07 |
-| 60. Dependency Upgrades | v3.6 | 1/2 | In Progress|  |
+| 60. Dependency Upgrades | v3.6 | 2/2 | Complete   | 2026-04-07 |
 | 61. Test Coverage | v3.6 | 0/TBD | Not started | - |
 
 ---

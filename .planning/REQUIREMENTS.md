@@ -39,8 +39,8 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 
 ### Dependencies
 
-- [ ] **DEP-01**: apache-arrow upgraded from v18 to v21 with LanceDB compatibility verified
-- [ ] **DEP-02**: web-tree-sitter upgraded from ~0.25.10 to 0.26.x with WASM grammar compatibility verified
+- [x] **DEP-01**: apache-arrow upgraded from v18 to v21 with LanceDB compatibility verified
+- [x] **DEP-02**: web-tree-sitter upgraded from ~0.25.10 to 0.26.x with WASM grammar compatibility verified
 - [x] **DEP-03**: vitest upgraded from v2 to v4 with all tests passing
 - [x] **DEP-04**: TypeScript upgraded from 5.9 to 6.0 with breaking changes resolved
 
@@ -82,8 +82,8 @@ None deferred — all concerns scoped to this milestone.
 | FEAT-01 | Phase 59 | Complete |
 | FEAT-02 | Phase 59 | Complete |
 | FEAT-03 | Phase 59 | Complete |
-| DEP-01 | Phase 60 | Pending |
-| DEP-02 | Phase 60 | Pending |
+| DEP-01 | Phase 60 | Complete |
+| DEP-02 | Phase 60 | Complete |
 | DEP-03 | Phase 60 | Complete |
 | DEP-04 | Phase 60 | Complete |
 | TEST-01 | Phase 61 | Pending |
