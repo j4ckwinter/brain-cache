@@ -5,16 +5,18 @@ import type { NoIndexError as NoIndexErrorType } from '../../src/lib/errors.js';
 const registeredTools = new Map<string, { schema: any; handler: Function }>();
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
-  McpServer: vi.fn().mockImplementation(() => ({
-    registerTool: vi.fn((name: string, config: any, handler: Function) => {
-      registeredTools.set(name, { schema: config, handler });
-    }),
-    connect: vi.fn().mockResolvedValue(undefined),
-  })),
+  McpServer: vi.fn().mockImplementation(function () {
+    return {
+      registerTool: vi.fn((name: string, config: any, handler: Function) => {
+        registeredTools.set(name, { schema: config, handler });
+      }),
+      connect: vi.fn().mockResolvedValue(undefined),
+    };
+  }),
 }));
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn().mockImplementation(() => ({})),
+  StdioServerTransport: vi.fn().mockImplementation(function () { return {}; }),
 }));
 
 // Mock all service and workflow dependencies

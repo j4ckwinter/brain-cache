@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 
 describe('npm pack --dry-run', () => {
-  it('includes all 6 required WASM files in package output', () => {
+  it('includes all 6 required WASM files in package output', { timeout: 60000 }, () => {
     // Build first — npm pack --dry-run does not run prepare
     execSync('npm run build', { encoding: 'utf8', stdio: 'pipe' });
 

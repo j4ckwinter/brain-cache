@@ -119,6 +119,9 @@ describe('runInit', () => {
     stderrOutput = [];
     stdoutOutput = [];
 
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
+
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
       return true;
@@ -301,6 +304,9 @@ describe('.mcp.json management', () => {
 
   beforeEach(async () => {
     stderrOutput = [];
+
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
 
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
@@ -549,6 +555,9 @@ describe('statusline installation', () => {
   beforeEach(async () => {
     stderrOutput = [];
 
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
+
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
       return true;
@@ -670,6 +679,9 @@ describe('settings.json management', () => {
 
   beforeEach(async () => {
     stderrOutput = [];
+
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
 
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
@@ -907,6 +919,9 @@ describe('PreToolUse hook installation', () => {
 
   beforeEach(async () => {
     stderrOutput = [];
+
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
 
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
@@ -1178,6 +1193,9 @@ describe('runDoctor', () => {
   beforeEach(async () => {
     stderrOutput = [];
     stdoutOutput = [];
+
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
 
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));

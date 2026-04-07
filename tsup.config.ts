@@ -8,7 +8,11 @@ export default defineConfig([
     target: "node20",
     outDir: "dist",
     clean: true,
-    dts: true,
+    dts: {
+      compilerOptions: {
+        ignoreDeprecations: "6.0",
+      },
+    },
     banner: {
       js: "#!/usr/bin/env node",
     },
@@ -22,7 +26,11 @@ export default defineConfig([
     target: "node20",
     outDir: "dist",
     clean: false,
-    dts: true,
+    dts: {
+      compilerOptions: {
+        ignoreDeprecations: "6.0",
+      },
+    },
     define: {
       __BRAIN_CACHE_VERSION__: JSON.stringify(pkg.version),
     },
