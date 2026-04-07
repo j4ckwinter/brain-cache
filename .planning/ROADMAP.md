@@ -20,8 +20,9 @@
 - ✅ **v3.1 Hook Adoption** — Phases 36-37 (shipped 2026-04-05) — [archive](milestones/v3.1-ROADMAP.md)
 - ✅ **v3.2 Test File Noise Reduction** — Phases 38-39 (shipped 2026-04-05)
 - ✅ **v3.3 Web Tree-Sitter Migration** — Phases 40-42 (shipped 2026-04-06)
-- ✅ **v3.4 Codebase Hardening** — Phases 43-47 (shipped 2026-04-06)
+- ✅ **v3.4 Codebase Hardening** — Phases 43-47 (shipped 2026-04-06) — [archive](milestones/v3.4-ROADMAP.md)
 - ✅ **v3.5 Daily Adoption** — Phases 48-54 (shipped 2026-04-07) — [archive](milestones/v3.5-ROADMAP.md)
+- 🚧 **v3.6 Concerns Cleanup** — Phases 55-61 (in progress)
 
 ## Phases
 
@@ -145,196 +146,134 @@
 
 </details>
 
-### v3.4 Codebase Hardening (Shipped 2026-04-06)
+<details>
+<summary>✅ v3.4 Codebase Hardening (Phases 43-47) — SHIPPED 2026-04-06</summary>
 
-**Milestone Goal:** Address all concerns from the codebase audit — eliminate tech debt, fix bugs, close security gaps, improve performance, strengthen test coverage, and add missing features.
+- [x] Phase 43: Correctness and Security (2/2 plans) — completed 2026-04-06
+- [x] Phase 44: Debt Reduction and Performance (4/4 plans) — completed 2026-04-06
+- [x] Phase 45: Auto-Index Retry Test and withGuards Extraction (2/2 plans) — completed 2026-04-06
+- [x] Phase 46: Missing Features (3/3 plans) — completed 2026-04-06
+- [x] Phase 47: Test Coverage and Structural Refactoring (3/3 plans) — completed 2026-04-06
 
-- [x] **Phase 43: Correctness and Security** — Fix zero-vector search pollution, MCP path traversal, concurrent index locking, and token savings consistency (completed 2026-04-06)
-- [x] **Phase 44: Debt Reduction and Performance** — Extract workflow guards, migrate async I/O, pool LanceDB connections, batch chunk deletions, cache parser instances (completed 2026-04-06)
-- [x] **Phase 45: Auto-Index Retry Test and withGuards Extraction** — Write retry test against current structure first, then extract withGuards wrapper and MCP factory (completed 2026-04-06)
-- [x] **Phase 46: Missing Features** — Add index staleness detection, Markdown/text/RST indexing, Ollama keyword fallback, crawler extension support (completed 2026-04-06)
-- [x] **Phase 47: Test Coverage and Structural Refactoring** — E2E pipeline test, CLI integration tests, edge case tests, index workflow split (completed 2026-04-06)
+</details>
 
-### v3.5 Daily Adoption (Shipped 2026-04-07)
+<details>
+<summary>✅ v3.5 Daily Adoption (Phases 48-54) — SHIPPED 2026-04-07</summary>
 
-**Milestone Goal:** Make brain-cache something developers use daily — cheap incremental indexing on large repos, a watch path so the index tracks the working tree, and git history in the index for “why” queries.
+- [x] Phase 48: Incremental Index I/O (3/3 plans) — completed 2026-04-06
+- [x] Phase 49: File Watcher (2/2 plans) — completed 2026-04-06
+- ~~Phase 50: Background Service Install~~ — REMOVED
+- [x] Phase 51: Git History Indexing (3/3 plans) — completed 2026-04-07
+- ~~Phase 52: Service Install Closure and Verification~~ — REMOVED
+- [x] Phase 53: Git History Closure and Traceability Sync (1/1 plan) — completed 2026-04-07
+- [x] Phase 54: v3.5 Milestone Re-audit and Ship (1/1 plan) — completed 2026-04-07
 
-- [x] **Phase 48: Incremental Index I/O** — Reduce full-file reads on incremental index using stat/mtime (or equivalent) so unchanged files skip `readFile`+hash when the manifest says they are unchanged (3/3 plans)
-- [x] **Phase 49: File Watcher** — `brain-cache watch` with debounced calls into `runIndex`, respecting `acquireIndexLock` (planned) (completed 2026-04-06)
-- [x] ~~**Phase 50: Background Service Install**~~ — REMOVED (user decision: background service not wanted)
-- [x] **Phase 51: Git History Indexing** — Ingest commit messages and touched paths; same embed pipeline; search/build_context return provenance for history vs file chunks (runtime complete, closure verified 2026-04-07)
-- [x] ~~**Phase 52: Service Install Closure and Verification**~~ — REMOVED (dependent on phase 50)
-- [x] **Phase 53: Git History Closure and Traceability Sync** — Close DAILY-04 with verification artifact and align milestone traceability metadata with implemented runtime wiring (completed 2026-04-07)
-- [x] **Phase 54: v3.5 Milestone Re-audit and Ship** — Re-ran v3.5 milestone audit post-closure and synchronized shipped-state metadata across roadmap, requirements, and state artifacts (completed 2026-04-07)
+</details>
+
+---
+
+### v3.6 Concerns Cleanup (In Progress)
+
+**Milestone Goal:** Address all documented codebase concerns — critical bugs, technical debt, performance issues, security gaps, missing functionality, dependency upgrades, and test coverage gaps.
+
+- [x] **Phase 55: Critical Fixes** - Replace stderr monkey-patching with a centralized utility and string-based error detection with typed error classes (completed 2026-04-07)
+- [ ] **Phase 56: Technical Debt** - Decompose index workflow monolith into pipeline stages, remove deprecated exports, clean empty dirs, add connection pool TTL eviction
+- [ ] **Phase 57: Performance** - Fix keyword fallback memory usage, optimize staleness batching, improve embedding fallback with binary search
+- [ ] **Phase 58: Security** - Harden SQL predicate escaping, expand path blocklist to home/root, move API key check before context building
+- [ ] **Phase 59: Missing Functionality** - Wire edge graph traversal into trace retrieval, add brain-cache clean command, document watch MCP decision
+- [ ] **Phase 60: Dependency Upgrades** - Upgrade apache-arrow, web-tree-sitter, vitest, and TypeScript with compatibility verification
+- [ ] **Phase 61: Test Coverage** - Fill gaps for nested stderr patching, keyword fallback when Ollama unavailable, and keyword search at scale
 
 ## Phase Details
 
-### Phase 43: Correctness and Security
-**Goal**: Users can trust search results and concurrent indexing without data corruption or security exposure
-**Depends on**: Phase 42
-**Requirements**: COR-01, COR-02, COR-03, COR-04
+### Phase 55: Critical Fixes
+**Goal**: The codebase handles stderr filtering safely via a centralized utility and detects no-index errors via typed classes instead of fragile string matching
+**Depends on**: Phase 54
+**Requirements**: CRIT-01, CRIT-02
 **Success Criteria** (what must be TRUE):
-  1. Search results never include zero-vector chunks — functions too large to embed are excluded at query time, not stored as noise
-  2. MCP tools reject path inputs that point to system directories (e.g., /etc, ~/.ssh, ~/.aws) with a clear error message
-  3. Running `brain-cache index` while the MCP server is actively indexing the same project serializes rather than corrupts — the second caller waits or fails cleanly
-  4. Token savings percentages shown in all tools reflect actual file-content-based computation with no magic multipliers — the same file produces the same savings number regardless of which tool reports it
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 43-01-PLAN.md — Zero-vector exclusion and cross-process index locking (COR-01, COR-03)
-- [x] 43-02-PLAN.md — Path validation blocklist and unified token savings (COR-02, COR-04)
-
-### Phase 44: Debt Reduction and Performance
-**Goal**: MCP and workflow handlers share guard logic, I/O is async throughout, and LanceDB operations are faster via connection pooling and batch deletions
-**Depends on**: Phase 43
-**Requirements**: DEBT-02, DEBT-03, DEBT-04, DEBT-05, DEBT-06, DEBT-07, PERF-01, PERF-02, PERF-03
-**Success Criteria** (what must be TRUE):
-  1. All six workflow functions enforce profile and Ollama availability via shared `requireProfile()` and `requireOllama()` helpers — no duplicated guard logic in workflow files
-  2. `brain-cache init` and related init operations use async `fs/promises` with no synchronous file calls remaining
-  3. Sequential MCP tool calls against an already-indexed project complete faster — LanceDB connections are reused from a module-level pool rather than opened per-call
-  4. Incremental re-index completes faster on large projects — chunk deletions use batched SQL `IN` predicates instead of serial per-chunk deletes
-  5. Parser instances are reused across files during indexing — the same language grammar is not loaded more than once per index run
-**Plans:** 4/4 plans complete
-Plans:
-- [x] 44-01-PLAN.md — Shared guard helpers and workflow guard replacement (DEBT-02, DEBT-05)
-- [x] 44-02-PLAN.md — Async init.ts migration (DEBT-04)
-- [x] 44-03-PLAN.md — LanceDB connection pool, parser cache, and MCP factory (PERF-01, DEBT-07, DEBT-03)
-- [x] 44-04-PLAN.md — Batch deletions, token count dedup, and buildContext optimization (PERF-02, DEBT-06, PERF-03)
-
-### Phase 45: Auto-Index Retry Test and withGuards Extraction
-**Goal**: The MCP auto-index retry path is tested and preserved through the withGuards wrapper extraction, and the MCP server is instantiated via a factory function
-**Depends on**: Phase 44
-**Requirements**: TEST-03, DEBT-01, DEBT-03
-**Success Criteria** (what must be TRUE):
-  1. A test exists that sends a tool call against a fresh (unindexed) project, confirms the auto-index triggers, and confirms the tool call retries and returns results — this test is green before withGuards is introduced
-  2. After withGuards extraction, the same auto-index retry test remains green — the wrapper preserves the retry callback behavior
-  3. The MCP server is created via `createMcpServer()` factory function — module-level singleton is gone and the factory is callable from tests without side effects
-  4. All four MCP tool handlers use the withGuards wrapper and contain only business logic — boilerplate profile/Ollama checks are not duplicated in handler bodies
-
-Note: TEST-03 must be written and passing against the current (pre-refactor) structure BEFORE DEBT-01 extraction begins. This is a hard intra-phase ordering constraint.
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 45-01-PLAN.md — Auto-index retry tests for search_codebase and build_context (TEST-03)
-- [x] 45-02-PLAN.md — withGuards extraction, createMcpServer factory, and file reorganization (DEBT-01, DEBT-03)
-
-### Phase 46: Missing Features
-**Goal**: brain-cache indexes Markdown and plain-text documentation files, degrades gracefully when Ollama is unavailable, and warns users when the index is stale
-**Depends on**: Phase 45
-**Requirements**: FEAT-01, FEAT-02, FEAT-03, FEAT-04
-**Success Criteria** (what must be TRUE):
-  1. Running `brain-cache index` on a project containing `.md`, `.txt`, and `.rst` files indexes those files using heading-boundary chunking — documentation appears in search results alongside code
-  2. Running `brain-cache search` when Ollama is unavailable returns keyword-matched results with a visible fallback indicator rather than an error — partial value over no value
-  3. `brain-cache doctor` and `brain-cache status` display a staleness warning when any crawled source file has an `mtime` newer than the index `indexedAt` timestamp (mtime comparison only — no separate “age of index” timer; see D-10 in phase context)
-  4. The crawler's `SOURCE_EXTENSIONS` list includes `.md`, `.txt`, and `.rst` — these extensions are picked up automatically without user configuration
-**Plans:** 3/3 plans complete
-Plans:
-- [x] 46-01-PLAN.md — Documentation chunker (`marked`), chunker dispatch, crawler `SOURCE_EXTENSIONS` (FEAT-02, FEAT-04)
-- [x] 46-02-PLAN.md — Staleness module and status/doctor wiring (FEAT-01)
-- [x] 46-03-PLAN.md — Keyword search fallback when Ollama unavailable (FEAT-03)
-**UI hint**: no
-
-### Phase 47: Test Coverage and Structural Refactoring
-**Goal**: The full pipeline is smoke-tested end-to-end, CLI argument handling is covered, and the largest source files are split into readable sub-units
-**Depends on**: Phase 46
-**Requirements**: TEST-01, TEST-02, TEST-04, TEST-05, TEST-06, REFAC-01, REFAC-02, REFAC-03
-**Success Criteria** (what must be TRUE):
-  1. An E2E test runs the full init → index → search → build_context pipeline with a mocked embedder in a tmpdir and passes in CI — no live Ollama or LanceDB server required
-  2. CLI integration tests cover Commander argument parsing, option coercion, and error handling for the main subcommands — bad inputs produce correct error messages, not unhandled exceptions
-  3. The incremental re-index edge deletion path is tested — removing a file from the project and re-indexing produces a clean index with no stale chunks from the deleted file
-  4. `src/workflows/index.ts` is split into named sub-functions (`computeFileDiffs`, `processFileGroup`, `printSummary`) — no function in the file exceeds a readable size
-  5. Token savings computation is unified into a single `computeTokenSavings()` utility used by all tools — no tool-specific savings logic remains scattered across files
-**Plans:** 3/3 plans complete
-Plans:
-- [x] 47-01-PLAN.md — REFAC-01/02/03: index workflow split (`computeFileDiffs`, `processFileGroup`, `printSummary`), token savings + MCP (`server.ts`) verification
-- [x] 47-02-PLAN.md — TEST-02/04/05/06: CLI Commander tests, file deletion re-index, dimension fallback, askCodebase errors
-- [x] 47-03-PLAN.md — TEST-01: E2E index → search → build_context with mocked embedder (`tests/e2e/pipeline.test.ts`); retriever vector coercion for LanceDB row shapes
-
-### Phase 48: Incremental Index I/O
-**Goal**: Incremental runs avoid reading every file from disk when content cannot have changed — large repos pay O(changed) reads, not O(all files), while correctness matches full hash when a file is rechecked.
-**Depends on**: Phase 47
-**Requirements**: DAILY-01
-**Success Criteria** (what must be TRUE):
-  1. Stored manifest (or sidecar) records per-file metadata sufficient to skip `readFile` when the file is unchanged (e.g. size + mtime, with documented invalidation rules)
-  2. When a skip is wrong (clock skew, editor that preserves mtime), a full re-read+hash path still exists — `--force` or first mismatch triggers re-hash
-  3. Behaviour is covered by tests using controlled mtimes in a temp directory
-**Plans:** 3/3 plans complete
-
-Plans:
-- [x] [48-01-PLAN.md](phases/48-incremental-index-io/48-01-PLAN.md) — DAILY-01: `FileStatEntry`, `FileHashManifest.stats`, migration-safe read/write (`tests/services/lancedb.test.ts`)
-- [x] [48-02-PLAN.md](phases/48-incremental-index-io/48-02-PLAN.md) — DAILY-01: `statAllFiles`, `partitionByStatChange`, `runIndex` stat fast-path, token carry-forward + backfill, manifest stats merge
-- [x] [48-03-PLAN.md](phases/48-incremental-index-io/48-03-PLAN.md) — DAILY-01: CLI `--verify`, workflow + CLI tests, controlled-mtime tempdir test
-
-### Phase 49: File Watcher
-**Goal**: Developers run `brain-cache watch` in a project; saves trigger debounced incremental re-index; lock prevents corruption with concurrent CLI/MCP index.
-**Depends on**: Phase 48 (recommended)
-**Requirements**: DAILY-02
-**Success Criteria** (what must be TRUE):
-  1. `brain-cache watch [path]` exists and schedules `runIndex` after a debounce window
-  2. Rapid saves coalesce to a single index pass within the debounce window
-  3. Concurrent `brain-cache index` and watch serialize via existing index lock — no LanceDB corruption
+  1. Nested stderr invocations (watch triggering index) do not corrupt output or cause missed filter events
+  2. `NoIndexError` class exists and auto-index retry uses `instanceof NoIndexError` instead of string matching
+  3. Both index and watch workflows import from the shared stderr utility rather than implementing their own monkey-patching
 **Plans:** 2/2 plans complete
 
-### Phase 50: Background Service Install
-**REMOVED** — User decided background service install is not a good idea. Code, tests, CLI commands, and phase artifacts deleted.
-
-### Phase 51: Git History Indexing
-**Goal**: Commits (message + metadata) and touched paths are embedded and searchable alongside code chunks; results show whether a hit is source or history.
-**Depends on**: Phase 49 (lock/index stability) recommended before heavy ingestion
-**Requirements**: DAILY-04
-**Success Criteria** (what must be TRUE):
-  1. Configurable depth/limit for history ingestion; shallow-clone behaviour documented
-  2. Chunks carry provenance (`source_kind` or equivalent) so search and build_context can label commit-derived hits
-  3. Incremental “high water mark” commit optional follow-up — initial milestone may full-refresh history table when enabled
-**Plans:** 3 plans (runtime delivered; closure verification completed via phase 53)
 Plans:
-- [x] [51-01-PLAN.md](phases/51-git-history-indexing/51-01-PLAN.md) — DAILY-04 foundation: git log parser/service and commit content contract tests
-- [x] [51-02-PLAN.md](phases/51-git-history-indexing/51-02-PLAN.md) — DAILY-04 ingestion/storage wiring: `source_kind` schema, config-gated index step, full-refresh history ingestion
-- [x] [51-03-PLAN.md](phases/51-git-history-indexing/51-03-PLAN.md) — DAILY-04 retrieval/provenance: history penalty, formatter labels, build_context Git History section
+- [x] 55-01-PLAN.md — Create withStderrFilter utility and NoIndexError class with tests
+- [x] 55-02-PLAN.md — Wire utilities into workflows, guards, and update test mocks
 
-### Phase 52: Service Install Closure and Verification
-**REMOVED** — Dependent on Phase 50 which was removed.
-
-### Phase 53: Git History Closure and Traceability Sync
-**Goal**: DAILY-04 is auditable as complete by adding missing verification artifacts and synchronizing stale closure metadata.
-**Depends on**: Phase 51
-**Requirements**: DAILY-04
-**Gap Closure:** Closes v3.5 audit gaps for missing Phase 51 verification and stale milestone traceability.
+### Phase 56: Technical Debt
+**Goal**: The index workflow is readable pipeline stages, deprecated code is removed, empty directories are gone, and the connection pool evicts stale connections automatically
+**Depends on**: Phase 55
+**Requirements**: DEBT-01, DEBT-02, DEBT-03, DEBT-04
 **Success Criteria** (what must be TRUE):
-  1. `51-VERIFICATION.md` exists with requirement-level evidence proving DAILY-04 closure.
-  2. Roadmap and requirements traceability reflect Phase 53 closure work and no longer report DAILY-04 as unverified/planned ambiguity.
-  3. Re-audit inputs are internally consistent across summary, verification, and traceability artifacts.
-**Plans:** 1/1 plans complete
-Plans:
-- [x] [53-01-PLAN.md](phases/53-git-history-closure-and-traceability-sync/53-01-PLAN.md) — DAILY-04 closure: phase 51 verification artifact, roadmap/requirements sync, and validation metadata alignment
+  1. `runIndex` is decomposed into named functions (stat-partition, file-diff, chunk-embed, git-history) with no single function exceeding a reasonable line count
+  2. `classifyQueryIntent` is no longer exported from the services barrel and no test references it directly
+  3. `src/tools/` directory is either removed or populated with extracted handler code (no empty directory in source tree)
+  4. LanceDB connection pool evicts connections that exceed a configured TTL and validates health before returning a connection
+**Plans**: TBD
 
-### Phase 54: v3.5 Milestone Re-audit and Ship
-**Goal**: v3.5 Daily Adoption is auditable as shipped at milestone level, with no residual metadata drift after requirement closure phases.
-**Depends on**: Phase 53
-**Requirements**: DAILY-04
+### Phase 57: Performance
+**Goal**: Keyword fallback, staleness checking, and embedding batch recovery all use memory- and time-efficient strategies instead of naive implementations
+**Depends on**: Phase 55
+**Requirements**: PERF-01, PERF-02, PERF-03
 **Success Criteria** (what must be TRUE):
-  1. `v3.5-MILESTONE-AUDIT.md` is refreshed and reports no unsatisfied requirement gaps for DAILY-01 through DAILY-04.
-  2. Main roadmap, v3.5 archived roadmap, requirements traceability, and state metadata all show a consistent closure/shipped truth for v3.5.
-  3. No planning artifact still reports the v3.5 re-audit as pending once phase 54 execution is complete.
-**Plans:** 1/1 plans complete
-Plans:
-- [x] [54-01-PLAN.md](phases/54-v35-milestone-reaudit-and-ship/54-01-PLAN.md) — Milestone-level closure audit refresh and metadata synchronization for v3.5 shipment
+  1. Keyword fallback search does not load the full chunk table into memory — it uses SQL LIKE predicates or cursor-based pagination
+  2. Staleness checking reuses the batched stat approach from the index workflow instead of issuing individual file stats
+  3. Embedding batch fallback isolates a failing chunk via binary search rather than retrying one chunk at a time
+**Plans**: TBD
+
+### Phase 58: Security
+**Goal**: SQL operations are protected against injection, path validation rejects home and root directories, and API key validation happens before expensive context building
+**Depends on**: Phase 55
+**Requirements**: SEC-01, SEC-02, SEC-03
+**Success Criteria** (what must be TRUE):
+  1. All LanceDB SQL predicates use comprehensive escaping or parameterized query patterns — no raw user input interpolated into SQL strings
+  2. The path validation blocklist rejects attempts to access home directory root (`~/`) and filesystem root (`/`) in addition to existing sensitive paths
+  3. `askCodebase` checks for a valid ANTHROPIC_API_KEY and throws a clear error before any context building or Ollama calls begin
+**Plans**: TBD
+
+### Phase 59: Missing Functionality
+**Goal**: Trace retrieval uses stored call edges to expand results, users can clean stale index directories, and the watch-mode MCP design decision is documented
+**Depends on**: Phase 56
+**Requirements**: FEAT-01, FEAT-02, FEAT-03
+**Success Criteria** (what must be TRUE):
+  1. Trace retrieval follows call edges from matched chunks to expand results — `trace_flow` returns richer hop chains for functions with documented call relationships
+  2. `brain-cache clean` CLI command removes `.brain-cache/` directories and confirms deletion to the user
+  3. SKILL.md or equivalent documentation explains that watch mode is CLI-only by design and is not exposed as an MCP tool
+**Plans**: TBD
+
+### Phase 60: Dependency Upgrades
+**Goal**: apache-arrow, web-tree-sitter, vitest, and TypeScript are all on their current major versions with no regressions
+**Depends on**: Phase 56
+**Requirements**: DEP-01, DEP-02, DEP-03, DEP-04
+**Success Criteria** (what must be TRUE):
+  1. apache-arrow is upgraded to v21 and LanceDB operations (insert, query, delete) pass integration tests
+  2. web-tree-sitter is upgraded to 0.26.x with WASM grammar files verified compatible and all 5 language parsers loading without error
+  3. vitest is upgraded to v4 and the full test suite passes with no skipped or failing tests
+  4. TypeScript is upgraded to 6.0 with all breaking changes resolved and `tsc --noEmit` reporting zero errors
+**Plans**: TBD
+
+### Phase 61: Test Coverage
+**Goal**: Integration tests cover nested stderr patching, keyword fallback when Ollama is unavailable, and keyword search behavior at scale
+**Depends on**: Phase 55, Phase 57, Phase 60
+**Requirements**: TEST-01, TEST-02, TEST-03
+**Success Criteria** (what must be TRUE):
+  1. An integration test reproduces the watch-triggers-index scenario and asserts that nested stderr patching does not corrupt output
+  2. An integration test verifies keyword fallback search returns ranked results when Ollama is not running
+  3. A test seeding more than 10,000 chunk rows exercises keyword search and asserts acceptable memory usage and result correctness
+**Plans**: TBD
 
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 43. Correctness and Security | v3.4 | 2/2 | Complete    | 2026-04-06 |
-| 44. Debt Reduction and Performance | v3.4 | 4/4 | Complete   | 2026-04-06 |
-| 45. Auto-Index Retry Test and withGuards Extraction | v3.4 | 2/2 | Complete   | 2026-04-06 |
-| 46. Missing Features | v3.4 | 3/3 | Complete | 2026-04-06 |
-| 47. Test Coverage and Structural Refactoring | v3.4 | 3/3 | Complete | 2026-04-06 |
-| 48. Incremental Index I/O | v3.5 | 3/3 | Complete    | 2026-04-06 |
-| 49. File Watcher | v3.5 | 2/2 | Complete    | 2026-04-06 |
-| 50. Background Service Install | v3.5 | 2/2 | Removed    | — |
-| 51. Git History Indexing | v3.5 | 3/3 | Complete | 2026-04-07 |
-| 52. Service Install Closure and Verification | v3.5 | 1/1 | Removed    | — |
-| 53. Git History Closure and Traceability Sync | v3.5 | 1/1 | Complete   | 2026-04-07 |
-| 54. v3.5 Milestone Re-audit and Ship | v3.5 | 1/1 | Complete   | 2026-04-07 |
+| 55. Critical Fixes | v3.6 | 2/2 | Complete   | 2026-04-07 |
+| 56. Technical Debt | v3.6 | 0/TBD | Not started | - |
+| 57. Performance | v3.6 | 0/TBD | Not started | - |
+| 58. Security | v3.6 | 0/TBD | Not started | - |
+| 59. Missing Functionality | v3.6 | 0/TBD | Not started | - |
+| 60. Dependency Upgrades | v3.6 | 0/TBD | Not started | - |
+| 61. Test Coverage | v3.6 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-07 — phase 54 completed; v3.5 Daily Adoption shipped with milestone audit passed*
+*Last updated: 2026-04-07 — Phase 55 planned (2 plans)*

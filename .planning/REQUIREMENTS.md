@@ -1,143 +1,100 @@
 # Requirements: Brain-Cache
 
-**Defined:** 2026-04-05
+**Defined:** 2026-04-07
 **Core Value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
 
-## v3.4 Requirements
+## v3.6 Requirements
 
-Requirements for Codebase Hardening milestone. Each maps to roadmap phases.
+Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 
-### Correctness & Security
+### Critical Issues
 
-- [x] **COR-01**: Zero-vector chunks are excluded from search results at query time
-- [x] **COR-02**: MCP tool path inputs are validated to stay within the working directory
-- [x] **COR-03**: Concurrent index operations on the same project are serialized via advisory lockfile
-- [x] **COR-04**: Token savings estimation uses file-content-based computation across all tools (no magic multipliers)
+- [x] **CRIT-01**: Stderr filtering uses a centralized stack-based utility instead of direct monkey-patching in index and watch workflows
+- [x] **CRIT-02**: Auto-index trigger uses typed `NoIndexError` class with `instanceof` check instead of string matching
 
-### Tech Debt
+### Technical Debt
 
-- [x] **DEBT-01**: MCP tool handlers use a shared `withGuards()` wrapper for profile/Ollama checks and auto-index retry
-- [x] **DEBT-02**: Workflow functions use shared `requireProfile()` and `requireOllama()` guard helpers
-- [x] **DEBT-03**: MCP server is instantiated via `createMcpServer()` factory function (not module-level singleton)
-- [x] **DEBT-04**: `init.ts` uses async `fs/promises` instead of synchronous file operations
-- [x] **DEBT-05**: stderr monkey-patch in `runIndex` is documented or replaced with LanceDB log config
-- [x] **DEBT-06**: Token counting per chunk happens once during the filter step (no redundant calls)
-- [x] **DEBT-07**: Parser instances are cached per language in a module-level Map (not created per file)
+- [ ] **DEBT-01**: Index workflow (`runIndex`) is decomposed into named pipeline stage functions (stat-partition, file-diff, chunk-embed, git-history)
+- [ ] **DEBT-02**: Deprecated `classifyQueryIntent` export removed from services barrel and test references updated
+- [ ] **DEBT-03**: Empty `src/tools/` directory removed or populated with extracted tool handlers
+- [ ] **DEBT-04**: LanceDB connection pool has TTL-based eviction and connection health validation
 
 ### Performance
 
-- [x] **PERF-01**: LanceDB connections are cached in a module-level Map and reused across operations
-- [x] **PERF-02**: Chunk deletions during incremental re-index use batched SQL predicates
-- [x] **PERF-03**: `buildContext` reads per-file token counts from index state instead of re-reading files
+- [ ] **PERF-01**: Keyword fallback search uses SQL LIKE predicates or cursor-based pagination instead of loading entire table
+- [ ] **PERF-02**: Staleness check reuses batched stat approach from index workflow instead of individual file stats
+- [ ] **PERF-03**: Embedding batch fallback uses binary search to isolate problematic chunks instead of one-at-a-time
 
-### Missing Features
+### Security
 
-- [x] **FEAT-01**: Index staleness is detected by comparing `indexedAt` timestamp against file modification times and surfaced as a warning
-- [x] **FEAT-02**: Markdown, text, and RST files are indexed using heading-boundary chunking via marked Lexer
-- [x] **FEAT-03**: When Ollama is unavailable, search falls back to keyword matching against chunk metadata
-- [x] **FEAT-04**: Crawler's `SOURCE_EXTENSIONS` includes `.md`, `.txt`, and `.rst` extensions
+- [ ] **SEC-01**: SQL predicates in LanceDB operations use comprehensive escaping or parameterized queries
+- [ ] **SEC-02**: Path validation blocklist includes home directory root and filesystem root
+- [ ] **SEC-03**: `askCodebase` validates ANTHROPIC_API_KEY before context building begins
+
+### Missing Functionality
+
+- [ ] **FEAT-01**: Edge graph traversal is wired into trace retrieval path, expanding results by following call edges from matched chunks
+- [ ] **FEAT-02**: `brain-cache clean` CLI command removes stale `.brain-cache/` directories
+- [ ] **FEAT-03**: Watch mode MCP design decision documented (CLI-only is intentional)
+
+### Dependencies
+
+- [ ] **DEP-01**: apache-arrow upgraded from v18 to v21 with LanceDB compatibility verified
+- [ ] **DEP-02**: web-tree-sitter upgraded from ~0.25.10 to 0.26.x with WASM grammar compatibility verified
+- [ ] **DEP-03**: vitest upgraded from v2 to v4 with all tests passing
+- [ ] **DEP-04**: TypeScript upgraded from 5.9 to 6.0 with breaking changes resolved
 
 ### Test Coverage
 
-- [x] **TEST-01**: E2E pipeline test covers index → search → build_context in a tmpdir with mocked embedder (full `brain-cache init` is not exercised — it requires live Ollama)
-- [x] **TEST-02**: CLI integration tests cover Commander argument parsing, option coercion, and error handling
-- [x] **TEST-03**: MCP auto-index retry path is tested (fresh project triggers index then retries)
-- [x] **TEST-04**: Edge deletion during incremental re-index is tested with file removal scenarios
-- [x] **TEST-05**: Embedding dimension fallback path is tested for unknown models
-- [x] **TEST-06**: askCodebase error paths are tested (API failures, rate limits, missing key)
-
-### Refactoring
-
-- [x] **REFAC-01**: `src/workflows/index.ts` is split into named sub-functions (computeFileDiffs, processFileGroup, printSummary)
-- [x] **REFAC-02**: `src/mcp/index.ts` tool handlers are extracted into individual handler files or use withGuards to reduce per-handler size
-- [x] **REFAC-03**: Token savings computation is unified into a single `computeTokenSavings()` utility
-
-## v3.5 Requirements
-
-Requirements for **Daily Adoption** milestone (Phases 48–51). See [.planning/milestones/v3.5-REQUIREMENTS.md](milestones/v3.5-REQUIREMENTS.md) for the archived snapshot.
-
-### Incremental performance
-
-- [x] **DAILY-01**: Incremental `brain-cache index` skips full-file reads for files whose stored stat fingerprint matches the current filesystem — full hash when fingerprint differs or on `--force`
-
-### Watch and services
-
-- [x] **DAILY-02**: `brain-cache watch [path]` runs a debounced file watcher that invokes incremental index and respects the project index lock
-- [x] **DAILY-03**: Documented opt-in install for a user-level background service that runs the watcher; documented disable/uninstall
-
-### Git history
-
-- [x] **DAILY-04**: Git commits (messages + touched paths, within configured limits) are embedded and searchable; retrieval surfaces provenance distinguishing history chunks from file chunks
-
----
+- [ ] **TEST-01**: Integration test for nested stderr patching (watch triggering index)
+- [ ] **TEST-02**: Integration test for keyword fallback search when Ollama is unavailable
+- [ ] **TEST-03**: Performance/behavior test for keyword search on large chunk tables (>10k rows)
 
 ## Future Requirements
 
-### Scaling
-
-- **SCALE-01**: In-memory file content map releases content after each group is processed
-- **SCALE-02**: Embedding batch size adapts based on available VRAM
-- **SCALE-03**: File hash manifest migrates from JSON to SQLite or LanceDB metadata table
-- **SCALE-04**: Session stats uses per-project files or advisory locking for cross-process safety
-
-### Fragile Areas
-
-- **FRAG-01**: Arrow function chunking heuristic has integration tests for edge cases (export default, declare const)
-- **FRAG-02**: currentChunkId tracking uses a scope stack instead of mutable variable
-- **FRAG-03**: Query intent classification uses scoring system instead of first-match
-- **FRAG-04**: Embedding dimensions are queried from Ollama via test embed call during init
+None deferred — all concerns scoped to this milestone.
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| LanceDB parameterized queries | All query inputs originate from trusted internal sources; manual escaping is sufficient |
-| Replace stderr monkey-patch entirely | LanceDB TS SDK has no log level config API; documenting is sufficient |
-| Replace in-memory file content map | Current capacity handles typical projects; scaling path is future work |
-| Session stats cross-process locking | Per-project files are a scaling concern, not a v3.4 priority |
+| New MCP tools beyond current 4 | This milestone is cleanup, not feature expansion |
+| Reranking with second LLM | Explicitly out of scope per PROJECT.md |
+| Multi-language grammar additions | Separate concern from current 5-language support |
+| Remote/cloud deployment support | Local-only tool by design |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| COR-01 | Phase 43 | Complete |
-| COR-02 | Phase 43 | Complete |
-| COR-03 | Phase 43 | Complete |
-| COR-04 | Phase 43 | Complete |
-| DEBT-02 | Phase 44 | Complete |
-| DEBT-03 | Phase 45 | Complete |
-| DEBT-04 | Phase 44 | Complete |
-| DEBT-05 | Phase 44 | Complete |
-| DEBT-06 | Phase 44 | Complete |
-| DEBT-07 | Phase 44 | Complete |
-| PERF-01 | Phase 44 | Complete |
-| PERF-02 | Phase 44 | Complete |
-| PERF-03 | Phase 44 | Complete |
-| TEST-03 | Phase 45 | Complete |
-| DEBT-01 | Phase 45 | Complete |
-| FEAT-01 | Phase 46 | Complete |
-| FEAT-02 | Phase 46 | Complete |
-| FEAT-03 | Phase 46 | Complete |
-| FEAT-04 | Phase 46 | Complete |
-| TEST-01 | Phase 47 | Complete |
-| TEST-02 | Phase 47 | Complete |
-| TEST-04 | Phase 47 | Complete |
-| TEST-05 | Phase 47 | Complete |
-| TEST-06 | Phase 47 | Complete |
-| REFAC-01 | Phase 47 | Complete |
-| REFAC-02 | Phase 47 | Complete |
-| REFAC-03 | Phase 47 | Complete |
-| DAILY-01 | Phase 48 | Complete |
-| DAILY-02 | Phase 49 | Complete |
-| DAILY-03 | Phase 52 | Complete |
-| DAILY-04 | Phase 53 | Complete |
+| CRIT-01 | Phase 55 | Complete |
+| CRIT-02 | Phase 55 | Complete |
+| DEBT-01 | Phase 56 | Pending |
+| DEBT-02 | Phase 56 | Pending |
+| DEBT-03 | Phase 56 | Pending |
+| DEBT-04 | Phase 56 | Pending |
+| PERF-01 | Phase 57 | Pending |
+| PERF-02 | Phase 57 | Pending |
+| PERF-03 | Phase 57 | Pending |
+| SEC-01 | Phase 58 | Pending |
+| SEC-02 | Phase 58 | Pending |
+| SEC-03 | Phase 58 | Pending |
+| FEAT-01 | Phase 59 | Pending |
+| FEAT-02 | Phase 59 | Pending |
+| FEAT-03 | Phase 59 | Pending |
+| DEP-01 | Phase 60 | Pending |
+| DEP-02 | Phase 60 | Pending |
+| DEP-03 | Phase 60 | Pending |
+| DEP-04 | Phase 60 | Pending |
+| TEST-01 | Phase 61 | Pending |
+| TEST-02 | Phase 61 | Pending |
+| TEST-03 | Phase 61 | Pending |
 
 **Coverage:**
-- v3.4 requirements: 27 total — mapped: 27 — complete
-- v3.5 requirements: 4 total — mapped: 4 — complete closure (DAILY-01/02/03/04 complete; DAILY-04 closed via Phase 53 verification)
+- v3.6 requirements: 22 total
+- Mapped to phases: 22
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-04-05*
-*Last updated: 2026-04-07 — DAILY-01..DAILY-04 closure traceability synchronized for v3.5 milestone shipment*
+*Requirements defined: 2026-04-07*
+*Last updated: 2026-04-07 — traceability mapped to phases 55-61*
