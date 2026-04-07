@@ -163,6 +163,9 @@ describe('runIndex', () => {
     stderrOutput = [];
     stdoutOutput = [];
 
+    // Clear all mock call history and implementations before each test
+    vi.clearAllMocks();
+
     stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation((data: unknown) => {
       stderrOutput.push(String(data));
       return true;
