@@ -1,76 +1,77 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.5
-milestone_name: Daily Adoption
-status: completed
-stopped_at: Completed 54-01-PLAN.md
-last_updated: "2026-04-06T19:29:56.009Z"
-last_activity: 2026-04-07
+milestone: v3.6
+milestone_name: Concerns Cleanup
+status: executing
+stopped_at: Completed 55-01-PLAN.md
+last_updated: "2026-04-07T06:27:00.000Z"
+last_activity: 2026-04-07 -- Phase 55 Plan 01 executed
 progress:
-  total_phases: 42
-  completed_phases: 41
-  total_plans: 77
-  completed_plans: 74
+  total_phases: 7
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 0
 ---
 
 # Project State: Brain-Cache
 
 **Last updated:** 2026-04-07
-**Updated by:** gsd-executor — completed 54-01 milestone re-audit and shipment sync
+**Updated by:** roadmap created — v3.6 Concerns Cleanup (phases 55-61)
 
 ---
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-05)
+See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** v3.5 milestone closure complete — audit passed and shipment metadata synced
+**Current focus:** Phase 55 — critical-fixes
 
 ---
 
 ## Current Position
 
-Phase: 54
-Plan: 01 complete
-Status: Completed
-Last activity: 2026-04-07
+Phase: 55 (critical-fixes) — EXECUTING
+Plan: 2 of 2
+Status: Executing Phase 55
+Last activity: 2026-04-07 -- Phase 55 Plan 01 complete
 
-Progress: [██████████] v3.5: 4/4 phases
+Progress: ░░░░░░░░░░ 0/7 phases complete
 
 ---
 
 ## Accumulated Context
 
-### Critical Ordering Constraints
+### Phase Map
 
-- Phase 48 (stat fingerprint skip) before Phase 49 (watch) — watch amplifies index frequency; cheaper incremental I/O reduces load
-- DAILY-04 (git history) after Phase 49 recommended — stable lock + index patterns before second ingestion pipeline
-- TEST-03 (auto-index retry test) MUST be written before DEBT-01 (withGuards extraction) — both are in Phase 45, TEST-03 first
-- COR-03 (cross-process locking) MUST land before PERF-02 (batch deletions) — batching is only safe under the lock
-- DEBT-02 (workflow guards) before DEBT-01 (withGuards wrapper) — guards enable the wrapper
-- FEAT-04 (crawler extensions) after FEAT-02 (Markdown chunker) — crawler needs chunker support first
-
-### Key Pitfalls (from research)
-
-- Zero-vector fix: use query-time filtering only — adding a schema column breaks all existing user indexes
-- LanceDB pool: cache Connection only, never Table — stale Table handles after --force reindex cause silent wrong-data bugs
-- Path traversal: validate against system-path blocklist, NOT cwd() anchor — MCP servers spawn from Claude Code's cwd, not user project root
-- withGuards: auto-index retry behavior is currently untested — write TEST-03 first to prevent silent regression
+| Phase | Name | Requirements | Status |
+|-------|------|--------------|--------|
+| 55 | Critical Fixes | CRIT-01, CRIT-02 | Plan 01 complete |
+| 56 | Technical Debt | DEBT-01, DEBT-02, DEBT-03, DEBT-04 | Not started |
+| 57 | Performance | PERF-01, PERF-02, PERF-03 | Not started |
+| 58 | Security | SEC-01, SEC-02, SEC-03 | Not started |
+| 59 | Missing Functionality | FEAT-01, FEAT-02, FEAT-03 | Not started |
+| 60 | Dependency Upgrades | DEP-01, DEP-02, DEP-03, DEP-04 | Not started |
+| 61 | Test Coverage | TEST-01, TEST-02, TEST-03 | Not started |
 
 ### Active Blockers
 
 None.
 
+### Key Decisions (v3.6)
+
+- [55-01] Stack-based LIFO filter with single shared interceptor — avoids nested monkey-patch corruption (withStderrFilter)
+- [55-01] Object.setPrototypeOf in NoIndexError constructor — ensures instanceof works after TypeScript compilation
+
 ---
 
 ## Session Continuity
 
-**Last session:** 2026-04-06T19:29:55.997Z
+**Last session:** 2026-04-07
 
-**Stopped at:** Completed 54-01-PLAN.md
+**Stopped at:** Completed 55-01-PLAN.md
 
-**Next action:** Begin next milestone planning/discovery and define the first post-v3.5 phase plan.
+**Next action:** Execute 55-02 — wire withStderrFilter and NoIndexError into workflows and guards
 
 ---
 
