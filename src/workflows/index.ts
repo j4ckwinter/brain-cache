@@ -26,6 +26,7 @@ import {
   insertEdges,
   withWriteLock,
   classifyFileType,
+  escapeSqlLiteral,
   type ChunkRow,
 } from '../services/lancedb.js';
 import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
@@ -491,7 +492,7 @@ export async function diffAndCleanup(
     await deleteChunksByFilePaths(table, filesToDelete);
     // Batch edge deletion with single IN predicate
     await withWriteLock(async () => {
-      const escaped = filesToDelete.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+      const escaped = filesToDelete.map(p => `'${escapeSqlLiteral(p)}'`).join(', ');
       await edgesTable.delete(`from_file IN (${escaped})`);
     });
   }

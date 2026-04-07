@@ -413,6 +413,16 @@ export async function writeFileHashes(
 }
 
 /**
+ * Escapes a string for use as a SQL string literal in LanceDB predicates.
+ * Doubles single-quote characters per SQL standard.
+ * Use for equality (=) and IN predicates only.
+ * For LIKE predicates, additionally escape % and _ metacharacters separately.
+ */
+export function escapeSqlLiteral(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+/**
  * Deletes all LanceDB rows where file_path matches the given filePath.
  * Uses SQL-style predicate with single-quote escaping.
  * Wrapped in withWriteLock to prevent interleaving with concurrent inserts.
@@ -421,7 +431,7 @@ export async function deleteChunksByFilePath(
   table: lancedb.Table,
   filePath: string
 ): Promise<void> {
-  const escaped = filePath.replace(/'/g, "''");
+  const escaped = escapeSqlLiteral(filePath);
   await withWriteLock(async () => {
     await table.delete(`file_path = '${escaped}'`);
   });
@@ -438,7 +448,7 @@ export async function deleteChunksByFilePaths(
   filePaths: string[]
 ): Promise<void> {
   if (filePaths.length === 0) return;
-  const escaped = filePaths.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+  const escaped = filePaths.map(p => `'${escapeSqlLiteral(p)}'`).join(', ');
   await withWriteLock(async () => {
     await table.delete(`file_path IN (${escaped})`);
   });
@@ -509,7 +519,7 @@ export async function queryEdgesFrom(
   edgesTable: lancedb.Table,
   fromChunkId: string
 ): Promise<EdgeRow[]> {
-  const escaped = fromChunkId.replace(/'/g, "''");
+  const escaped = escapeSqlLiteral(fromChunkId);
   return edgesTable.query().where(`from_chunk_id = '${escaped}'`).toArray() as Promise<EdgeRow[]>;
 }
 
