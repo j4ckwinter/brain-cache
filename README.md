@@ -4,7 +4,7 @@
 
 brain-cache is a local AI runtime that sits between your codebase and Claude. It runs embeddings and retrieval on your machine — so Claude only sees what actually matters. Fewer tokens. Better answers. Your API bill stops looking like a mortgage payment.
 
-![brain-cache only sends the parts of your codebase that matter — not everything.](assets/brain-cache.svg)
+![brain-cache only sends the parts of your codebase that matter — not everything.](assets/brain-cache.jpg)
 
 ---
 
@@ -104,12 +104,12 @@ After `brain-cache init`, the status line in Claude Code's bottom bar shows your
 
 `brain-cache init` installs advisory hooks into Claude Code (`~/.claude/settings.json`) that fire before certain tools. They remind Claude to try brain-cache first — but never block execution.
 
-| Tool triggered | Reminder |
-|---------------|----------|
-| Grep | Try `search_codebase` to find code by meaning instead of regex |
-| Glob | Try `search_codebase` to locate files by meaning instead of pattern |
-| Read | Try `build_context` to get relevant code instead of reading whole files |
-| Agent | Try `build_context` or `search_codebase` before spawning a sub-agent |
+| Tool triggered | Reminder                                                                |
+| -------------- | ----------------------------------------------------------------------- |
+| Grep           | Try `search_codebase` to find code by meaning instead of regex          |
+| Glob           | Try `search_codebase` to locate files by meaning instead of pattern     |
+| Read           | Try `build_context` to get relevant code instead of reading whole files |
+| Agent          | Try `build_context` or `search_codebase` before spawning a sub-agent    |
 
 Hooks are idempotent — re-running `init` updates brain-cache hooks without touching any other hooks you have configured.
 
