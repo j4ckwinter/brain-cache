@@ -73,6 +73,32 @@ describe('validateIndexPath', () => {
     });
   });
 
+  describe('rejects filesystem root and home directory root (SEC-02)', () => {
+    it('rejects filesystem root /', () => {
+      expect(() => validateIndexPath('/')).toThrow('filesystem root');
+    });
+
+    it('rejects home directory root', () => {
+      expect(() => validateIndexPath(homedir())).toThrow('home directory root');
+    });
+
+    it('allows subdirectories of home', () => {
+      expect(() => validateIndexPath(join(homedir(), 'projects', 'myapp'))).not.toThrow();
+    });
+
+    it('still allows /var/folders (macOS exception)', () => {
+      expect(() => validateIndexPath('/var/folders/xx/tmp')).not.toThrow();
+    });
+
+    it('filesystem root / error message contains "filesystem root"', () => {
+      expect(() => validateIndexPath('/')).toThrow(/filesystem root/);
+    });
+
+    it('homedir error message contains "home directory root"', () => {
+      expect(() => validateIndexPath(homedir())).toThrow(/home directory root/);
+    });
+  });
+
   describe('handles path traversal attacks', () => {
     it('rejects ../../etc/passwd after resolve (traversal attack)', () => {
       // Anchor so resolve() yields /etc/passwd regardless of process cwd
