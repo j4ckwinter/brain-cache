@@ -10,6 +10,7 @@ import {
   classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
   filterDedupedForNonTestChunks,
+  expandByEdges,
 } from '../services/retriever.js';
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
 import { DEFAULT_TOKEN_BUDGET } from '../lib/config.js';
@@ -61,7 +62,15 @@ export async function runBuildContext(
   const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
   const queryVector = vectors[0];
 
-  const results = await searchChunks(table, queryVector, strategy, query);
+  let results = await searchChunks(table, queryVector, strategy, query);
+
+  // Expand trace results by following call edges one hop
+  if (mode === 'trace' && tableNames.includes('edges')) {
+    const edgesTable = await db.openTable('edges');
+    const expanded = await expandByEdges(table, edgesTable, results);
+    results = [...results, ...expanded];
+  }
+
   let deduped = deduplicateChunks(results);
   deduped = filterDedupedForNonTestChunks(deduped, query);
   const sourceChunks = deduped.filter((chunk) => chunk.sourceKind !== 'history');
@@ -148,7 +157,10 @@ export async function runBuildContext(
       matchedPoolTokens,
       filteringPct,
       savingsDisplayMode,
-      localTasksPerformed: ['embed_query', 'vector_search', 'dedup', 'token_budget'],
+      localTasksPerformed: [
+        'embed_query', 'vector_search', 'dedup', 'token_budget',
+        ...(mode === 'trace' && tableNames.includes('edges') ? ['edge_expansion'] : []),
+      ],
       cloudCallsMade: 0,
     },
   };

@@ -24,6 +24,7 @@ vi.mock('../../src/services/retriever.js', () => ({
   deduplicateChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
   filterDedupedForNonTestChunks: vi.fn((chunks: unknown[]) => chunks),
+  expandByEdges: vi.fn(async () => []),
   RETRIEVAL_STRATEGIES: {
     lookup:  { limit: 5,  distanceThreshold: 0.4, keywordBoostWeight: 0.40 },
     trace:   { limit: 3,  distanceThreshold: 0.5, keywordBoostWeight: 0.20 },
@@ -60,6 +61,7 @@ import {
   searchChunks,
   deduplicateChunks,
   classifyRetrievalMode,
+  expandByEdges,
 } from '../../src/services/retriever.js';
 import { assembleContext, countChunkTokens } from '../../src/services/tokenCounter.js';
 import { readFile } from 'node:fs/promises';
@@ -73,6 +75,7 @@ const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
 const mockClassifyQueryIntent = vi.mocked(classifyRetrievalMode);
+const mockExpandByEdges = vi.mocked(expandByEdges);
 const mockAssembleContext = vi.mocked(assembleContext);
 const mockCountChunkTokens = vi.mocked(countChunkTokens);
 const mockReadFile = vi.mocked(readFile);
@@ -163,6 +166,7 @@ describe('runBuildContext', () => {
     // Per-chunk content token count (matched pool); file reads for grep baseline are mocked separately
     mockCountChunkTokens.mockReturnValue(500);
     mockReadFile.mockResolvedValue('file content here' as any);
+    mockExpandByEdges.mockResolvedValue([]);
 
     // Dynamically import after mocks are in place
     const mod = await import('../../src/workflows/buildContext.js');
@@ -291,5 +295,50 @@ describe('runBuildContext', () => {
     expect(result.content.indexOf('## Source Context')).toBeLessThan(
       result.content.indexOf('## Git History'),
     );
+  });
+
+  it('calls expandByEdges when mode is trace and edges table exists', async () => {
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockClassifyQueryIntent.mockReturnValue('trace');
+
+    await runBuildContext('trace the call path from CLI to storage');
+
+    expect(mockExpandByEdges).toHaveBeenCalledOnce();
+  });
+
+  it('does not call expandByEdges when mode is trace but no edges table', async () => {
+    // Default: tableNames returns only ['chunks'] — no edges table
+    mockClassifyQueryIntent.mockReturnValue('trace');
+
+    await runBuildContext('trace the call path from CLI to storage');
+
+    expect(mockExpandByEdges).not.toHaveBeenCalled();
+  });
+
+  it('does not call expandByEdges when mode is explore even with edges table', async () => {
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockClassifyQueryIntent.mockReturnValue('explore');
+
+    await runBuildContext('how does authentication work');
+
+    expect(mockExpandByEdges).not.toHaveBeenCalled();
+  });
+
+  it('includes edge_expansion in localTasksPerformed when mode is trace with edges table', async () => {
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockClassifyQueryIntent.mockReturnValue('trace');
+
+    const result = await runBuildContext('trace the call path from CLI to storage');
+
+    expect(result.metadata.localTasksPerformed).toContain('edge_expansion');
+  });
+
+  it('does not include edge_expansion in localTasksPerformed when mode is explore', async () => {
+    mockDb.tableNames.mockResolvedValue(['chunks', 'edges']);
+    mockClassifyQueryIntent.mockReturnValue('explore');
+
+    const result = await runBuildContext('how does auth work');
+
+    expect(result.metadata.localTasksPerformed).not.toContain('edge_expansion');
   });
 });
