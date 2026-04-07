@@ -66,11 +66,51 @@ function isContextLengthError(err: unknown): boolean {
 }
 
 /**
+ * Uses binary search to find all chunk indices that exceed Ollama's context length.
+ * Returns the set of original indices that are problematic.
+ * O(k * log N) embed calls where k = number of bad chunks, N = batch size.
+ */
+async function findContextLengthFailures(
+  model: string,
+  texts: string[],
+  originalIndices: number[],
+): Promise<Set<number>> {
+  const badIndices = new Set<number>();
+
+  // Try embedding the full sub-batch
+  try {
+    await embedBatch(model, texts);
+    return badIndices; // all good
+  } catch (err) {
+    if (!isContextLengthError(err)) throw err;
+  }
+
+  // Base case: single text that fails = it's the bad one
+  if (texts.length === 1) {
+    badIndices.add(originalIndices[0]);
+    return badIndices;
+  }
+
+  // Bisect
+  const mid = Math.floor(texts.length / 2);
+  const leftBad = await findContextLengthFailures(
+    model, texts.slice(0, mid), originalIndices.slice(0, mid)
+  );
+  const rightBad = await findContextLengthFailures(
+    model, texts.slice(mid), originalIndices.slice(mid)
+  );
+
+  for (const idx of leftBad) badIndices.add(idx);
+  for (const idx of rightBad) badIndices.add(idx);
+  return badIndices;
+}
+
+/**
  * Wraps embedBatch with a single cold-start retry and context-length fallback.
  *
- * When a batch fails with "input length exceeds the context length", falls back
- * to embedding each text individually. Texts that still exceed the limit are
- * replaced with zero vectors and the count is tracked in the returned skip count.
+ * When a batch fails with "input length exceeds the context length", uses binary
+ * search to isolate problematic chunks in O(log N) calls per bad chunk, then
+ * embeds remaining texts in a single batch.
  *
  * @param model   - Ollama model name
  * @param texts   - Array of text strings to embed
@@ -94,28 +134,41 @@ export async function embedBatchWithRetry(
       return embedBatchWithRetry(model, texts, dimension, 1);
     }
 
-    // Context-length error: fall back to one-at-a-time embedding
     if (isContextLengthError(err)) {
-      log.warn({ model, batchSize: texts.length }, 'Batch exceeded context length, falling back to individual embedding');
-      const results: number[][] = [];
-      const zeroVectorIndices = new Set<number>();
-      let skipped = 0;
+      log.warn({ model, batchSize: texts.length }, 'Batch exceeded context length, using binary search to isolate bad chunks');
+      const originalIndices = texts.map((_, i) => i);
+      const badIndices = await findContextLengthFailures(model, texts, originalIndices);
+
+      const zeroVectorIndices = new Set<number>(badIndices);
+      const skipped = badIndices.size;
+
+      // Embed the good texts in one batch
+      const goodTexts: string[] = [];
+      const goodOriginalIndices: number[] = [];
       for (let i = 0; i < texts.length; i++) {
-        try {
-          const [vec] = await embedBatch(model, [texts[i]]);
-          results.push(vec);
-        } catch (innerErr) {
-          if (isContextLengthError(innerErr)) {
-            // Track this index as a zero-vector — caller will skip inserting it
-            skipped++;
-            zeroVectorIndices.add(i);
-            results.push(new Array(dimension).fill(0));
-          } else {
-            throw innerErr;
-          }
+        if (!badIndices.has(i)) {
+          goodTexts.push(texts[i]);
+          goodOriginalIndices.push(i);
         }
       }
-      return { embeddings: results, skipped, zeroVectorIndices };
+
+      let goodEmbeddings: number[][] = [];
+      if (goodTexts.length > 0) {
+        goodEmbeddings = await embedBatch(model, goodTexts);
+      }
+
+      // Assemble final embeddings array in original order
+      const embeddings: number[][] = new Array(texts.length);
+      let goodIdx = 0;
+      for (let i = 0; i < texts.length; i++) {
+        if (badIndices.has(i)) {
+          embeddings[i] = new Array(dimension).fill(0);
+        } else {
+          embeddings[i] = goodEmbeddings[goodIdx++];
+        }
+      }
+
+      return { embeddings, skipped, zeroVectorIndices };
     }
 
     throw err;
