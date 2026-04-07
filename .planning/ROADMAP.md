@@ -256,8 +256,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [x] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
-- [x] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
+- [ ] 59-01-PLAN.md — Wire edge graph traversal into trace retrieval with expandByEdges
+- [ ] 59-02-PLAN.md — Add brain-cache clean command and document watch-mode MCP decision
 
 ### Phase 60: Dependency Upgrades
 **Goal**: apache-arrow, web-tree-sitter, vitest, and TypeScript are all on their current major versions with no regressions
@@ -295,11 +295,11 @@ Plans:
 | 55. Critical Fixes | v3.6 | 2/2 | Complete   | 2026-04-07 |
 | 56. Technical Debt | v3.6 | 3/3 | Complete    | 2026-04-07 |
 | 57. Performance | v3.6 | 3/3 | Complete    | 2026-04-07 |
-| 58. Security | v3.6 | 2/2 | Complete   | 2026-04-07 |
-| 59. Missing Functionality | v3.6 | 0/TBD | Not started | - |
+| 58. Security | v3.6 | 2/2 | Complete    | 2026-04-07 |
+| 59. Missing Functionality | v3.6 | 0/2 | Not started | - |
 | 60. Dependency Upgrades | v3.6 | 0/TBD | Not started | - |
 | 61. Test Coverage | v3.6 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-03-31*
-*Last updated: 2026-04-07 — Phase 56 planned (3 plans)*
+*Last updated: 2026-04-07 — Phase 59 planned (2 plans)*
