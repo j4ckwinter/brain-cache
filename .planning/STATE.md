@@ -81,6 +81,7 @@ None.
 | 260404-4u7 | Update README | 2026-04-04 | 5f74829 | [260404-4u7-update-readme](./quick/260404-4u7-update-readme/) |
 | 260405-cxe | Update README to document PreToolUse hook | 2026-04-05 | de55cb4 | [260405-cxe-update-readme-to-document-pretooluse-hoo](./quick/260405-cxe-update-readme-to-document-pretooluse-hoo/) |
 | 260407-3oi | Audit and update README for v3.5 Daily Adoption shipped state | 2026-04-07 | ec82859 | [260407-3oi-do-we-need-an-update-for-the-read-me-for](./quick/260407-3oi-do-we-need-an-update-for-the-read-me-for/) |
+| 260406-vat | Remove phase 50 background service install (code, tests, CLI, artifacts) | 2026-04-07 | 4aa97ec | [260406-vat-remove-phase-50-background-service-insta](./quick/260406-vat-remove-phase-50-background-service-insta/) |
 
 ---
 *State initialized: 2026-03-31*
