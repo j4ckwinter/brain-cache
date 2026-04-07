@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { requireProfile } from '../lib/guards.js';
 import { readIndexState } from '../services/lancedb.js';
 import { checkIndexStaleness } from '../lib/staleness.js';
+import { NoIndexError } from '../lib/errors.js';
 
 /**
  * Reports index stats for a project directory.
@@ -21,7 +22,7 @@ export async function runStatus(targetPath?: string): Promise<void> {
   // Step 2: Read index state
   const indexState = await readIndexState(rootDir);
   if (!indexState) {
-    throw new Error(`No index found at ${rootDir}. Run 'brain-cache index [path]' first.`);
+    throw new NoIndexError(rootDir);
   }
 
   // Step 3: Print status report to stderr

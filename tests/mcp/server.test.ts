@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { NoIndexError as NoIndexErrorType } from '../../src/lib/errors.js';
 
 // Capture registered tool handlers before any imports
 const registeredTools = new Map<string, { schema: any; handler: Function }>();
@@ -152,6 +153,12 @@ const fakeContextResult = {
 };
 
 describe('MCP tool handlers', () => {
+  // Holds the NoIndexError class from the current module generation.
+  // Must be re-imported each beforeEach because vi.resetModules() clears the cache
+  // and server.js / guards.ts load a fresh errors.ts — making the top-level
+  // import stale for instanceof checks.
+  let NoIndexError: typeof NoIndexErrorType;
+
   beforeEach(async () => {
     // Reset the map before each test so module re-import registers fresh handlers
     registeredTools.clear();
@@ -162,6 +169,10 @@ describe('MCP tool handlers', () => {
     // Trigger module load to register tools
     const { createMcpServer } = await import('../../src/mcp/server.js');
     createMcpServer();
+
+    // Import NoIndexError from the same module generation as guards.ts so that
+    // instanceof checks work correctly inside the freshly-loaded guards code.
+    ({ NoIndexError } = await import('../../src/lib/errors.js'));
   });
 
   afterEach(() => {
@@ -290,7 +301,7 @@ describe('MCP tool handlers', () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunSearch
-        .mockRejectedValueOnce(new Error('No index found at /some/project'))
+        .mockRejectedValueOnce(new NoIndexError('/some/project'))
         .mockResolvedValueOnce({ chunks: [fakeChunk('1')], fallback: false });
       mockRunIndex.mockResolvedValue(undefined);
 
@@ -306,7 +317,7 @@ describe('MCP tool handlers', () => {
     it('returns error envelope when retry also fails after auto-index', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunSearch.mockRejectedValue(new Error('No index found at /some/project'));
+      mockRunSearch.mockRejectedValue(new NoIndexError('/some/project'));
       mockRunIndex.mockResolvedValue(undefined);
 
       const { handler } = registeredTools.get('search_codebase')!;
@@ -363,7 +374,7 @@ describe('MCP tool handlers', () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
       mockRunBuildContext
-        .mockRejectedValueOnce(new Error('No index found at /some/project'))
+        .mockRejectedValueOnce(new NoIndexError('/some/project'))
         .mockResolvedValueOnce(fakeContextResult);
       mockRunIndex.mockResolvedValue(undefined);
 
@@ -379,7 +390,7 @@ describe('MCP tool handlers', () => {
     it('returns error envelope when build_context retry also fails after auto-index', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(true);
-      mockRunBuildContext.mockRejectedValue(new Error('No index found at /some/project'));
+      mockRunBuildContext.mockRejectedValue(new NoIndexError('/some/project'));
       mockRunIndex.mockResolvedValue(undefined);
 
       const { handler } = registeredTools.get('build_context')!;

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { requireProfile, requireOllama } from '../lib/guards.js';
 import { getConnection, readIndexState, readFileHashes } from '../services/lancedb.js';
+import { NoIndexError } from '../lib/errors.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import {
   searchChunks,
@@ -34,7 +35,7 @@ export async function runBuildContext(
   const rootDir = resolve(opts?.path ?? '.');
   const indexState = await readIndexState(rootDir);
   if (indexState === null) {
-    throw new Error(`No index found at ${rootDir}. Run 'brain-cache index' first.`);
+    throw new NoIndexError(rootDir);
   }
 
   const db = await getConnection(rootDir);

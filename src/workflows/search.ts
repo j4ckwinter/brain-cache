@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { requireProfile } from "../lib/guards.js";
 import { isOllamaRunning } from "../services/ollama.js";
 import { getConnection, readIndexState } from "../services/lancedb.js";
+import { NoIndexError } from "../lib/errors.js";
 import { embedBatchWithRetry } from "../services/embedder.js";
 import {
   searchChunks,
@@ -32,9 +33,7 @@ export async function runSearch(
   const rootDir = resolve(opts?.path ?? ".");
   const indexState = await readIndexState(rootDir);
   if (indexState === null) {
-    throw new Error(
-      `No index found at ${rootDir}. Run 'brain-cache index' first.`,
-    );
+    throw new NoIndexError(rootDir);
   }
 
   const db = await getConnection(rootDir);

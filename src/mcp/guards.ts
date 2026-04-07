@@ -3,6 +3,7 @@ import { readProfile } from "../services/capability.js";
 import { isOllamaRunning } from "../services/ollama.js";
 import { formatErrorEnvelope } from "../lib/format.js";
 import { runIndex } from "../workflows/index.js";
+import { NoIndexError } from "../lib/errors.js";
 
 export type McpResult = {
   content: Array<{ type: "text"; text: string }>;
@@ -62,8 +63,7 @@ export function withGuards<T extends Record<string, unknown>>(
     } catch (err) {
       if (
         opts?.autoIndex &&
-        err instanceof Error &&
-        err.message.includes("No index found") // DEBT-01: This string match is the implicit contract for auto-index trigger. See also: workflows that throw this error.
+        err instanceof NoIndexError
       ) {
         const resolvedPath = resolve(
           (args as Record<string, unknown>).path as string ?? ".",
