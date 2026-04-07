@@ -148,6 +148,15 @@ program
     await runWatch(path);
   });
 
+program
+  .command('clean')
+  .description('Remove the .brain-cache/ index directory for a project')
+  .argument('[path]', 'Project root directory (defaults to current directory)')
+  .action(async (path?: string) => {
+    const { runClean } = await import('../workflows/clean.js');
+    await runClean(path);
+  });
+
 /**
  * Resolve to a canonical path so `isMain` matches when the CLI is invoked via
  * a symlink (e.g. `node_modules/.bin/brain-cache`) or `/tmp` vs `/private/tmp`
