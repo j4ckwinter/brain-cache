@@ -40,3 +40,5 @@ export { formatTokenSavings, type TokenSavingsInput } from './format.js';
 export { requireProfile, requireOllama } from './guards.js';
 
 export { withStderrFilter } from './stderr.js';
+
+export { NoIndexError } from './errors.js';
