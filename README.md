@@ -60,7 +60,7 @@ brain-cache index
 
 brain-cache tools are called automatically. You don't change how you work — the context just gets better.
 
-### Daily adoption workflow (v3.5 shipped)
+### Daily adoption workflow
 
 Once your first index is built, these daily-use paths are available now:
 
@@ -142,6 +142,7 @@ brain-cache search "auth middleware"  Manual search (useful for debugging)
 brain-cache context "auth flow"       Manual context building (useful for debugging)
 brain-cache ask "how does auth work?" Direct Claude query via CLI
 brain-cache status                    Show index and system status
+brain-cache clean                     Remove .brain-cache/ index directories
 brain-cache doctor                    Check system health
 ```
 
