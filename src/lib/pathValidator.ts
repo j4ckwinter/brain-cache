@@ -43,16 +43,6 @@ export function validateIndexPath(rawPath: string): void {
     return;
   }
 
-  // Filesystem root — equality-only check (SEC-02)
-  if (resolved === '/') {
-    throw new Error(`Path '${resolved}' is the filesystem root. Access denied.`);
-  }
-
-  // Home directory root — equality-only, subdirectories are valid project roots (SEC-02)
-  if (resolved === homedir()) {
-    throw new Error(`Path '${resolved}' is the home directory root. Access denied.`);
-  }
-
   for (const sensitive of SENSITIVE_DIRS) {
     if (resolved === sensitive || resolved.startsWith(sensitive + '/')) {
       throw new Error(

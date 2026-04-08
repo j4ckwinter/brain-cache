@@ -46,9 +46,9 @@ Requirements for Concerns Cleanup milestone. Each maps to roadmap phases.
 
 ### Test Coverage
 
-- [ ] **TEST-01**: Integration test for nested stderr patching (watch triggering index)
-- [ ] **TEST-02**: Integration test for keyword fallback search when Ollama is unavailable
-- [ ] **TEST-03**: Performance/behavior test for keyword search on large chunk tables (>10k rows)
+- [x] **TEST-01**: Integration test for nested stderr patching (watch triggering index)
+- [x] **TEST-02**: Integration test for keyword fallback search when Ollama is unavailable
+- [x] **TEST-03**: Performance/behavior test for keyword search on large chunk tables (>10k rows)
 
 ## Future Requirements
 
@@ -86,9 +86,9 @@ None deferred — all concerns scoped to this milestone.
 | DEP-02 | Phase 60 | Complete |
 | DEP-03 | Phase 60 | Complete |
 | DEP-04 | Phase 60 | Complete |
-| TEST-01 | Phase 61 | Pending |
-| TEST-02 | Phase 61 | Pending |
-| TEST-03 | Phase 61 | Pending |
+| TEST-01 | Phase 61 | Complete |
+| TEST-02 | Phase 61 | Complete |
+| TEST-03 | Phase 61 | Complete |
 
 **Coverage:**
 - v3.6 requirements: 22 total

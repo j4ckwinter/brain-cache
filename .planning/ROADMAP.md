@@ -182,7 +182,7 @@
 - [x] **Phase 58: Security** - Harden SQL predicate escaping, expand path blocklist to home/root, move API key check before context building (completed 2026-04-07)
 - [x] **Phase 59: Missing Functionality** - Wire edge graph traversal into trace retrieval, add brain-cache clean command, document watch MCP decision (completed 2026-04-07)
 - [x] **Phase 60: Dependency Upgrades** - Upgrade apache-arrow, web-tree-sitter, vitest, and TypeScript with compatibility verification (completed 2026-04-07)
-- [ ] **Phase 61: Test Coverage** - Fill gaps for nested stderr patching, keyword fallback when Ollama unavailable, and keyword search at scale
+- [x] **Phase 61: Test Coverage** - Fill gaps for nested stderr patching, keyword fallback when Ollama unavailable, and keyword search at scale (completed 2026-04-07)
 
 ## Phase Details
 
@@ -285,8 +285,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 58-01-PLAN.md — Extract shared escapeSqlLiteral helper and wire all SQL predicate sites
-- [ ] 58-02-PLAN.md — Expand path blocklist with root/homedir checks and verify SEC-03 compliance
+- [x] 61-01-PLAN.md — Integration test for nested stderr filter (watch-triggers-index scenario)
+- [x] 61-02-PLAN.md — Integration tests for keyword fallback and keyword search at scale
 
 ## Progress
 
@@ -298,7 +298,7 @@ Plans:
 | 58. Security | v3.6 | 2/2 | Complete    | 2026-04-07 |
 | 59. Missing Functionality | v3.6 | 2/2 | Complete    | 2026-04-07 |
 | 60. Dependency Upgrades | v3.6 | 2/2 | Complete   | 2026-04-07 |
-| 61. Test Coverage | v3.6 | 0/TBD | Not started | - |
+| 61. Test Coverage | v3.6 | 2/2 | Complete   | 2026-04-07 |
 
 ---
 *Roadmap created: 2026-03-31*
