@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.6
 milestone_name: Concerns Cleanup
-status: verifying
-stopped_at: Completed 61-02-PLAN.md
-last_updated: "2026-04-07T14:46:12.314Z"
-last_activity: 2026-04-07
+status: shipped
+stopped_at: Milestone v3.6 complete
+last_updated: "2026-04-08T04:30:12.895Z"
+last_activity: 2026-04-08
 progress:
   total_phases: 7
   completed_phases: 7
@@ -17,7 +17,7 @@ progress:
 # Project State: Brain-Cache
 
 **Last updated:** 2026-04-07
-**Updated by:** roadmap created — v3.6 Concerns Cleanup (phases 55-61)
+**Updated by:** v3.6 Concerns Cleanup milestone completed
 
 ---
 
@@ -26,18 +26,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** Reduce Claude token usage and improve response quality by running embeddings, retrieval, and context building locally — Claude only sees what matters.
-**Current focus:** Phase 60 — dependency-upgrades
+**Current focus:** Planning next milestone
 
 ---
 
 ## Current Position
 
-Phase: 60 (dependency-upgrades) — EXECUTING
-Plan: 2 of 2
-Status: Phase complete — ready for verification
-Last activity: 2026-04-07
+Phase: All complete (v3.6 shipped)
+Plan: 16/16 plans complete
+Status: Milestone shipped
+Last activity: 2026-04-08
 
-Progress: [██████████] 100% (14/14 plans complete)
+Progress: [██████████] 100% (16/16 plans complete)
 
 ---
 
