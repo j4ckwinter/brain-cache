@@ -1,4 +1,5 @@
 .planning/
+.agents/
 node_modules/
 dist/
 src/services/wasm/
