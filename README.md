@@ -6,7 +6,9 @@
 
 brain-cache is a local context engine for Claude Code. It indexes your codebase using AST-aware chunking and a call graph — so when Claude needs context, it gets the right functions and their dependencies, not a wall of files. Fewer tokens. Better answers. Runs entirely on your machine.
 
-![brain-cache only sends the parts of your codebase that matter — not everything.](assets/brain-cache.gif)
+<p align="center">
+  <img src="assets/brain-cache.gif" alt="brain-cache only sends the parts of your codebase that matter — not everything.">
+</p>
 
 ---
 
