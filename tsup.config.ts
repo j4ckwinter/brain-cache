@@ -5,7 +5,7 @@ export default defineConfig([
   {
     entry: { cli: "src/cli/index.ts" },
     format: ["esm"],
-    target: "node20",
+    target: "node22",
     outDir: "dist",
     clean: true,
     dts: {
@@ -23,7 +23,7 @@ export default defineConfig([
   {
     entry: { mcp: "src/mcp/main.ts" },
     format: ["esm"],
-    target: "node20",
+    target: "node22",
     outDir: "dist",
     clean: false,
     dts: {

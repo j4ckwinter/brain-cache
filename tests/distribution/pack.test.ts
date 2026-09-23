@@ -25,7 +25,7 @@ describe('npm pack --dry-run', () => {
     }
   });
 
-  it('pack output contains exactly 6 .wasm files', () => {
+  it('pack output contains exactly 6 .wasm files', { timeout: 60000 }, () => {
     const output = execSync('npm pack --dry-run 2>&1', {
       cwd: process.cwd(),
       encoding: 'utf8',

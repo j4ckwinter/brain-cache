@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
@@ -119,7 +119,7 @@ describe('crawlSourceFiles', () => {
 
     expect(files.length).toBeGreaterThan(0);
     for (const f of files) {
-      expect(f.startsWith('/')).toBe(true); // absolute path starts with /
+      expect(isAbsolute(f)).toBe(true);
     }
   });
 

@@ -3,15 +3,12 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// Import the pure functions from the .mjs script.
-// The script is standalone ESM and has no project imports.
 import {
   formatTokenCount,
-  readStats,
   renderOutput,
   IDLE_OUTPUT,
   _readStatsFromPath,
-} from '../../src/scripts/statusline.mjs';
+} from '../../src/lib/statusline.js';
 
 let tempDir: string;
 

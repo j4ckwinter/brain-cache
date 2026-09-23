@@ -1,0 +1,11 @@
+[
+  { "query": "where is the authentication handler", "category": "lookup", "intent": "lookup", "expectedFiles": ["src/auth.ts"], "rankedFiles": ["src/auth.ts", "src/router.ts"], "contextTokens": 120 },
+  { "query": "find the cache configuration type", "category": "lookup", "intent": "lookup", "expectedFiles": ["src/config.ts"], "rankedFiles": ["src/config.ts", "src/cache.ts"], "contextTokens": 105 },
+  { "query": "show me the user lookup function", "category": "lookup", "intent": "lookup", "expectedFiles": ["src/users.ts"], "rankedFiles": ["src/users.ts"], "contextTokens": 90 },
+  { "query": "trace the call path from router to authentication", "category": "trace", "intent": "trace", "expectedFiles": ["src/router.ts", "src/auth.ts"], "rankedFiles": ["src/router.ts", "src/auth.ts", "src/users.ts"], "contextTokens": 240 },
+  { "query": "how does the cache write flow", "category": "trace", "intent": "trace", "expectedFiles": ["src/cache.ts"], "rankedFiles": ["src/cache.ts", "src/config.ts"], "contextTokens": 180 },
+  { "query": "what invokes the user repository", "category": "ambiguous", "intent": "trace", "expectedFiles": ["src/users.ts"], "rankedFiles": ["src/users.ts", "src/auth.ts"], "contextTokens": 160 },
+  { "query": "explain the project architecture", "category": "explore", "intent": "explore", "expectedFiles": ["src/router.ts", "src/cache.ts"], "rankedFiles": ["src/router.ts", "src/cache.ts", "src/auth.ts"], "contextTokens": 310 },
+  { "query": "how is authentication tested", "category": "test-focused", "intent": "explore", "expectedFiles": ["tests/auth.test.ts"], "rankedFiles": ["tests/auth.test.ts", "src/auth.ts"], "contextTokens": 190 },
+  { "query": "how does configuration affect cache and routing", "category": "multi-file", "intent": "explore", "expectedFiles": ["src/config.ts", "src/cache.ts", "src/router.ts"], "rankedFiles": ["src/config.ts", "src/cache.ts", "src/router.ts"], "contextTokens": 360 }
+]

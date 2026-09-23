@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { pathToFileURL } from "node:url";
 
 const STATS_PATH = join(homedir(), ".brain-cache", "session-stats.json");
 const STATS_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — must match sessionStats.ts STATS_TTL_MS
@@ -90,7 +91,7 @@ export function renderOutput(stats) {
 }
 
 // Stdin/stdout protocol — only when executed directly (not imported for testing)
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const stdinTimeout = setTimeout(() => process.exit(0), 3000);
   let input = "";
   process.stdin.setEncoding("utf8");

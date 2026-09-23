@@ -48,6 +48,6 @@ describe('CLAUDE_MD_SECTION template', () => {
     const sectionEnd = afterStart === -1 ? claudeMd.length : afterStart;
     const claudeMdSection = claudeMd.slice(sectionStart, sectionEnd).trim();
     const templateSection = CLAUDE_MD_SECTION.trim();
-    expect(templateSection).toBe(claudeMdSection);
+    expect(templateSection.replace(/\r\n/g, '\n')).toBe(claudeMdSection.replace(/\r\n/g, '\n'));
   });
 });

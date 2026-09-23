@@ -165,9 +165,28 @@ brain-cache doctor                    Check system health
 
 ## Requirements
 
-- Node.js >= 22
+- Node.js >= 22.12.0 (Node 22.12 and Node 24 are release-tested)
 - Ollama running locally (`nomic-embed-text` model recommended)
 - Anthropic API key (for `ask` command only)
+
+### Upgrading to 3.7
+
+Version 3.7 updates LanceDB and advances the derived index format. Existing
+indexes are reported as stale with an instruction to run `brain-cache index`;
+guarded MCP operations retain their normal automatic indexing path. Rebuilding
+only replaces data under `.brain-cache/` and never modifies project source.
+
+### Maintainer checks
+
+`npm run verify:dist` builds and inspects the package, verifies the exact WASM
+payload, installs the generated tarball, and smoke-tests the installed CLI.
+`npm run eval:retrieval` runs the live Ollama retrieval benchmark and writes JSON
+plus Markdown reports. CI uses `--deterministic` to validate the fixture and
+metric pipeline without treating synthetic scores as a quality baseline.
+
+`web-tree-sitter` remains on the latest compatible 0.25 release because the
+published `tree-sitter-wasms@0.1.13` grammars are rejected by the 0.27 runtime.
+The runtime can move to 0.27 once compatible grammar artifacts are available.
 
 ---
 

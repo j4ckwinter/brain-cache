@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { validateIndexPath } from '../../src/lib/pathValidator.js';
 
 describe('validateIndexPath', () => {
-  describe('rejects sensitive system directories', () => {
+  describe.runIf(process.platform !== 'win32')('rejects POSIX sensitive system directories', () => {
     it('rejects /etc', () => {
       expect(() => validateIndexPath('/etc')).toThrow('sensitive system directory');
     });
@@ -23,6 +23,9 @@ describe('validateIndexPath', () => {
       expect(() => validateIndexPath('/var/log')).toThrow('sensitive system directory');
     });
 
+  });
+
+  describe('rejects sensitive user directories', () => {
     it('rejects ~/.ssh', () => {
       expect(() => validateIndexPath(join(homedir(), '.ssh'))).toThrow('sensitive system directory');
     });
@@ -86,7 +89,7 @@ describe('validateIndexPath', () => {
       expect(() => validateIndexPath(join(homedir(), 'projects', 'myapp'))).not.toThrow();
     });
 
-    it('still allows /var/folders (macOS exception)', () => {
+    it.runIf(process.platform === 'darwin')('still allows /var/folders (macOS exception)', () => {
       expect(() => validateIndexPath('/var/folders/xx/tmp')).not.toThrow();
     });
 
@@ -99,7 +102,22 @@ describe('validateIndexPath', () => {
     });
   });
 
-  describe('handles path traversal attacks', () => {
+  describe.runIf(process.platform === 'win32')('handles Windows roots and system directories', () => {
+    it('rejects the current drive root', () => {
+      const driveRoot = parse(process.cwd()).root;
+      expect(() => validateIndexPath(driveRoot)).toThrow('filesystem root');
+    });
+
+    it('rejects a UNC share root', () => {
+      expect(() => validateIndexPath('\\\\server\\share\\')).toThrow('filesystem root');
+    });
+
+    it('rejects the Windows system directory', () => {
+      expect(() => validateIndexPath(process.env.SystemRoot!)).toThrow('sensitive system directory');
+    });
+  });
+
+  describe.runIf(process.platform !== 'win32')('handles POSIX path traversal attacks', () => {
     it('rejects ../../etc/passwd after resolve (traversal attack)', () => {
       // Anchor so resolve() yields /etc/passwd regardless of process cwd
       expect(() => validateIndexPath('/tmp/foo/../../../etc/passwd')).toThrow('sensitive system directory');

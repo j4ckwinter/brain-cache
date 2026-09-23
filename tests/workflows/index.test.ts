@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resolve } from 'node:path';
 
 // Mock all service dependencies before importing the workflow
 vi.mock('../../src/services/capability.js', () => ({
@@ -241,7 +242,7 @@ describe('runIndex', () => {
 
   it('calls crawlSourceFiles with the resolved target path', async () => {
     await runIndex('/project');
-    expect(mockCrawlSourceFiles).toHaveBeenCalledWith('/project');
+    expect(mockCrawlSourceFiles).toHaveBeenCalledWith(resolve('/project'));
   });
 
   it('calls chunkFile for each crawled file', async () => {
@@ -292,9 +293,9 @@ describe('runIndex', () => {
   it('calls writeIndexState with correct model, dimension, and counts', async () => {
     await runIndex('/project');
     expect(mockWriteIndexState).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({
-        version: 1,
+        version: 2,
         embeddingModel: 'nomic-embed-text',
         dimension: 768,
         fileCount: fakeFiles.length,
@@ -384,7 +385,7 @@ describe('runIndex', () => {
 
   it('calls acquireIndexLock with the resolved project path before indexing begins', async () => {
     await runIndex('/project');
-    expect(mockAcquireIndexLock).toHaveBeenCalledWith('/project');
+    expect(mockAcquireIndexLock).toHaveBeenCalledWith(resolve('/project'));
     expect(mockAcquireIndexLock).toHaveBeenCalledTimes(1);
   });
 
@@ -397,7 +398,7 @@ describe('runIndex', () => {
       // expected
     }
 
-    expect(mockReleaseIndexLock).toHaveBeenCalledWith('/project');
+    expect(mockReleaseIndexLock).toHaveBeenCalledWith(resolve('/project'));
   });
 
   it('propagates lock contention error immediately without calling crawlSourceFiles', async () => {
@@ -459,7 +460,7 @@ describe('runIndex', () => {
 
     await runIndex('/project');
 
-    expect(mockFetchGitCommits).toHaveBeenCalledWith('/project', 25);
+    expect(mockFetchGitCommits).toHaveBeenCalledWith(resolve('/project'), 25);
     expect(callOrder.indexOf('insertFileChunks')).toBeGreaterThan(-1);
     expect(callOrder.indexOf('deleteHistoryChunks')).toBeGreaterThan(callOrder.indexOf('insertFileChunks'));
     expect(callOrder.indexOf('insertHistoryChunks')).toBeGreaterThan(callOrder.indexOf('deleteHistoryChunks'));
@@ -476,7 +477,7 @@ describe('runIndex', () => {
     mockReadGitConfig.mockResolvedValue({ enabled: true });
     mockFetchGitCommits.mockResolvedValue([]);
     await runIndex('/project');
-    expect(mockFetchGitCommits).toHaveBeenCalledWith('/project', 500);
+    expect(mockFetchGitCommits).toHaveBeenCalledWith(resolve('/project'), 500);
   });
 });
 
@@ -805,7 +806,7 @@ describe('runIndex stat fast-path', () => {
     await runIndexLocal('/project');
 
     expect(mockWriteFileHashes).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({
         stats: expect.objectContaining({
           [fakeFiles[0]]: expect.objectContaining({ size: expect.any(Number), mtimeMs: expect.any(Number) }),
@@ -835,7 +836,7 @@ describe('runIndex stat fast-path', () => {
     expect(mockReadFile).not.toHaveBeenCalled();
     // stats should be written
     expect(mockWriteFileHashes).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({
         stats: expect.objectContaining({
           [fakeFiles[0]]: expect.objectContaining({ size: 55, mtimeMs: 9999 }),
@@ -865,7 +866,7 @@ describe('runIndex stat fast-path', () => {
     await runIndexLocal('/project');
 
     expect(mockWriteIndexState).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({ totalTokens: 100 }), // 40 + 60
     );
   });
@@ -922,7 +923,7 @@ describe('embedding dimension fallback', () => {
 
     expect(mockOpenOrCreateChunkTable).toHaveBeenCalledWith(
       mockDb,
-      '/project',
+      resolve('/project'),
       'unknown-model-xyz',
       768,
     );

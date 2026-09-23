@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ignore from 'ignore';
+import { resolve } from 'node:path';
 
 // Mock all dependencies before importing the module
 vi.mock('node:fs', () => ({
@@ -190,7 +191,7 @@ describe('debounce coalescing', () => {
 
     // runIndex should be called exactly once
     expect(mockRunIndex).toHaveBeenCalledTimes(1);
-    expect(mockRunIndex).toHaveBeenCalledWith('/tmp/coalesce-1');
+    expect(mockRunIndex).toHaveBeenCalledWith(resolve('/tmp/coalesce-1'));
   });
 
   it('calls runIndex once after a single event + 500ms', async () => {

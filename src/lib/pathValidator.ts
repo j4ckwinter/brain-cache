@@ -1,4 +1,4 @@
-import { resolve, join } from 'node:path';
+import { resolve, join, parse, relative, isAbsolute, sep } from 'node:path';
 import { homedir } from 'node:os';
 
 /**
@@ -7,13 +7,19 @@ import { homedir } from 'node:os';
  * Per D-04: blocklist covers sensitive dirs only, NOT /usr or /bin.
  */
 export const SENSITIVE_DIRS: string[] = [
-  '/etc',
-  '/var',
+  ...(process.platform === 'win32'
+    ? [process.env.SystemRoot, process.env.ProgramData].filter((value): value is string => Boolean(value))
+    : ['/etc', '/var']),
   join(homedir(), '.ssh'),
   join(homedir(), '.aws'),
   join(homedir(), '.gnupg'),
   join(homedir(), '.config'),
 ];
+
+function isSameOrChild(candidate: string, parent: string): boolean {
+  const rel = relative(resolve(parent), candidate);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
 
 /**
  * Validates that a path does not point to a sensitive system directory.
@@ -26,25 +32,25 @@ export const SENSITIVE_DIRS: string[] = [
 export function validateIndexPath(rawPath: string): void {
   const resolved = resolve(rawPath);
   // Reject filesystem root — never a valid project path
-  if (resolved === '/') {
+  if (resolved === parse(resolved).root) {
     throw new Error(
-      `Path '/' is the filesystem root. Access denied.`
+      `Path '${resolved}' is the filesystem root. Access denied.`
     );
   }
   // Reject home directory root — prevents accidental wipe of entire home dir
   const home = homedir();
-  if (resolved === home) {
+  if (resolved === resolve(home)) {
     throw new Error(
       `Path '${resolved}' is the home directory root. Access denied.`
     );
   }
   // macOS stores user temp dirs under /var/folders — not the same threat model as /var/log, /var/db, etc.
-  if (resolved === '/var/folders' || resolved.startsWith('/var/folders/')) {
+  if (process.platform === 'darwin' && isSameOrChild(resolved, '/var/folders')) {
     return;
   }
 
   for (const sensitive of SENSITIVE_DIRS) {
-    if (resolved === sensitive || resolved.startsWith(sensitive + '/')) {
+    if (isSameOrChild(resolved, sensitive)) {
       throw new Error(
         `Path '${resolved}' points to a sensitive system directory. Access denied.`
       );
