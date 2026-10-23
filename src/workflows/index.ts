@@ -777,11 +777,11 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
     async () => {
       // Resolve path and suppress logging before lock — these don't throw
       const previousLogLevel = process.env.BRAIN_CACHE_LOG ?? 'warn';
-      setLogLevel('silent');
       const rootDir = resolve(targetPath ?? '.');
 
       await acquireIndexLock(rootDir);
       try {
+        setLogLevel('silent');
         // resolveAndSetup handles profile, Ollama, gitCfg, dim, LanceDB (inside try)
         const setup = await resolveAndSetup(targetPath, opts);
 
