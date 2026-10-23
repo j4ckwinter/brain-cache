@@ -401,7 +401,7 @@ export async function resolveAndSetup(
 
   // Step 5: Open LanceDB
   const db = await getConnection(rootDir, force);
-  const table = await openOrCreateChunkTable(db, rootDir, profile.embeddingModel, dim);
+  const table = await openOrCreateChunkTable(db, rootDir, profile.embeddingModel, dim, force);
   const edgesTable = await openOrCreateEdgesTable(db);
 
   return { force, verifyEffective, previousLogLevel, rootDir, profile, gitCfg, dim, db, table, edgesTable };
@@ -791,7 +791,6 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
 
         if (files.length === 0) {
           process.stderr.write(`No source files found in ${rootDir}\n`);
-          return;
         }
 
         const partition = await statAndPartition(files, setup);

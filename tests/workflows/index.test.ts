@@ -342,10 +342,10 @@ describe('runIndex', () => {
     expect(processExitSpy).not.toHaveBeenCalled();
   });
 
-  it('handles zero source files: does not call writeIndexState', async () => {
+  it('records an empty index after a zero-file crawl', async () => {
     mockCrawlSourceFiles.mockResolvedValue([]);
     await runIndex('/project');
-    expect(mockWriteIndexState).not.toHaveBeenCalled();
+    expect(mockWriteIndexState).toHaveBeenCalledWith('/project', expect.objectContaining({ fileCount: 0 }));
   });
 
   it('defaults to process.cwd() when no path argument provided', async () => {
@@ -925,6 +925,7 @@ describe('embedding dimension fallback', () => {
       '/project',
       'unknown-model-xyz',
       768,
+      false,
     );
     const combined = stderrOutput.join('');
     expect(combined).toContain("Unknown embedding model 'unknown-model-xyz'");

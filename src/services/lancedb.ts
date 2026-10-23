@@ -2,7 +2,7 @@ import * as lancedb from '@lancedb/lancedb';
 import { Index } from '@lancedb/lancedb';
 import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow';
 import { join } from 'node:path';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME, CONNECTION_POOL_TTL_MS } from '../lib/config.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState, CallEdge, FileStatEntry } from '../lib/types.js';
@@ -209,55 +209,32 @@ export async function openOrCreateChunkTable(
   db: lancedb.Connection,
   projectRoot: string,
   model: string,
-  dim: number
+  dim: number,
+  force = false,
 ): Promise<lancedb.Table> {
   const tableNames = await db.tableNames();
 
-  if (tableNames.includes('chunks')) {
+  if (tableNames.includes('chunks') && !force) {
     const state = await readIndexState(projectRoot);
-    const mismatch =
-      state === null ||
-      state.embeddingModel !== model ||
-      state.dimension !== dim;
-
-    if (mismatch) {
-      log.warn(
-        { storedModel: state?.embeddingModel, storedDim: state?.dimension, model, dim },
-        'Embedding model or dimension changed — dropping and recreating chunks table'
-      );
-      await db.dropTable('chunks');
-      if (tableNames.includes('edges')) {
-        await db.dropTable('edges');
-        log.warn('Also dropped edges table (stale chunk IDs)');
-      }
-    } else {
+    if (state?.embeddingModel === model && state.dimension === dim) {
       const existingTable = await db.openTable('chunks');
       const tableSchema = await existingTable.schema();
-      const hasFileType = tableSchema.fields.some(
-        (f: { name: string }) => f.name === 'file_type'
-      );
-      const hasSourceKind = tableSchema.fields.some(
-        (f: { name: string }) => f.name === 'source_kind'
-      );
-      if (!hasFileType) {
-        log.warn('Schema missing file_type column — dropping and recreating chunks table');
-        await db.dropTable('chunks');
-        if (tableNames.includes('edges')) {
-          await db.dropTable('edges');
-          log.warn('Also dropped edges table (stale chunk IDs)');
-        }
-      } else {
-        if (!hasSourceKind) {
+      if (tableSchema.fields.some(f => f.name === 'file_type')) {
+        if (!tableSchema.fields.some(f => f.name === 'source_kind')) {
           await migrateSourceKindColumn(existingTable);
-          const refreshed = await db.openTable('chunks');
-          log.info({ model, dim }, 'Opened existing chunks table after source_kind migration');
-          return refreshed;
+          return db.openTable('chunks');
         }
-        log.info({ model, dim }, 'Opened existing chunks table');
         return existingTable;
       }
     }
   }
+
+  // A manifest is valid only for the tables it describes. Invalidate state first:
+  // if rebuilding fails, the next attempt must rebuild rather than reuse partial data.
+  await rm(join(projectRoot, PROJECT_DATA_DIR, 'index_state.json'), { force: true });
+  await writeFileHashes(projectRoot, { hashes: {}, tokenCounts: {}, stats: {} });
+  if (tableNames.includes('chunks')) await db.dropTable('chunks');
+  if (tableNames.includes('edges')) await db.dropTable('edges');
 
   // Create new table with explicit Arrow schema
   const schema = chunkSchema(dim);

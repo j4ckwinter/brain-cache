@@ -27,6 +27,11 @@ vi.mock('../../src/services/embedder.js', () => ({
   embedBatchWithRetry: (...args: unknown[]) => mockEmbedBatchWithRetry(...args),
 }));
 
+vi.mock('../../src/services/gitHistory.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/services/gitHistory.js')>(),
+  readGitConfig: vi.fn().mockResolvedValue({ enabled: false }),
+}));
+
 vi.mock('../../src/services/indexLock.js', () => ({
   acquireIndexLock: vi.fn().mockResolvedValue(undefined),
   releaseIndexLock: vi.fn().mockResolvedValue(undefined),
@@ -88,4 +93,83 @@ describe('e2e pipeline', () => {
     expect(ctx.content.length).toBeGreaterThan(0);
     expect(ctx.metadata.tokensSent).toBeGreaterThan(0);
   });
+
+  async function indexFixture() {
+    await mkdir(join(projectRoot, 'src'), { recursive: true });
+    await writeFile(join(projectRoot, 'src', 'hello.ts'),
+      'export function helper() { return 1; }\nexport function hello() { return helper(); }\n');
+    const { runIndex } = await import('../../src/workflows/index.js');
+    await runIndex(projectRoot);
+    return runIndex;
+  }
+
+  async function counts() {
+    const { getConnection } = await import('../../src/services/lancedb.js');
+    const db = await getConnection(projectRoot);
+    return {
+      chunks: await (await db.openTable('chunks')).countRows(),
+      edges: await (await db.openTable('edges')).countRows(),
+    };
+  }
+
+  it('repeated forced rebuilds replace chunks and edges without duplicates', async () => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    expect(initial.chunks).toBeGreaterThan(0);
+    expect(initial.edges).toBeGreaterThan(0);
+    await runIndex(projectRoot, { force: true });
+    expect(await counts()).toEqual(initial);
+    await runIndex(projectRoot, { force: true });
+    expect(await counts()).toEqual(initial);
+  });
+
+  it('rebuilds unchanged files after an embedding model change', async () => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    mockReadProfile.mockResolvedValue({ ...profile, embeddingModel: 'mxbai-embed-large' });
+    mockEmbedBatchWithRetry.mockImplementation(async (_model: string, texts: string[]) => ({
+      embeddings: texts.map(() => new Array(1024).fill(0.02)),
+      skipped: 0, zeroVectorIndices: new Set<number>(),
+    }));
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual(initial);
+    const { readIndexState } = await import('../../src/services/lancedb.js');
+    expect(await readIndexState(projectRoot)).toMatchObject({
+      embeddingModel: 'mxbai-embed-large', dimension: 1024, chunkCount: initial.chunks,
+    });
+  });
+
+  it('clears persisted content and metadata when the last source file is removed', async () => {
+    const runIndex = await indexFixture();
+    await rm(join(projectRoot, 'src', 'hello.ts'));
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual({ chunks: 0, edges: 0 });
+    const { readIndexState, readFileHashes } = await import('../../src/services/lancedb.js');
+    expect(await readIndexState(projectRoot)).toMatchObject({ fileCount: 0, chunkCount: 0 });
+    expect((await readFileHashes(projectRoot)).hashes).toEqual({});
+  });
+
+
+  it('recovers a failed forced rebuild on the next ordinary index', async () => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    mockEmbedBatchWithRetry.mockRejectedValueOnce(new Error('embedding unavailable'));
+    await expect(runIndex(projectRoot, { force: true })).rejects.toThrow('embedding unavailable');
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual(initial);
+  });
+
+
+  it('rebuilds unchanged files when upgrading a legacy table schema', async () => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    const { getConnection } = await import('../../src/services/lancedb.js');
+    const db = await getConnection(projectRoot);
+    await (await db.openTable('chunks')).dropColumns(['file_type']);
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual(initial);
+    const schema = await (await db.openTable('chunks')).schema();
+    expect(schema.fields.some(field => field.name === 'file_type')).toBe(true);
+  });
+
 });
