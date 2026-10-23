@@ -35,10 +35,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.81.0",
+    "@anthropic-ai/sdk": "^0.92.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@lancedb/lancedb": "^0.27.1",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "apache-arrow": "^21.1.0",
     "commander": "14.0.3",
     "dedent": "^1.7.2",
@@ -52,7 +52,10 @@
     "zod": "^4.3.6"
   },
   "overrides": {
-    "apache-arrow": "^21.1.0"
+    "apache-arrow": "^21.1.0",
+    "tsup": {
+      "esbuild": "^0.28.2"
+    }
   },
   "devDependencies": {
     "@types/dedent": "^0.7.2",
@@ -60,9 +63,9 @@
     "cpy-cli": "^7.0.0",
     "pino-pretty": "^11.0.0",
     "tsup": "^8.0.0",
-    "tsx": "4.21.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.3"
+    "vitest": "^4.1.12"
   },
   "keywords": [
     "ai",
