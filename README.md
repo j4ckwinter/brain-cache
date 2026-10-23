@@ -163,6 +163,8 @@ brain-cache doctor                    Check system health
 
 ---
 
+`ask` uses `claude-sonnet-4-6` by default. Set `BRAIN_CACHE_CLAUDE_MODEL` to use another supported Anthropic model. Only `ask` sends retrieved context to the Anthropic API; indexing, search, and context assembly stay local.
+
 ## Requirements
 
 - Node.js >= 22

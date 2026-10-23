@@ -174,7 +174,7 @@ describe('runAskCodebase', () => {
     const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
     await runAskCodebase('how does hello work');
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: expect.stringContaining('claude') })
+      expect.objectContaining({ model: 'claude-sonnet-4-6' })
     );
   });
 
