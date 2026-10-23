@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ignore from 'ignore';
+import { IndexLockedError } from '../../src/services/indexLock.js';
 
 // Mock all dependencies before importing the module
 vi.mock('node:fs', () => ({
@@ -193,6 +194,21 @@ describe('debounce coalescing', () => {
     expect(mockRunIndex).toHaveBeenCalledWith('/tmp/coalesce-1');
   });
 
+  it('queues one follow-up pass for edits during a slow index', async () => {
+    let finish!: () => void;
+    mockRunIndex.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const { watchCallback } = await setupWatch('/tmp/slow-index');
+    watchCallback('change', 'src/one.ts');
+    await vi.advanceTimersByTimeAsync(500);
+    watchCallback('change', 'src/two.ts');
+    watchCallback('change', 'src/three.ts');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.advanceTimersByTimeAsync(501);
+    expect(mockRunIndex).toHaveBeenCalledTimes(2);
+  });
+
   it('calls runIndex once after a single event + 500ms', async () => {
     const { watchCallback } = await setupWatch('/tmp/coalesce-2');
 
@@ -221,12 +237,12 @@ describe('debounce coalescing', () => {
   });
 });
 
-describe('lock contention skip', () => {
+describe('lock contention retry', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mockRunIndex.mockRejectedValue(
-      new Error('Another index operation is in progress. Try again later.')
+      new IndexLockedError()
     );
   });
 
@@ -237,7 +253,7 @@ describe('lock contention skip', () => {
     process.removeAllListeners('SIGTERM');
   });
 
-  it('writes skip message and does not crash when runIndex throws lock error', async () => {
+  it('writes retry message and does not crash when runIndex throws lock error', async () => {
     const { watchCallback } = await setupWatch('/tmp/lock-test');
 
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -248,9 +264,17 @@ describe('lock contention skip', () => {
     const writtenStrings = stderrSpy.mock.calls
       .map(c => (typeof c[0] === 'string' ? c[0] : ''))
       .join('');
-    expect(writtenStrings).toContain('Index in progress, skipping');
+    expect(writtenStrings).toContain('Index in progress, retrying');
 
     stderrSpy.mockRestore();
+  });
+
+  it('retries a busy external indexer without requiring another file edit', async () => {
+    mockRunIndex.mockRejectedValueOnce(new IndexLockedError()).mockResolvedValue(undefined);
+    const { watchCallback } = await setupWatch('/tmp/external-lock');
+    watchCallback('change', 'src/service.ts');
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(mockRunIndex).toHaveBeenCalledTimes(2);
   });
 
   it('does not rethrow the lock contention error', async () => {
@@ -341,6 +365,33 @@ describe('cleanup handler', () => {
     vi.clearAllMocks();
     process.removeAllListeners('SIGINT');
     process.removeAllListeners('SIGTERM');
+  });
+
+  it('does not queue another pass after shutdown during an active index', async () => {
+    let finish!: () => void;
+    mockRunIndex.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const { watchCallback } = await setupWatch('/tmp/stop-active');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+    watchCallback('change', 'src/one.ts');
+    await vi.advanceTimersByTimeAsync(500);
+    watchCallback('change', 'src/two.ts');
+    process.emit('SIGINT');
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    exitSpy.mockRestore();
+  });
+
+  it('cancels a pending lock retry on shutdown', async () => {
+    mockRunIndex.mockRejectedValueOnce(new IndexLockedError());
+    const { watchCallback } = await setupWatch('/tmp/stop-retry');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+    watchCallback('change', 'src/one.ts');
+    await vi.advanceTimersByTimeAsync(500);
+    process.emit('SIGINT');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    exitSpy.mockRestore();
   });
 
   it('calls watcher.close() on SIGINT', async () => {
