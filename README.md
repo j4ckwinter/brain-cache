@@ -173,11 +173,19 @@ Context budgets and savings use an offline approximation. The bundled legacy Ant
 
 ## Requirements
 
-- Node.js >= 22
+- Node.js >= 22.12.0 (Node 22 or 24 LTS recommended)
 - Ollama running locally (`nomic-embed-text` model recommended)
 - Anthropic API key (for `ask` command only)
 
 ---
+
+## Development checks
+
+Run `npm ci`, `npm run typecheck`, and `npm test`. The suite builds and installs the npm tarball in temporary local and global prefixes, checks CLI/MCP startup, and parses samples with all five bundled grammars. These checks require registry access but no Ollama service or Anthropic key.
+
+CI runs the same checks on Linux and macOS with the minimum Node 22.12.0 and current Node 24, plus `npm audit`. `npm run test:distribution` runs just the package-install checks.
+
+The parser/WASM versions are paired intentionally: upgrade them together and rerun the grammar checks. The scoped `tsup`/`esbuild` override supplies security fixes while retaining the current build configuration; recheck it when upgrading the build tool.
 
 ## If this is useful
 
