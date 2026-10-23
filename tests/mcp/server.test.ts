@@ -369,7 +369,7 @@ describe('MCP tool handlers', () => {
       expect(text).toContain('Context assembled for');
       expect(text).toContain('how does auth work');
       expect(text).toContain('assembled context here');
-      expect(text).toContain('Tokens sent to Claude:');
+      expect(text).toContain('Estimated context tokens:');
     });
 
     it('auto-indexes and retries build_context when no index found', async () => {

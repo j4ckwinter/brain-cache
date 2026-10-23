@@ -221,7 +221,7 @@ export function createMcpServer(): McpServer {
           .min(100)
           .max(100000)
           .optional()
-          .describe("Token budget for assembled context (default 4096)"),
+          .describe("Approximate token budget for assembled context (default 4096)"),
         path: z
           .string()
           .optional()

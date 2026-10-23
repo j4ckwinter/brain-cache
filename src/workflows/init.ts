@@ -1,5 +1,6 @@
 import { readFile, writeFile, appendFile, chmod, mkdir, copyFile, access } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
+import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
@@ -230,6 +231,11 @@ export async function runInit(): Promise<void> {
   if (existingScript !== null) {
     if (existingScript === STATUSLINE_SCRIPT_CONTENT) {
       process.stderr.write('brain-cache: statusline.mjs already installed, skipping.\n');
+    } else if (createHash('sha256').update(existingScript).digest('hex') ===
+      '24536abf269b1c05f3c5d28415eaace01a6feb6a0719efede24fd2f754c2511c') {
+      // Exact unmodified v3.6.2 script; preserve any user-customized version.
+      await writeFile(statuslinePath, STATUSLINE_SCRIPT_CONTENT, 'utf-8');
+      process.stderr.write('brain-cache: updated bundled statusline.mjs\n');
     } else {
       process.stderr.write(
         'brain-cache: Warning: ~/.brain-cache/statusline.mjs already exists with custom content. Skipping to preserve user changes.\n'

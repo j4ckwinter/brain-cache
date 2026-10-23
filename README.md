@@ -111,7 +111,7 @@ To install manually, copy the `.claude/skills/brain-cache/` directory into your 
 
 ## Status line
 
-After `brain-cache init`, the status line in Claude Code's bottom bar shows your cumulative token savings session by session. You see the reduction without doing anything different.
+After `brain-cache init`, the status line in Claude Code's bottom bar shows estimated cumulative token savings session by session. These figures compare retrieved context with a modeled grep/read baseline; they are not measured billing savings.
 
 ---
 
@@ -164,6 +164,12 @@ brain-cache doctor                    Check system health
 ---
 
 `ask` uses `claude-sonnet-4-6` by default. Set `BRAIN_CACHE_CLAUDE_MODEL` to use another supported Anthropic model. Only `ask` sends retrieved context to the Anthropic API; indexing, search, and context assembly stay local.
+
+## Token estimates
+
+Context budgets and savings use an offline approximation. The bundled legacy Anthropic tokenizer is inaccurate for modern Claude models, so `maxTokens` is an approximate context budget, not a guaranteed API-token limit. MCP framing, instructions, and conversation history also add tokens outside that budget.
+
+`ask` prints the API's actual input/output usage separately from the context estimate. Use that whole-request usage to assess real consumption; it cannot by itself measure the savings against a request you did not send. Indexing, search, and context assembly do not make cloud calls to count tokens.
 
 ## Requirements
 

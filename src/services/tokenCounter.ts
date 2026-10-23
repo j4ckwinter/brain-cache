@@ -5,7 +5,8 @@ import type { RetrievedChunk } from '../lib/types.js';
 const log = childLogger('tokenCounter');
 
 /**
- * Counts tokens in a text string using Anthropic's tokenizer.
+ * Estimates tokens locally using Anthropic's legacy tokenizer.
+ * Modern Claude token counts differ; this is a budget heuristic, not billing usage.
  * Returns 0 for empty strings.
  */
 export function countChunkTokens(text: string): number {

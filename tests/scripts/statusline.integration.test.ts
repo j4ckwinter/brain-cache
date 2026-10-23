@@ -80,7 +80,7 @@ describe("statusline.mjs subprocess integration", () => {
 
     expect(code).toBe(0);
     expect(stdout).toBe(
-      "\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less) \u00b7 last: 500\n",
+      "\ud83e\udde0 brain-cache \u2192 est. saved 2k tokens (86% less) \u00b7 last: 500\n",
     );
   });
 

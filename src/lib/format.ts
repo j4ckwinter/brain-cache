@@ -68,15 +68,15 @@ export function formatTokenSavings(input: TokenSavingsInput): string {
 function formatIndexEmbeddingFooter(input: TokenSavingsInput): string {
   const fileSuffix = input.filesInContext !== 1 ? 's' : '';
   return [
-    `Tokens sent to Claude: ${input.tokensSent.toLocaleString()}`,
+    `Estimated chunk tokens: ${input.tokensSent.toLocaleString()}`,
     `Estimated without: ~${input.estimatedWithout.toLocaleString()}  (${input.filesInContext} file${fileSuffix} + overhead)`,
-    `Reduction: ${input.reductionPct}%`,
+    `Estimated reduction: ${input.reductionPct}%`,
   ].join('\n');
 }
 
 function formatContextTokenSavings(input: TokenSavingsInput): string {
   const lines: string[] = [
-    `Tokens sent to Claude: ${input.tokensSent.toLocaleString()}`,
+    `Estimated context tokens: ${input.tokensSent.toLocaleString()}`,
   ];
   if (input.matchedPoolTokens! > 0) {
     lines.push(
@@ -85,7 +85,7 @@ function formatContextTokenSavings(input: TokenSavingsInput): string {
   }
   if (input.savingsDisplayMode === 'full') {
     lines.push(
-      `Vs grep-style baseline (grep + read up to 5 files): ~${input.estimatedWithout.toLocaleString()} — Reduction vs baseline: ${input.reductionPct}%`,
+      `Vs grep-style baseline (grep + read up to 5 files): ~${input.estimatedWithout.toLocaleString()} — Estimated reduction vs baseline: ${input.reductionPct}%`,
     );
   }
   lines.push(
@@ -97,11 +97,11 @@ function formatContextTokenSavings(input: TokenSavingsInput): string {
 function formatSearchTokenSavings(input: TokenSavingsInput): string {
   const fileSuffix = input.filesInContext !== 1 ? 's' : '';
   const lines = [
-    `Tokens sent to Claude: ${input.tokensSent.toLocaleString()}`,
+    `Estimated context tokens: ${input.tokensSent.toLocaleString()}`,
     `Vs grep-style baseline (grep + read up to 5 files): ~${input.estimatedWithout.toLocaleString()}  (${input.filesInContext} file${fileSuffix} + overhead)`,
   ];
   if (input.savingsDisplayMode !== 'filtering_only') {
-    lines.push(`Reduction vs baseline: ${input.reductionPct}%`);
+    lines.push(`Estimated reduction vs baseline: ${input.reductionPct}%`);
   }
   lines.push(
     'Value: semantic discovery — relevant code without knowing file paths upfront.',

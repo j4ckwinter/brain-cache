@@ -377,9 +377,9 @@ describe('runIndex', () => {
   it('prints token savings stats on completion', async () => {
     await runIndex('/project');
     const combined = stderrOutput.join('');
-    expect(combined).toContain('Tokens sent to Claude:');
+    expect(combined).toContain('Estimated chunk tokens:');
     expect(combined).toContain('Estimated without:');
-    expect(combined).toContain('Reduction:');
+    expect(combined).toContain('Estimated reduction:');
   });
 
   it('calls acquireIndexLock with the resolved project path before indexing begins', async () => {
@@ -540,7 +540,7 @@ describe('printSummary', () => {
     expect(out).toContain('indexing complete');
     expect(out).toContain('Files:');
     expect(out).toContain('Chunks:');
-    expect(out).toContain('Tokens sent to Claude:');
+    expect(out).toContain('Estimated chunk tokens:');
   });
 });
 

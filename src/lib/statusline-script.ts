@@ -74,7 +74,7 @@ export function renderOutput(stats) {
   );
   if (pct <= 0 || saved <= 0) return IDLE_OUTPUT;
 
-  let line = \`\\ud83e\\udde0 brain-cache \\u2192 saved \${formatTokenCount(saved)} tokens (\${pct}% less)\`;
+  let line = \`\\ud83e\\udde0 brain-cache \\u2192 est. saved \${formatTokenCount(saved)} tokens (\${pct}% less)\`;
 
   // Append last-call savings when available
   if (stats.lastEstimatedWithoutBraincache > 0 && stats.lastTokensSent >= 0) {

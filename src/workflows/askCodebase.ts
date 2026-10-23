@@ -82,6 +82,12 @@ export async function runAskCodebase(
     ],
   });
 
+  if (response.usage) {
+    process.stderr.write(
+      `API usage (whole request): ${response.usage.input_tokens} input, ${response.usage.output_tokens} output tokens\n`,
+    );
+  }
+
   // 4. Extract text response
   const textBlock = response.content.find((b) => b.type === 'text');
   const answer = (textBlock as { type: 'text'; text: string } | undefined)?.text ?? '(no text response from Claude)';

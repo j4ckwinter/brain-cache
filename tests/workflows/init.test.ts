@@ -664,6 +664,20 @@ describe('statusline installation', () => {
     expect(combined).toContain('already installed');
   });
 
+  it('updates the unmodified v3.6.2 statusline while preserving custom scripts', async () => {
+    const actual = await vi.importActual<typeof import('../../src/lib/statusline-script.js')>('../../src/lib/statusline-script.js');
+    const legacy = actual.STATUSLINE_SCRIPT_CONTENT.replace('est. saved ', 'saved ');
+    mockReadFile.mockImplementation(async path => {
+      if (String(path).endsWith('statusline.mjs')) return legacy;
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    await runInit();
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      join(homedir(), '.brain-cache', 'statusline.mjs'),
+      '#!/usr/bin/env node\n// mock statusline content\n', 'utf-8',
+    );
+  });
+
   it('warns and skips when statusline.mjs has custom content', async () => {
     mockAccess.mockImplementation(makeAccessMock((p) => {
       const ps = String(p);
