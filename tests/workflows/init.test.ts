@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+vi.mock('node:url', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:url')>();
+  return { ...actual, fileURLToPath: vi.fn(actual.fileURLToPath) };
+});
+const packageRoot = process.cwd();
 
 // Mock node:fs/promises so init.ts file operations don't touch disk
 vi.mock('node:fs/promises', () => ({
@@ -92,7 +99,7 @@ const mockCopyFile = vi.mocked(nodeFsMock.copyFile);
 // rejects with ENOENT otherwise — mirrors old existsSync boolean semantics.
 function makeAccessMock(existsFn: (p: string) => boolean): (p: unknown) => Promise<void> {
   return (p: unknown) => {
-    if (existsFn(String(p))) return Promise.resolve();
+    if (String(p) === join(packageRoot, 'package.json') || existsFn(String(p))) return Promise.resolve();
     return Promise.reject(Object.assign(new Error(`ENOENT: no such file or directory`), { code: 'ENOENT' }));
   };
 }
@@ -383,10 +390,22 @@ describe('.mcp.json management', () => {
     expect(written).toEqual({
       mcpServers: {
         'brain-cache': {
-          command: 'node',
-          args: ['node_modules/brain-cache/dist/mcp.js'],
+          command: process.execPath,
+          args: [join(packageRoot, 'dist', 'mcp.js')],
         },
       },
+    });
+  });
+
+  it.each(['/opt/npm/brain-cache', '/tmp/my project/node_modules/brain-cache'])(
+    'uses the installed package location %s', async installedRoot => {
+    vi.mocked(fileURLToPath).mockReturnValueOnce(join(installedRoot, 'dist', 'init-chunk.js'));
+    mockAccess.mockImplementation(makeAccessMock(p => p === join(installedRoot, 'package.json')));
+    await runInit();
+    const write = mockWriteFile.mock.calls.find(call => call[0] === '.mcp.json');
+    expect(JSON.parse(String(write?.[1])).mcpServers['brain-cache']).toEqual({
+      command: process.execPath,
+      args: [join(installedRoot, 'dist', 'mcp.js')],
     });
   });
 
@@ -422,8 +441,8 @@ describe('.mcp.json management', () => {
     const written = JSON.parse(writeCall![1] as string);
     expect(written.mcpServers['other-mcp']).toEqual({ command: 'other', args: [] });
     expect(written.mcpServers['brain-cache']).toEqual({
-      command: 'node',
-      args: ['node_modules/brain-cache/dist/mcp.js'],
+      command: process.execPath,
+      args: [join(packageRoot, 'dist', 'mcp.js')],
     });
   });
 
@@ -431,8 +450,8 @@ describe('.mcp.json management', () => {
     const existing = {
       mcpServers: {
         'brain-cache': {
-          command: 'node',
-          args: ['node_modules/brain-cache/dist/mcp.js'],
+          command: process.execPath,
+          args: [join(packageRoot, 'dist', 'mcp.js')],
         },
       },
     };
@@ -518,8 +537,8 @@ describe('.mcp.json management', () => {
     const existing = {
       mcpServers: {
         'brain-cache': {
-          command: 'node',
-          args: ['node_modules/brain-cache/dist/mcp.js'],
+          command: process.execPath,
+          args: [join(packageRoot, 'dist', 'mcp.js')],
         },
       },
     };

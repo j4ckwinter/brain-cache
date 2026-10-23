@@ -135,10 +135,20 @@ export async function runInit(): Promise<void> {
     `  VRAM tier: ${profileWithVersion.vramTier}\n`
   );
 
+  const currentFile = fileURLToPath(import.meta.url);
+  // Walk up from current file to find package root (works regardless of tsup output structure)
+  let packageRoot = dirname(currentFile);
+  while (packageRoot !== dirname(packageRoot)) {
+    let pkgExists = false;
+    try { await access(join(packageRoot, 'package.json')); pkgExists = true; } catch { /* not found */ }
+    if (pkgExists) break;
+    packageRoot = dirname(packageRoot);
+  }
+
   // Step 11: Create or update .mcp.json with brain-cache MCP server entry (idempotent)
   const brainCacheMcpEntry = {
-    command: 'node',
-    args: ['node_modules/brain-cache/dist/mcp.js'],
+    command: process.execPath,
+    args: [join(packageRoot, 'dist', 'mcp.js')],
   };
   const mcpJsonPath = '.mcp.json';
 
@@ -188,15 +198,6 @@ export async function runInit(): Promise<void> {
   }
 
   // Step 11b: Install skill to user's project (idempotent)
-  const currentFile = fileURLToPath(import.meta.url);
-  // Walk up from current file to find package root (works regardless of tsup output structure)
-  let packageRoot = dirname(currentFile);
-  while (packageRoot !== dirname(packageRoot)) {
-    let pkgExists = false;
-    try { await access(join(packageRoot, 'package.json')); pkgExists = true; } catch { /* not found */ }
-    if (pkgExists) break;
-    packageRoot = dirname(packageRoot);
-  }
   const skillSource = join(packageRoot, '.claude', 'skills', 'brain-cache', 'SKILL.md');
   const skillTargetDir = join(process.cwd(), '.claude', 'skills', 'brain-cache');
   const skillTarget = join(skillTargetDir, 'SKILL.md');

@@ -37,7 +37,7 @@ Documentation files (`.md`, `.txt`, `.rst`) use a separate doc chunker and are i
 
 ## Use inside Claude Code (MCP)
 
-The primary way to use brain-cache is as an MCP server. Run `brain-cache init` once — it auto-configures `.mcp.json` in your project root so Claude Code connects immediately. No manual JSON setup needed.
+The primary way to use brain-cache is as an MCP server. Run `brain-cache init` once — it auto-configures `.mcp.json` in your project root so Claude Code connects immediately. No manual JSON setup needed. The generated entry uses absolute paths to the current Node executable and installed package, so both global and local installs work. Re-run `init` after moving the installation or changing Node installations.
 
 Claude then has access to:
 
