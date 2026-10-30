@@ -217,11 +217,11 @@ export async function processFileGroup(
     const content = contentMap.get(filePath)!;
     const rawTokens = countChunkTokens(content);
     stats.totalRawTokens += rawTokens;
-    tokenCounts[filePath] = rawTokens;
     try {
       const { chunks, edges } = await chunkFile(filePath, content);
       groupChunks.push(...chunks);
       groupEdges.push(...edges);
+      tokenCounts[filePath] = rawTokens;
     } catch (err) {
       log.warn({ filePath, err }, 'Failed to chunk file, skipping');
     }
@@ -566,7 +566,6 @@ export async function writeEarlyExitManifest(
   }
   await writeFileHashes(rootDir, { hashes: finalHashes, tokenCounts: outTokenCounts, stats: mergedStats });
 
-  // allFilesTotalTokens = sum of outTokenCounts for all crawled files
   let allFilesTotalTokens = 0;
   for (const fp of files) {
     allFilesTotalTokens += outTokenCounts[fp] ?? 0;
@@ -689,32 +688,33 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
     pipelineStats,
   } = opts;
 
-  // Step 9a: Merge new/changed hashes into manifest
   const finalHashes = { ...updatedHashes };
+  const finalTokenCounts = { ...outTokenCounts };
+  const finalStats = { ...mergedStats };
   for (const filePath of filesToProcess) {
-    finalHashes[filePath] = currentHashes[filePath];
+    if (processedTokenCounts[filePath] !== undefined) {
+      finalHashes[filePath] = currentHashes[filePath];
+      finalTokenCounts[filePath] = processedTokenCounts[filePath];
+    } else {
+      delete finalHashes[filePath];
+      delete finalTokenCounts[filePath];
+      delete finalStats[filePath];
+    }
   }
   // Also ensure unchanged files stay in manifest
   for (const filePath of unchangedFiles) {
     finalHashes[filePath] = currentHashes[filePath];
   }
 
-  // Merge token counts: fresh counts from processFileGroup override carried-forward
-  const finalTokenCounts = { ...outTokenCounts };
-  for (const [fp, count] of Object.entries(processedTokenCounts)) {
-    finalTokenCounts[fp] = count;
-  }
-
-  // allFilesTotalTokens = sum of outTokenCounts for all crawled files
   let allFilesTotalTokens = 0;
   for (const fp of files) {
     allFilesTotalTokens += finalTokenCounts[fp] ?? 0;
   }
 
-  await writeFileHashes(rootDir, { hashes: finalHashes, tokenCounts: finalTokenCounts, stats: mergedStats });
+  await writeFileHashes(rootDir, { hashes: finalHashes, tokenCounts: finalTokenCounts, stats: finalStats });
 
   // Step 9b: Write index state
-  const totalFiles = files.length;
+  const totalFiles = Object.keys(finalHashes).length;
   await writeIndexState(rootDir, {
     version: 1,
     chunkFormatVersion: CHUNK_FORMAT_VERSION,

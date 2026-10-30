@@ -429,6 +429,30 @@ describe('runIndex', () => {
     );
   });
 
+  it('retries a failed changed file without retaining successful manifest metadata', async () => {
+    const badFile = fakeFiles[0];
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { [badFile]: 'old-hash' },
+      tokenCounts: { [badFile]: 42 },
+      stats: { [badFile]: { size: 1, mtimeMs: 1 } },
+    });
+    mockChunkFile.mockImplementation((filePath) => {
+      if (filePath === badFile) throw new Error('transient parser failure');
+      return { chunks: [fakeChunk(filePath, 1)], edges: [] };
+    });
+    await runIndex('/project');
+    const manifest = mockWriteFileHashes.mock.calls.at(-1)![1];
+    expect(manifest.hashes).not.toHaveProperty(badFile);
+    expect(manifest.tokenCounts).not.toHaveProperty(badFile);
+    expect(manifest.stats).not.toHaveProperty(badFile);
+    mockReadFileHashes.mockResolvedValue(manifest);
+    mockChunkFile.mockClear();
+    mockChunkFile.mockImplementation((filePath) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    await runIndex('/project');
+    expect(mockChunkFile).toHaveBeenCalledWith(badFile, expect.any(String));
+    expect(mockWriteFileHashes.mock.calls.at(-1)![1].hashes).toHaveProperty(badFile);
+  });
+
   it('ingests git history after file indexing when git.enabled=true', async () => {
     mockReadGitConfig.mockResolvedValue({ enabled: true, maxCommits: 25 });
     mockFetchGitCommits.mockResolvedValue([
