@@ -145,7 +145,7 @@ function splitCamelCase(name: string): string[] {
  * - 0.8: Filename stem exact match — any query token equals the filename stem (without extension)
  * - fallback: Original partial token presence (matchCount / queryTokens.length)
  */
-export function computeKeywordBoost(chunk: RetrievedChunk, queryTokens: string[]): number {
+export function computeKeywordBoost(chunk: Pick<RetrievedChunk, 'filePath' | 'name'>, queryTokens: string[]): number {
   if (queryTokens.length === 0) return 0;
 
   const fileName = chunk.filePath.split('/').pop()?.toLowerCase() ?? '';

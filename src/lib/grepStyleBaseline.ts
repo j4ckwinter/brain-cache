@@ -8,7 +8,6 @@ import {
   computeKeywordBoost,
   extractQueryTokens,
 } from '../services/retriever.js';
-import { countChunkTokens } from '../services/tokenCounter.js';
 import { TOOL_CALL_OVERHEAD_TOKENS } from './config.js';
 import type { RetrievedChunk } from './types.js';
 
@@ -20,22 +19,6 @@ export interface GrepBaselineResult {
   grepBaselineTokens: number;
   /** 1–5 files included in the sum. */
   filesUsed: number;
-}
-
-function rowToChunk(r: Record<string, unknown>): RetrievedChunk {
-  return {
-    id: r.id as string,
-    filePath: r.file_path as string,
-    chunkType: r.chunk_type as string,
-    sourceKind: r.source_kind === 'history' ? 'history' : 'file',
-    scope: (r.scope as string) ?? null,
-    name: (r.name as string) ?? null,
-    content: r.content as string,
-    startLine: r.start_line as number,
-    endLine: r.end_line as number,
-    similarity: 0,
-    fileType: (r.file_type as string) ?? 'source',
-  };
 }
 
 /**
@@ -55,15 +38,14 @@ export async function computeGrepStyleBaseline(
     };
   }
 
-  const rows = await table.query().toArray();
   const byFile = new Map<string, number>();
-
-  for (const r of rows) {
-    const chunk = rowToChunk(r as Record<string, unknown>);
-    const boost = computeKeywordBoost(chunk, queryTokens);
-    if (boost <= 0) continue;
-    const prev = byFile.get(chunk.filePath) ?? 0;
-    byFile.set(chunk.filePath, prev + boost);
+  for await (const batch of table.query().select(['file_path', 'name'])) {
+    for (const row of batch) {
+      const filePath = row.file_path as string;
+      const boost = computeKeywordBoost({ filePath, name: row.name as string | null }, queryTokens);
+      if (boost <= 0) continue;
+      byFile.set(filePath, (byFile.get(filePath) ?? 0) + boost);
+    }
   }
 
   const ranked = [...byFile.entries()]
