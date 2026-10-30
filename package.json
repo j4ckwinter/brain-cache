@@ -34,7 +34,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "test:distribution": "vitest run tests/distribution/pack.test.ts"
+    "test:distribution": "vitest run --config vitest.distribution.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
