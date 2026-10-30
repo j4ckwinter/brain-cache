@@ -101,7 +101,7 @@ With an existing index, `search_codebase` and `build_context` fall back to keywo
 
 ## Keeping the index fresh
 
-After upgrading to 4.0.7, the next `brain-cache index` rebuilds older indexes once to adopt collision-free chunk IDs and corrected call ownership. Later indexing runs remain incremental. Existing indexes remain readable until that rebuild.
+When an upgrade changes the chunk format, the next `brain-cache index` rebuilds older indexes once to adopt the latest format. Later indexing runs remain incremental. Existing indexes remain readable until that rebuild.
 
 `brain-cache index` runs incrementally by default — unchanged files are skipped, so re-indexing a large repo after a few edits takes seconds, not minutes.
 
@@ -113,7 +113,9 @@ For continuous sync, `brain-cache watch` runs a debounced incremental re-index o
 
 brain-cache ships as a Claude Code skill. After `brain-cache init`, the skill is installed at `.claude/skills/brain-cache/SKILL.md` in your project. Claude automatically learns when and how to use brain-cache tools.
 
-To install manually, copy the `.claude/skills/brain-cache/` directory into your project root.
+To install manually, copy the packaged `.claude/skills/brain-cache/SKILL.md` to the same path in your project.
+
+`init` preserves an existing skill file, so re-running it after an upgrade does not refresh the skill. To update it, back up your project’s copy, compare it with the installed package’s `.claude/skills/brain-cache/SKILL.md`, and merge the changes while keeping your custom instructions. For a local install, the source is `node_modules/brain-cache/.claude/skills/brain-cache/SKILL.md`; for a global install, find the package under the directory printed by `npm root -g`.
 
 ---
 
@@ -189,9 +191,11 @@ Context budgets and savings use an offline approximation. The bundled legacy Ant
 
 ## Development checks
 
-Run `npm ci`, `npm run typecheck`, and `npm test`. The suite builds and installs the npm tarball in temporary local and global prefixes, checks CLI/MCP startup, and parses samples with all five bundled grammars. These checks require registry access but no Ollama service or Anthropic key.
+Run `npm ci` to install dependencies, then `npm run typecheck` to check source and test types and `npm test` for the ordinary unit and integration suite. The ordinary suite needs no registry access, Ollama service, or Anthropic key once dependencies are installed.
 
-CI runs the same checks on Linux and macOS with the minimum Node 22.12.0 and current Node 24, plus `npm audit`. `npm run test:distribution` runs just the package-install checks.
+Run `npm run test:distribution` separately for packaging checks. It builds and installs the npm tarball in temporary local and global prefixes, checks CLI/MCP startup, and parses samples with all five bundled grammars. These checks require registry access but no Ollama service or Anthropic key.
+
+CI runs typechecking, both test suites, and `npm audit` on Linux and macOS with the minimum Node 22.12.0 and Node 24.
 
 The parser/WASM versions are paired intentionally: upgrade them together and rerun the grammar checks. The scoped `tsup`/`esbuild` override supplies security fixes while retaining the current build configuration; recheck it when upgrading the build tool.
 
