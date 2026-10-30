@@ -29,8 +29,8 @@ function stripYamlFrontmatter(content: string): { body: string; lineOffset: numb
   }
   const after = rest.slice(end + closeLen);
   const consumed = content.slice(0, content.length - after.length);
-  const lineOffset = consumed.split(/\r?\n/).length;
-  return { body: after.replace(/^\r?\n/, ''), lineOffset };
+  const lineOffset = consumed.split(/\r?\n/).length - 1;
+  return { body: after, lineOffset };
 }
 
 function enterHeading(stack: HeadingFrame[], depth: number, text: string): void {
@@ -50,44 +50,29 @@ function splitDocSection(
 ): CodeChunk[] {
   const trimmed = body.trim();
   if (!trimmed) return [];
+  startLine += body.slice(0, body.length - body.trimStart().length).split('\n').length - 1;
 
   if (countChunkTokens(trimmed) <= DOC_CHUNK_SIZE_THRESHOLD) {
     return [makeDocChunk(filePath, trimmed, heading, breadcrumb, startLine)];
   }
 
-  const paragraphs = trimmed.split(/\n\n+/).filter((p) => p.trim().length > 0);
   const out: CodeChunk[] = [];
-  let buf: string[] = [];
-  let bufStartLine = startLine;
-  let lineAtParaStart = startLine;
-
-  const flushBuf = () => {
-    if (buf.length === 0) return;
-    const text = buf.join('\n\n');
-    out.push(makeDocChunk(filePath, text, heading, breadcrumb, bufStartLine));
-    buf = [];
+  let bufferStart = 0;
+  let bufferEnd = 0;
+  const flush = () => {
+    if (bufferEnd <= bufferStart) return;
+    const line = startLine + trimmed.slice(0, bufferStart).split('\n').length - 1;
+    out.push(makeDocChunk(filePath, trimmed.slice(bufferStart, bufferEnd), heading, breadcrumb, line));
   };
-
-  for (let pi = 0; pi < paragraphs.length; pi++) {
-    const para = paragraphs[pi]!;
-    const paraLines = para.split(/\r?\n/).length;
-    const gapLines = pi < paragraphs.length - 1 ? 2 : 0;
-    const combined = buf.length ? `${buf.join('\n\n')}\n\n${para}` : para;
-
-    if (buf.length > 0 && countChunkTokens(combined) > DOC_CHUNK_SIZE_THRESHOLD) {
-      flushBuf();
-      buf.push(para);
-      bufStartLine = lineAtParaStart;
-    } else if (buf.length === 0 && countChunkTokens(para) > DOC_CHUNK_SIZE_THRESHOLD) {
-      out.push(makeDocChunk(filePath, para, heading, breadcrumb, lineAtParaStart));
-    } else {
-      if (buf.length === 0) bufStartLine = lineAtParaStart;
-      buf.push(para);
+  for (const paragraph of trimmed.matchAll(/\S[\s\S]*?(?=\r?\n[ \t]*\r?\n|$)/g)) {
+    const end = paragraph.index + paragraph[0].trimEnd().length;
+    if (bufferEnd > bufferStart && countChunkTokens(trimmed.slice(bufferStart, end)) > DOC_CHUNK_SIZE_THRESHOLD) {
+      flush();
+      bufferStart = paragraph.index;
     }
-
-    lineAtParaStart += paraLines + gapLines;
+    bufferEnd = end;
   }
-  flushBuf();
+  flush();
   return out;
 }
 
@@ -113,7 +98,7 @@ function makeDocChunk(
 }
 
 function chunkMarkdown(filePath: string, content: string): CodeChunk[] {
-  const { body: stripped, lineOffset } = stripYamlFrontmatter(content);
+  const { body: stripped, lineOffset } = stripYamlFrontmatter(content.replace(/\r\n/g, '\n'));
   const tokens = marked.lexer(stripped);
   const stack: HeadingFrame[] = [];
   const chunks: CodeChunk[] = [];
@@ -144,6 +129,8 @@ function chunkMarkdown(filePath: string, content: string): CodeChunk[] {
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i]!;
+    const idx = stripped.indexOf(t.raw, searchFrom);
+    if (idx !== -1) searchFrom = idx + t.raw.length;
     if (t.type === 'heading') {
       const depth = (t as { depth: number; text: string; raw: string }).depth;
       const text = (t as { text: string }).text;
@@ -153,11 +140,9 @@ function chunkMarkdown(filePath: string, content: string): CodeChunk[] {
         flushSection();
         enterHeading(stack, depth, text);
         currentH2 = text.trim();
-        const idx = stripped.indexOf(raw, searchFrom);
-        searchFrom = idx === -1 ? searchFrom : idx + raw.length;
         if (idx !== -1) {
           const bodyStart = idx + raw.length;
-          sectionBodyStartLine = stripped.slice(0, bodyStart).split(/\r?\n/).length + 1;
+          sectionBodyStartLine = stripped.slice(0, bodyStart).split(/\r?\n/).length;
         } else {
           sectionBodyStartLine = 1;
         }
@@ -182,21 +167,10 @@ function chunkMarkdown(filePath: string, content: string): CodeChunk[] {
 }
 
 function chunkPlainText(filePath: string, content: string): CodeChunk[] {
-  const paragraphs = content.split(/\n\n+/).filter((p) => p.trim().length > 0);
-  if (paragraphs.length === 0) {
-    const t = content.trim();
-    if (!t) return [];
-    return splitDocSection(filePath, t, null, null, 1);
-  }
-
   const chunks: CodeChunk[] = [];
-  let lineAtParaStart = 1;
-  for (let pi = 0; pi < paragraphs.length; pi++) {
-    const para = paragraphs[pi]!;
-    const paraLines = para.split(/\r?\n/).length;
-    const gapLines = pi < paragraphs.length - 1 ? 2 : 0;
-    chunks.push(...splitDocSection(filePath, para, null, null, lineAtParaStart));
-    lineAtParaStart += paraLines + gapLines;
+  for (const paragraph of content.matchAll(/\S[\s\S]*?(?=\r?\n[ \t]*\r?\n|$)/g)) {
+    const startLine = content.slice(0, paragraph.index).split('\n').length;
+    chunks.push(...splitDocSection(filePath, paragraph[0], null, null, startLine));
   }
   return chunks;
 }
