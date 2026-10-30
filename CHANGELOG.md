@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.0.8 — 2026-10-30
+
+- Honor `OLLAMA_HOST` for model, embedding, and doctor requests.
+- Retry files that failed parsing and avoid duplicate chunks after interrupted indexing.
+- Preserve user commands that share a hook entry with brain-cache during initialization.
+- Retain named declarations alongside functions in TypeScript, Python, Go, and Rust source files.
+- Stream only ranking metadata when calculating context token savings.
+- Isolate cleanup tests from the working repository index.
+- Correct document source locations, including frontmatter, CRLF, and paragraph splits.
+- Rebuild older chunk formats on the next indexing run to apply declaration and document fixes.
+
 ## 4.0.7 — 2026-10-30
 
 - Give same-line and nested code chunks distinct, deterministic structural IDs so retrieval does not discard valid chunks.
