@@ -343,15 +343,32 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain("brain-cache init");
     });
 
-    it('returns isError when Ollama is not running', async () => {
+    it('returns keyword context and a warning when Ollama is unavailable', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(false);
-
+      mockRunBuildContext.mockResolvedValue({
+        ...fakeContextResult,
+        metadata: { ...fakeContextResult.metadata, localTasksPerformed: ['keyword_search', 'dedup', 'token_budget'] },
+      });
       const { handler } = registeredTools.get('build_context')!;
       const result = await handler({ query: 'how does auth work' });
+      expect(result.isError).toBeUndefined();
+      expect(mockRunBuildContext).toHaveBeenCalledOnce();
+      expect(result.content[0].text).toContain('[FALLBACK]');
+      expect(result.content[0].text).toContain('assembled context here');
+    });
 
+    it('returns an error envelope when offline auto-indexing fails', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(false);
+      mockRunBuildContext.mockRejectedValue(new NoIndexError('/some/project'));
+      mockRunIndex.mockRejectedValue(new Error('Ollama is not running'));
+      const { handler } = registeredTools.get('build_context')!;
+      const result = await handler({ query: 'auth', path: '/some/project' });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Ollama is not running');
+      expect(mockRunBuildContext).toHaveBeenCalledOnce();
+      expect(mockRunIndex).toHaveBeenCalledOnce();
     });
 
     it('returns formatted context text with metadata footer on success', async () => {
@@ -370,6 +387,7 @@ describe('MCP tool handlers', () => {
       expect(text).toContain('how does auth work');
       expect(text).toContain('assembled context here');
       expect(text).toContain('Estimated context tokens:');
+      expect(text).not.toContain('[FALLBACK]');
     });
 
     it('auto-indexes and retries build_context when no index found', async () => {

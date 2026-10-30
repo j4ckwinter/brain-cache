@@ -94,10 +94,12 @@ describe('isOllamaRunning', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
     vi.stubGlobal('fetch', vi.fn());
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     if (originalEnv === undefined) {
       delete process.env.OLLAMA_HOST;
@@ -113,7 +115,7 @@ describe('isOllamaRunning', () => {
 
     const result = await isOllamaRunning();
     expect(result).toBe(true);
-    expect(mockFetch).toHaveBeenCalledWith('http://localhost:11434');
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:11434', { signal: expect.any(AbortSignal) });
   });
 
   it('uses OLLAMA_HOST env var when set', async () => {
@@ -123,7 +125,7 @@ describe('isOllamaRunning', () => {
 
     const result = await isOllamaRunning();
     expect(result).toBe(true);
-    expect(mockFetch).toHaveBeenCalledWith('http://192.168.1.10:11434');
+    expect(mockFetch).toHaveBeenCalledWith('http://192.168.1.10:11434', { signal: expect.any(AbortSignal) });
   });
 
   it('returns false when fetch throws (connection refused)', async () => {
@@ -141,6 +143,53 @@ describe('isOllamaRunning', () => {
     const result = await isOllamaRunning();
     expect(result).toBe(false);
   });
+
+  it('aborts a stalled health request after two seconds', async () => {
+    let signal: AbortSignal | undefined;
+    const mockFetch = vi.fn((_url: string, options: RequestInit) => {
+      signal = options.signal as AbortSignal;
+      return new Promise<Response>((_resolve, reject) => {
+        signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = isOllamaRunning();
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(result).resolves.toBe(false);
+    expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([true, false])('releases the response and timer after HTTP success=%s', async (ok) => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => {
+      signal = options.signal as AbortSignal;
+      return { ok } as Response;
+    }));
+
+    await expect(isOllamaRunning()).resolves.toBe(ok);
+
+    expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears the timer and aborts after a network failure', async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => {
+      signal = options.signal as AbortSignal;
+      throw new Error('connection refused');
+    }));
+
+    await expect(isOllamaRunning()).resolves.toBe(false);
+
+    expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
 });
 
 describe('startOllama', () => {
@@ -154,7 +203,7 @@ describe('startOllama', () => {
     vi.unstubAllGlobals();
   });
 
-  it('spawns "ollama serve" detached and polls readiness up to 5 seconds', async () => {
+  it('spawns "ollama serve" detached and polls readiness', async () => {
     const mockChild = {
       pid: 11111,
       unref: vi.fn(),

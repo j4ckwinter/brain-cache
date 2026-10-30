@@ -157,10 +157,13 @@ export function createMcpServer(): McpServer {
     const pipeline = formatPipelineLabel(localTasksPerformed);
     const footer = `---\n${savings}\nPipeline: ${pipeline}`;
     const summary = `Context assembled for "${query}".`;
+    const fallbackPrefix = localTasksPerformed.includes("keyword_search")
+      ? "[FALLBACK] Ollama is unavailable. Context is keyword-matched only — semantic search disabled.\n\n"
+      : "";
     return {
       content: [{
         type: "text" as const,
-        text: formatToolResponse(summary, `${formatContext(result)}\n\n${footer}`),
+        text: formatToolResponse(summary, `${fallbackPrefix}${formatContext(result)}\n\n${footer}`),
       }],
     };
   }
@@ -239,7 +242,7 @@ export function createMcpServer(): McpServer {
         }).catch((err) => log.warn({ err }, "stats accumulation failed"));
         return buildContextResponse(result, query);
       },
-      { autoIndex: true, operationName: "Context build" },
+      { autoIndex: true, operationName: "Context build", allowOllamaDown: true },
     ),
   );
 

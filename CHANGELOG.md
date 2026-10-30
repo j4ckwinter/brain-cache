@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.4 — 2026-10-30
+
+- Build context from an existing index with keyword fallback when Ollama is unavailable, and label fallback results in CLI and MCP output.
+- Bound Ollama health checks and cancel their requests after completion or timeout.
+- Return MCP errors when automatic indexing fails instead of rejecting the tool handler.
+
 ## 4.0.3 — 2026-10-30
 
 - Match keyword fallback queries without case sensitivity across symbols, file paths, and content.

@@ -13,7 +13,7 @@ export type McpResult = {
 export interface WithGuardsOptions {
   autoIndex?: boolean;
   operationName?: string;
-  /** When true, skip the Ollama-running check (search_codebase uses keyword fallback when Ollama is down). */
+  /** When true, skip the Ollama-running check for handlers that support keyword fallback. */
   allowOllamaDown?: boolean;
 }
 
@@ -68,8 +68,8 @@ export function withGuards<T extends Record<string, unknown>>(
         const resolvedPath = resolve(
           (args as Record<string, unknown>).path as string ?? ".",
         );
-        await runIndex(resolvedPath);
         try {
+          await runIndex(resolvedPath);
           return await handler(args);
         } catch (retryErr) {
           return {

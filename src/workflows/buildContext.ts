@@ -1,11 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { requireProfile, requireOllama } from '../lib/guards.js';
+import { requireProfile } from '../lib/guards.js';
 import { getConnection, readIndexState, readFileHashes } from '../services/lancedb.js';
 import { NoIndexError } from '../lib/errors.js';
+import { isOllamaRunning } from '../services/ollama.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import {
   searchChunks,
+  keywordSearchChunks,
   deduplicateChunks,
   classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
@@ -15,7 +17,7 @@ import {
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
 import { DEFAULT_TOKEN_BUDGET } from '../lib/config.js';
 import { computeGrepStyleBaseline } from '../lib/grepStyleBaseline.js';
-import type { ContextResult, SearchOptions, SavingsDisplayMode } from '../lib/types.js';
+import type { ContextResult, SearchOptions, SavingsDisplayMode, RetrievedChunk } from '../lib/types.js';
 import { childLogger } from '../services/logger.js';
 
 const log = childLogger('build-context');
@@ -30,8 +32,7 @@ export async function runBuildContext(
   query: string,
   opts?: BuildContextOptions
 ): Promise<ContextResult> {
-  const profile = await requireProfile();
-  await requireOllama();
+  await requireProfile();
 
   const rootDir = resolve(opts?.path ?? '.');
   const indexState = await readIndexState(rootDir);
@@ -59,10 +60,17 @@ export async function runBuildContext(
     `brain-cache: building context (intent=${mode}, budget=${maxTokens} tokens)\n`
   );
 
-  const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
-  const queryVector = vectors[0];
-
-  let results = await searchChunks(table, queryVector, strategy, query);
+  const ollamaAvailable = await isOllamaRunning();
+  let results: RetrievedChunk[];
+  if (ollamaAvailable) {
+    const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
+    results = await searchChunks(table, vectors[0], strategy, query);
+  } else {
+    process.stderr.write(
+      'brain-cache: [FALLBACK] Ollama is unavailable. Building context from keyword matches — results may be less relevant.\n',
+    );
+    results = await keywordSearchChunks(table, query, strategy.limit);
+  }
 
   // Expand trace results by following call edges one hop
   if (mode === 'trace' && tableNames.includes('edges')) {
@@ -149,7 +157,8 @@ export async function runBuildContext(
       filteringPct,
       savingsDisplayMode,
       localTasksPerformed: [
-        'embed_query', 'vector_search', 'dedup', 'token_budget',
+        ...(ollamaAvailable ? ['embed_query', 'vector_search'] : ['keyword_search']),
+        'dedup', 'token_budget',
         ...(mode === 'trace' && tableNames.includes('edges') ? ['edge_expansion'] : []),
       ],
       cloudCallsMade: 0,

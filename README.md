@@ -93,6 +93,10 @@ brain-cache tools are called automatically. You don't change how you work — th
 
 ---
 
+## When Ollama is unavailable
+
+With an existing index, `search_codebase` and `build_context` fall back to keyword matching and label the results accordingly. Context still respects its approximate token budget. Building or refreshing an index requires Ollama; fallback results reflect the last successful index.
+
 ## Keeping the index fresh
 
 `brain-cache index` runs incrementally by default — unchanged files are skipped, so re-indexing a large repo after a few edits takes seconds, not minutes.

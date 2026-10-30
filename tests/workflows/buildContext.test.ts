@@ -21,6 +21,7 @@ vi.mock('../../src/services/embedder.js', () => ({
 
 vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
+  keywordSearchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
   filterDedupedForNonTestChunks: vi.fn((chunks: unknown[]) => chunks),
@@ -59,6 +60,7 @@ import { getConnection, readIndexState, readFileHashes } from '../../src/service
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
+  keywordSearchChunks,
   deduplicateChunks,
   classifyRetrievalMode,
   expandByEdges,
@@ -73,6 +75,7 @@ const mockReadFileHashes = vi.mocked(readFileHashes);
 const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
+const mockKeywordSearchChunks = vi.mocked(keywordSearchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
 const mockClassifyQueryIntent = vi.mocked(classifyRetrievalMode);
 const mockExpandByEdges = vi.mocked(expandByEdges);
@@ -158,6 +161,7 @@ describe('runBuildContext', () => {
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
     mockClassifyQueryIntent.mockReturnValue('explore');
     mockSearchChunks.mockResolvedValue(dedupedChunks);
+    mockKeywordSearchChunks.mockResolvedValue(dedupedChunks);
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     mockAssembleContext.mockReturnValue({
       content: 'assembled content',
@@ -257,9 +261,35 @@ describe('runBuildContext', () => {
     await expect(runBuildContext('test query')).rejects.toThrow("brain-cache init");
   });
 
-  it('throws when Ollama is not running', async () => {
+  it('builds keyword context with the selected limit when Ollama is unavailable', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
-    await expect(runBuildContext('test query')).rejects.toThrow('Ollama is not running');
+    const result = await runBuildContext('test query', { limit: 7 });
+    expect(mockKeywordSearchChunks).toHaveBeenCalledWith(mockTable, 'test query', 7);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    expect(mockSearchChunks).not.toHaveBeenCalled();
+    expect(result.metadata.localTasksPerformed).toEqual(['keyword_search', 'dedup', 'token_budget']);
+    expect(stderrOutput.join('')).toContain('[FALLBACK]');
+    expect(result.content).not.toContain('[FALLBACK]');
+  });
+
+  it('propagates storage failures in keyword mode', async () => {
+    mockIsOllamaRunning.mockResolvedValue(false);
+    mockKeywordSearchChunks.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(runBuildContext('test query')).rejects.toThrow('database unavailable');
+    expect(mockAssembleContext).not.toHaveBeenCalled();
+  });
+
+  it('propagates embedding failures without silently switching to keywords', async () => {
+    mockEmbedBatchWithRetry.mockRejectedValueOnce(new Error('model failure'));
+    await expect(runBuildContext('test query')).rejects.toThrow('model failure');
+    expect(mockKeywordSearchChunks).not.toHaveBeenCalled();
+  });
+
+  it('requires an index even when Ollama is unavailable', async () => {
+    mockIsOllamaRunning.mockResolvedValue(false);
+    mockReadIndexState.mockResolvedValue(null);
+    await expect(runBuildContext('test query')).rejects.toThrow('No index found');
+    expect(mockKeywordSearchChunks).not.toHaveBeenCalled();
   });
 
   it('throws when no index found', async () => {
