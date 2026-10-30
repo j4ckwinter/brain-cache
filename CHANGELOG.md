@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.0.9 — 2026-10-30
+
+- Coordinate cleanup and indexing with a lifecycle lock outside index storage.
+- Typecheck test fixtures alongside production source and repair outdated mock contracts.
+- Backfill missing token counts for unchanged files without re-embedding them.
+- Use one history and metadata finalization path for all indexing runs.
+- Share crawler and watcher exclusions, honor both ignore files, and reload watch policies when they change.
+- Correct manual MCP setup and refresh development and packaged skill guidance.
+- Run package-install smoke tests as a separate required CI step.
+
+When upgrading, stop older running indexers before using cleanup: older binaries do not honor the new external lifecycle lock.
+
 ## 4.0.8 — 2026-10-30
 
 - Honor `OLLAMA_HOST` for model, embedding, and doctor requests.
