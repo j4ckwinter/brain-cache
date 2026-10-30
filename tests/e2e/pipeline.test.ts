@@ -7,6 +7,7 @@ import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
+import { CHUNK_FORMAT_VERSION } from '../../src/lib/config.js';
 
 const mockReadProfile = vi.fn();
 const mockEmbedBatchWithRetry = vi.fn();
@@ -128,6 +129,19 @@ describe('e2e pipeline', () => {
     expect(await counts()).toEqual({ chunks: initial.chunks + 51, edges: initial.edges + 51 });
   });
 
+  it('retrieves declarations from mixed source files by their exact names', async () => {
+    await mkdir(join(projectRoot, 'src'), { recursive: true });
+    await writeFile(join(projectRoot, 'src', 'mixed.ts'),
+      'interface User { id: string }\nconst MAX_RETRIES = 3;\nfunction retry() { return MAX_RETRIES; }');
+    const { runIndex } = await import('../../src/workflows/index.js');
+    const { runSearch } = await import('../../src/workflows/search.js');
+    await runIndex(projectRoot);
+    for (const name of ['User', 'MAX_RETRIES']) {
+      const result = await runSearch(name, { path: projectRoot, limit: 1 });
+      expect(result.chunks[0]?.name).toBe(name);
+    }
+  });
+
   it('repeated forced rebuilds replace chunks and edges without duplicates', async () => {
     const runIndex = await indexFixture();
     const initial = await counts();
@@ -196,7 +210,7 @@ describe('e2e pipeline', () => {
     await writeFile(path, JSON.stringify(state));
   }
 
-  it.each([undefined, 1])('rebuilds unchanged files for obsolete chunk format %s and then reuses it', async (revision) => {
+  it.each([undefined, 1, 2])('rebuilds unchanged files for obsolete chunk format %s and then reuses it', async (revision) => {
     const runIndex = await indexFixture();
     const initial = await counts();
     await downgradeChunkFormat(revision);
@@ -205,12 +219,12 @@ describe('e2e pipeline', () => {
     expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
     expect(await counts()).toEqual(initial);
     const { readIndexState } = await import('../../src/services/lancedb.js');
-    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: 2 });
+    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: CHUNK_FORMAT_VERSION });
     mockEmbedBatchWithRetry.mockClear();
     await runIndex(projectRoot);
     expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
     expect(await counts()).toEqual(initial);
-    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: 2 });
+    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: CHUNK_FORMAT_VERSION });
   });
 
   it('retries an interrupted chunk format rebuild on the next ordinary index', async () => {
@@ -223,7 +237,7 @@ describe('e2e pipeline', () => {
     expect(await readIndexState(projectRoot)).toBeNull();
     await runIndex(projectRoot);
     expect(await counts()).toEqual(initial);
-    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: 2 });
+    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: CHUNK_FORMAT_VERSION });
   });
 
   it('keeps same-line class and method chunks distinct through storage and retrieval', async () => {

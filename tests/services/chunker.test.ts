@@ -286,3 +286,35 @@ describe('structural chunk identity and call ownership', () => {
     expect(destructured.chunks[0].name).toBeNull();
   });
 });
+
+describe('mixed-file declarations', () => {
+  it.each([
+    ['ts', 'export interface User { id: string }\nexport type ID = string;\nexport const MAX_RETRIES = 3, MIN_RETRIES = 1;\nfunction retry() { return MAX_RETRIES; }', ['User', 'ID', 'MAX_RETRIES', 'MIN_RETRIES', 'retry']],
+    ['py', 'MAX_RETRIES = 3\ndef retry():\n    return MAX_RETRIES\n', ['MAX_RETRIES', 'retry']],
+    ['go', 'package main\ntype User struct { ID string }\nconst MAX_RETRIES = 3\nfunc retry() int { return MAX_RETRIES }', ['User', 'MAX_RETRIES', 'retry']],
+    ['rs', 'struct User { id: String }\nconst MAX_RETRIES: usize = 3;\nfn retry() -> usize { MAX_RETRIES }', ['User', 'MAX_RETRIES', 'retry']],
+  ])('retains named declarations alongside functions in %s', async (ext, source, names) => {
+    const { chunks } = await chunkFile(`mixed.${ext}`, source);
+    for (const name of names) {
+      expect(chunks.find(chunk => chunk.name === name), name).toBeDefined();
+    }
+    expect(new Set(chunks.map(chunk => chunk.id)).size).toBe(chunks.length);
+    for (const chunk of chunks) {
+      expect(source.split('\n').slice(chunk.startLine - 1, chunk.endLine).join('\n')).toContain(chunk.content);
+    }
+  });
+});
+
+it('retains object configuration and function aliases without duplicating named arrows', async () => {
+  const source = 'export const SETTINGS = { retries: 3, run() { return true; } };\nconst alias = function implementation() {};\nconst arrow = () => {};';
+  const { chunks } = await chunkFile('config.ts', source);
+  expect(chunks.find(chunk => chunk.name === 'SETTINGS')?.content).toContain('retries: 3');
+  expect(chunks.find(chunk => chunk.name === 'alias')?.content).toContain('implementation');
+  expect(chunks.filter(chunk => chunk.name === 'arrow')).toHaveLength(1);
+});
+
+it('retains Rust trait signatures alongside default method bodies', async () => {
+  const { chunks } = await chunkFile('trait.rs', 'trait Cache { fn get(&self); fn ready(&self) -> bool { true } }');
+  expect(chunks.find(chunk => chunk.name === 'Cache')?.content).toContain('fn get(&self)');
+  expect(chunks.find(chunk => chunk.name === 'ready')).toBeDefined();
+});

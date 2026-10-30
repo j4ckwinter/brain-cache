@@ -120,6 +120,13 @@ export const CHUNK_NODE_TYPES: Record<string, Set<string>> = {
   ]),
 };
 
+const DECLARATION_NODE_TYPES: Record<string, Set<string>> = {
+  typescript: new Set(['interface_declaration', 'type_alias_declaration', 'enum_declaration', 'variable_declarator']),
+  python: new Set(['assignment']),
+  go: new Set(['type_spec', 'type_alias', 'const_spec', 'var_spec']),
+  rust: new Set(['struct_item', 'enum_item', 'type_item', 'const_item', 'static_item', 'trait_item']),
+};
+
 // Maps file extensions to language category keys used in CHUNK_NODE_TYPES.
 function getLanguageCategory(ext: string): string {
   switch (ext) {
@@ -330,6 +337,36 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
       };
       chunks.push(chunk);
       chunksByNode.set(node.id, chunk);
+    }
+    if (chunks.length > 0) {
+      for (const node of walkNodes(tree.rootNode)) {
+        if (!DECLARATION_NODE_TYPES[category].has(node.type)) continue;
+        let ancestor = node.parent;
+        let alreadyCovered = false;
+        while (ancestor) {
+          if (chunksByNode.has(ancestor.id)) {
+            alreadyCovered = true;
+            break;
+          }
+          ancestor = ancestor.parent;
+        }
+        if (alreadyCovered) continue;
+        const value = node.childForFieldName('value');
+        const nameNode = node.childForFieldName('name') ?? node.childForFieldName('left');
+        if (value && nameNode && chunksByNode.get(value.id)?.name === nameNode.text) continue;
+        const chunk: CodeChunk = {
+          id: `${filePath}:${node.startIndex}:${node.endIndex}:${node.type}`,
+          filePath,
+          chunkType: 'file',
+          scope: null,
+          name: nameNode?.text ?? null,
+          content: content.slice(node.startIndex, node.endIndex),
+          startLine: node.startPosition.row + 1,
+          endLine: node.endPosition.row + 1,
+        };
+        chunks.push(chunk);
+        chunksByNode.set(node.id, chunk);
+      }
     }
   } finally {
     tree.delete();
