@@ -1096,6 +1096,28 @@ describe('PreToolUse hook installation', () => {
     expect(entries.length).toBe(5); // 1 Bash + 4 brain-cache
   });
 
+  it('preserves user commands and entry options when sharing an entry with brain-cache', async () => {
+    const userCommand = { type: 'command', command: 'echo custom', timeout: 12 };
+    mockFsWithSettings(JSON.stringify({
+      statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' },
+      hooks: { PreToolUse: [{
+        matcher: 'Read', customOption: true,
+        hooks: [userCommand, { type: 'command', command: 'echo "brain-cache: old reminder"' }],
+      }] },
+    }));
+    await runInit();
+    const writes = mockWriteFile.mock.calls.filter(c => String(c[0]).endsWith('settings.json'));
+    const written = JSON.parse(writes.at(-1)![1] as string);
+    expect(written.hooks.PreToolUse).toContainEqual({
+      matcher: 'Read', customOption: true, hooks: [userCommand],
+    });
+    expect(written.hooks.PreToolUse).toHaveLength(5);
+    mockWriteFile.mockClear();
+    mockFsWithSettings(JSON.stringify(written));
+    await runInit();
+    expect(mockWriteFile.mock.calls.filter(c => String(c[0]).endsWith('settings.json'))).toHaveLength(0);
+  });
+
   it('Test 5 (HOOK-03): when brain-cache hooks already installed with identical content, no settings.json write emitted', async () => {
     // We need to know what BRAIN_CACHE_PRETOOLUSE_HOOKS looks like.
     // First run to get the written content, then use that as input for idempotency test.

@@ -18,10 +18,8 @@ interface HookEntry {
   hooks: HookCommand[];
 }
 
-function isBrainCacheHookEntry(entry: HookEntry): boolean {
-  return entry.hooks?.some(h =>
-    typeof h.command === 'string' && h.command.includes(BRAIN_CACHE_HOOK_PREFIX)
-  ) ?? false;
+function isBrainCacheHook(hook: HookCommand): boolean {
+  return typeof hook.command === 'string' && hook.command.includes(BRAIN_CACHE_HOOK_PREFIX);
 }
 
 const makeHookCommand = (reminder: string): string =>
@@ -303,8 +301,12 @@ export async function runInit(): Promise<void> {
       ? (hooks['PreToolUse'] as HookEntry[])
       : [];
 
-    const preserved = preToolUse.filter(e => !isBrainCacheHookEntry(e));
-    const currentBC = preToolUse.filter(e => isBrainCacheHookEntry(e));
+    const preserved = preToolUse.flatMap(entry => {
+      if (!entry.hooks?.some(isBrainCacheHook)) return [entry];
+      const userHooks = entry.hooks.filter(hook => !isBrainCacheHook(hook));
+      return userHooks.length > 0 ? [{ ...entry, hooks: userHooks }] : [];
+    });
+    const currentBC = preToolUse.filter(entry => entry.hooks?.some(isBrainCacheHook));
     const noChange = JSON.stringify(currentBC) === JSON.stringify(BRAIN_CACHE_PRETOOLUSE_HOOKS);
 
     if (noChange && currentBC.length > 0) {
