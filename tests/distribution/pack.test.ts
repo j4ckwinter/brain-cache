@@ -60,6 +60,17 @@ describe('published package', () => {
       : join(prefix, 'bin', 'brain-cache');
     const cli = await exec(launcher, ['--version'], { cwd: prefix });
     expect(cli.stdout.trim()).toBe(version);
+    for (const [command, option] of [
+      ['search', '--limit'], ['context', '--limit'],
+      ['context', '--budget'], ['ask', '--budget'],
+    ]) {
+      await expect(exec(launcher, [command, 'query', option, '10oops'], { cwd: prefix }))
+        .rejects.toMatchObject({
+          code: 1,
+          stderr: expect.stringContaining('Expected a positive safe decimal integer'),
+        });
+    }
+
 
     const transport = new StdioClientTransport({
       command: process.execPath,

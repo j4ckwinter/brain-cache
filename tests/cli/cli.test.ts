@@ -53,11 +53,17 @@ vi.mock('../../src/workflows/buildContext.js', () => ({ runBuildContext: mockRun
 vi.mock('../../src/workflows/askCodebase.js', () => ({ runAskCodebase: mockRunAskCodebase }));
 vi.mock('../../src/workflows/watch.js', () => ({ runWatch: mockRunWatch }));
 
-import { program } from '../../src/cli/index.js';
+let program: typeof import('../../src/cli/index.js').program;
 
 describe('CLI Commander', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.resetModules();
+    ({ program } = await import('../../src/cli/index.js'));
+    for (const command of [program, ...program.commands]) {
+      command.exitOverride();
+      command.configureOutput({ writeErr: () => {} });
+    }
   });
 
   it('init calls runInit', async () => {
@@ -121,4 +127,31 @@ describe('CLI Commander', () => {
     await program.parseAsync(['watch', '/some/path'], { from: 'user' });
     expect(mockRunWatch).toHaveBeenCalledWith('/some/path');
   });
+  describe.each([
+    ['search', '--limit', mockRunSearch, 'limit', 10],
+    ['context', '--limit', mockRunBuildContext, 'limit', 10],
+    ['context', '--budget', mockRunBuildContext, 'maxTokens', 4096],
+    ['ask', '--budget', mockRunAskCodebase, 'maxContextTokens', 4096],
+  ] as const)('%s %s', (command, option, workflow, property, defaultValue) => {
+    it.each(['10oops', '0', '-1', '1.5', 'Infinity', 'NaN', '9007199254740992', '1e3', '0x10', ' 10', '+10', ''])(
+      'rejects %j before invoking the workflow', async value => {
+        await expect(program.parseAsync([command, 'query', `${option}=${value}`], { from: 'user' }))
+          .rejects.toMatchObject({ code: 'commander.invalidArgument' });
+        expect(workflow).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['1', '0007', '100001', '9007199254740991'])(
+      'passes valid value %s as a number', async value => {
+        await program.parseAsync([command, 'query', option, value], { from: 'user' });
+        expect(workflow).toHaveBeenCalledWith('query', expect.objectContaining({ [property]: Number(value) }));
+      },
+    );
+
+    it('preserves the numeric default', async () => {
+      await program.parseAsync([command, 'query'], { from: 'user' });
+      expect(workflow).toHaveBeenCalledWith('query', expect.objectContaining({ [property]: defaultValue }));
+    });
+  });
+
 });

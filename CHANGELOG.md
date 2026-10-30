@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.5 — 2026-10-30
+
+- Reject malformed, nonpositive, fractional, and unsafe CLI limits and token budgets before running workflows.
+
 ## 4.0.4 — 2026-10-30
 
 - Build context from an existing index with keyword fallback when Ollama is unavailable, and label fallback results in CLI and MCP output.
