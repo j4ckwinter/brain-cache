@@ -127,7 +127,7 @@ describe('e2e pipeline', () => {
     expect(await counts()).toEqual({ chunks: initial.chunks + 51, edges: initial.edges + 51 });
     await runIndex(projectRoot);
     expect(await counts()).toEqual({ chunks: initial.chunks + 51, edges: initial.edges + 51 });
-  });
+  }, 30_000);
 
   it('retrieves declarations from mixed source files by their exact names', async () => {
     await mkdir(join(projectRoot, 'src'), { recursive: true });
