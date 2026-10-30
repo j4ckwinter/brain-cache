@@ -365,21 +365,24 @@ export function deduplicateChunks(chunks: RetrievedChunk[]): RetrievedChunk[] {
 
 /**
  * Keyword-only search fallback when Ollama is unavailable.
- * Uses SQL LIKE predicates to filter at the storage layer, avoiding full table scan.
- * Per PERF-01: pushes filtering to LanceDB, excludes vector column, caps rows via .limit().
+ * Filters case-insensitively in LanceDB and caps materialized candidates, excluding vectors.
  */
 export async function keywordSearchChunks(
   table: Table,
   query: string,
   limit: number,
 ): Promise<RetrievedChunk[]> {
-  const queryTokens = extractQueryTokens(query);
+  const queryTokens = [...new Set(query.toLowerCase()
+    .split(/[\s.,;:!?"()\[\]{}/]+/)
+    .filter(token => token.length >= 3))];
   if (queryTokens.length === 0) return [];
 
   const predicate = queryTokens
     .map(t => {
-      const escaped = t.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
-      return `(file_path LIKE '%${escaped}%' OR name LIKE '%${escaped}%' OR content LIKE '%${escaped}%')`;
+      const escaped = t.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/'/g, "''");
+      return ['file_path', 'name', 'content']
+        .map(column => `lower(${column}) LIKE '%${escaped}%' ESCAPE '\\'`)
+        .join(' OR ');
     })
     .join(' OR ');
 
@@ -404,13 +407,21 @@ export async function keywordSearchChunks(
       similarity: 0,
       fileType: (r.file_type as string) ?? 'source',
     };
-    const score = computeKeywordBoost(chunk, queryTokens);
-    return { chunk, score };
+    const identifiers = `${chunk.filePath} ${chunk.name ?? ''}`.toLowerCase();
+    const identifierScore = Math.max(
+      computeKeywordBoost(chunk, queryTokens),
+      queryTokens.filter(token => identifiers.includes(token)).length / queryTokens.length,
+    );
+    const body = chunk.content.toLowerCase();
+    const bodyScore = queryTokens.filter(token => body.includes(token)).length / queryTokens.length;
+    return { chunk, identifierScore, bodyScore };
   });
 
   return scored
-    .filter(({ score }) => score > 0)
-    .sort((a, b) => b.score - a.score)
+    .filter(({ identifierScore, bodyScore }) => identifierScore > 0 || bodyScore > 0)
+    .sort((a, b) => b.identifierScore - a.identifierScore
+      || b.bodyScore - a.bodyScore
+      || (a.chunk.id < b.chunk.id ? -1 : a.chunk.id > b.chunk.id ? 1 : 0))
     .slice(0, limit)
     .map(({ chunk }) => chunk);
 }

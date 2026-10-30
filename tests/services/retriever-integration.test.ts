@@ -116,6 +116,35 @@ describe('keyword fallback integration - real LanceDB', () => {
     expect(results[0]?.name).toBe('uniqueneedle');
   });
 
+  it('matches mixed-case symbols, paths, and body-only text', async () => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    const rows = [
+      { ...makeChunkRow(0), name: 'CamelTarget', content: 'unrelated' },
+      { ...makeChunkRow(1), file_path: 'src/CamelTarget/index.ts', content: 'unrelated' },
+      { ...makeChunkRow(2), content: 'CAMELTARGET appears only in this body' },
+    ];
+    await insertChunks(table, rows);
+    const results = await keywordSearchChunks(table, 'CamelTarget', 10);
+    expect(results.map(chunk => chunk.id)).toEqual(['chunk-0', 'chunk-1', 'chunk-2']);
+  });
+
+  it.each([
+    ["owner's", 'owners'],
+    ['value%part', 'valueXpart'],
+    ['value_part', 'valueXpart'],
+    [String.raw`value\part`, 'valuepart'],
+  ])('treats %s as literal text in fallback predicates', async (needle, decoy) => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    await insertChunks(table, [
+      { ...makeChunkRow(0), content: needle },
+      { ...makeChunkRow(1), content: decoy },
+    ]);
+    const results = await keywordSearchChunks(table, needle, 10);
+    expect(results.map(chunk => chunk.id)).toEqual(['chunk-0']);
+  });
+
   it('keywordSearchChunks returns empty for non-matching query', async () => {
     const db = await openDatabase(testDir);
     const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);

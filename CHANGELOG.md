@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.3 — 2026-10-30
+
+- Match keyword fallback queries without case sensitivity across symbols, file paths, and content.
+- Keep content-only keyword matches while prioritizing symbol and path matches.
+
 ## 4.0.2 — 2026-10-30
 
 - Apply the approximate context budget to source and Git history together, and report token estimates for the complete returned context.

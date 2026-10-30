@@ -795,30 +795,25 @@ describe('keywordSearchChunks', () => {
     const { table, whereFn } = makeKeywordMockTable([]);
     await keywordSearchChunks(table, 'test_fn', 10);
     const predicate: string = whereFn.mock.calls[0][0];
-    expect(predicate).toContain('test\\_fn');
+    expect(predicate).toContain("LIKE '%test\\_fn%' ESCAPE '\\'");
   });
 
   it('escapes percent sign in SQL LIKE predicate', async () => {
-    // "100%" — the token "100" has length 3 so it passes extractQueryTokens
-    // We need a token that contains % but still has length >= 3 after % removal.
-    // Use a query "100%" which extractQueryTokens will split into ["100"] (no %)
-    // To test % escaping specifically, we need a token that includes %, but
-    // extractQueryTokens strips punctuation. We can test via the internal escape path
-    // by using a string that contains % in a longer word.
     const { table, whereFn } = makeKeywordMockTable([]);
-    // Use "100pct%" — extractQueryTokens will return ["100pct"] but without %, so let's
-    // instead verify the escape code path is in the predicate by using something like
-    // a 3+ char token that might arrive via extractQueryTokens. In practice extractQueryTokens
-    // splits on punctuation so % won't appear. But we still test that the implementation
-    // handles it correctly by checking that query tokens that do contain special chars
-    // (injected via a mock path) are escaped. We'll test the positive path:
-    // a normal token 'auth' appears as "LIKE '%auth%'" (no escape needed).
-    await keywordSearchChunks(table, 'auth', 10);
+    await keywordSearchChunks(table, '100%', 10);
     const predicate: string = whereFn.mock.calls[0][0];
-    expect(predicate).toContain("LIKE '%auth%'");
-    // The predicate must NOT have an un-escaped bare percent wildcard from token injection
-    // (this verifies the % is only from LIKE wildcards, not token content)
-    expect(predicate).toMatch(/LIKE '%auth%'/);
+    expect(predicate).toContain("LIKE '%100\\%%' ESCAPE '\\'");
+    expect(predicate).toContain('lower(content)');
+  });
+
+  it('keeps content-only matches after name and path matches', async () => {
+    const { table } = makeKeywordMockTable([
+      makeKeywordRow({ id: 'body', name: 'other', file_path: 'src/other.ts', content: 'RETRIEVER' }),
+      makeKeywordRow({ id: 'path', name: 'other', file_path: 'src/Retriever/file.ts', content: 'unrelated' }),
+      makeKeywordRow({ id: 'none', name: 'other', file_path: 'src/other.ts', content: 'unrelated' }),
+    ]);
+    const result = await keywordSearchChunks(table, 'retriever', 10);
+    expect(result.map(chunk => chunk.id)).toEqual(['path', 'body']);
   });
 
   it('sorts results by computeKeywordBoost score descending and slices to limit', async () => {
