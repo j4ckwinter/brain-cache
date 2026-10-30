@@ -18,6 +18,8 @@ Most RAG tools split code by line count. brain-cache parses your source files in
 
 At index time, brain-cache also extracts call edges and import edges from the AST. At query time, `build_context` uses those edges to expand retrieval one hop out — pulling in not just the code that matches your query, but the functions it calls and the modules it depends on. You get context that's complete, not just similar.
 
+Exact symbol-name matches are considered alongside semantic candidates and ranked first, so a definition can be found even when its embedding is a weak match. Keyword fallback also retrieves exact names separately from its broader candidate pool. Final result limits still apply.
+
 Everything runs locally via Ollama. No embeddings leave your machine. No API calls for retrieval.
 
 ---

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.6 — 2026-10-30
+
+- Retrieve exact symbol names independently of vector and broad keyword candidate limits, prioritize them, and keep final result limits.
+- Preserve camelCase boundaries when computing symbol-name relevance.
+
 ## 4.0.5 — 2026-10-30
 
 - Reject malformed, nonpositive, fractional, and unsafe CLI limits and token budgets before running workflows.

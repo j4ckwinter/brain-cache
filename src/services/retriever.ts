@@ -159,7 +159,7 @@ export function computeKeywordBoost(chunk: RetrievedChunk, queryTokens: string[]
 
   // Tier 2 (PREC-01): Near-exact via camelCase sub-token match
   // All sub-tokens of chunk name must appear in query tokens
-  const subTokens = chunkName.length > 0 ? splitCamelCase(chunkName) : [];
+  const subTokens = chunkName.length > 0 ? splitCamelCase(chunk.name ?? '') : [];
   if (subTokens.length > 1 && subTokens.every(sub => queryTokens.some(t => t.includes(sub) || sub.includes(t)))) {
     return 1.0;
   }
@@ -289,6 +289,53 @@ function computeTestFilePenalty(chunk: RetrievedChunk, query: string): number {
   return TEST_FILE_NOISE_PENALTY;
 }
 
+const CHUNK_COLUMNS = ['id', 'file_path', 'chunk_type', 'scope', 'name', 'content', 'start_line', 'end_line', 'file_type', 'source_kind'];
+const MAX_EXACT_CANDIDATES = 500;
+
+function exactSymbolTokens(query: string, tokens: string[]): string[] {
+  const identifier = query.trim().replace(/^`([^`]+)`$/, '$1');
+  return /^[a-zA-Z_$][\w$]*$/.test(identifier) ? [identifier.toLowerCase()] : [...new Set(tokens)];
+}
+
+function isExactName(name: string | null, tokens: string[]): boolean {
+  return name != null && tokens.includes(name.toLowerCase());
+}
+
+function compareIds(a: RetrievedChunk, b: RetrievedChunk): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function rowToChunk(r: Record<string, unknown>, similarity = 0): RetrievedChunk {
+  return {
+    id: r.id as string,
+    filePath: r.file_path as string,
+    chunkType: r.chunk_type as string,
+    sourceKind: r.source_kind === 'history' ? 'history' : 'file',
+    scope: (r.scope as string) ?? null,
+    name: (r.name as string) ?? null,
+    content: r.content as string,
+    startLine: r.start_line as number,
+    endLine: r.end_line as number,
+    similarity,
+    fileType: (r.file_type as string) ?? 'source',
+  };
+}
+
+async function chunkColumns(table: Table): Promise<string[]> {
+  const fields = new Set((await table.schema()).fields.map(field => field.name));
+  return CHUNK_COLUMNS.filter(column =>
+    (column !== 'source_kind' && column !== 'file_type') || fields.has(column));
+}
+
+async function exactNameCandidates(table: Table, tokens: string[], columns?: string[]): Promise<RetrievedChunk[]> {
+  if (tokens.length === 0) return [];
+  const projection = columns ?? await chunkColumns(table);
+  const names = tokens.map(token => `'${escapeSqlLiteral(token)}'`).join(', ');
+  const rows = await table.query().where(`lower(name) IN (${names})`)
+    .select(projection).limit(MAX_EXACT_CANDIDATES).toArray();
+  return rows.map(row => rowToChunk(row));
+}
+
 export async function searchChunks(
   table: Table,
   queryVector: number[],
@@ -305,49 +352,40 @@ export async function searchChunks(
     .toArray();
 
   const queryTokens = query ? extractQueryTokens(query) : [];
+  const exactTokens = query ? exactSymbolTokens(query, queryTokens) : [];
+  const exactCandidates = await exactNameCandidates(table, exactTokens);
 
   const chunks: RetrievedChunk[] = (rows as RawChunkRow[])
-    .filter((r) => r._distance <= opts.distanceThreshold)
+    .filter((r) => r._distance <= opts.distanceThreshold || isExactName(r.name, exactTokens))
     .filter((r) => {
       const vec = (r as unknown as { vector?: unknown }).vector;
       return vec == null || !isStoredVectorAllZero(vec);
     })
-    .map((r) => ({
-      id: r.id,
-      filePath: r.file_path,
-      chunkType: r.chunk_type,
-      sourceKind: r.source_kind === 'history' ? 'history' : 'file' as const,
-      scope: r.scope,
-      name: r.name,
-      content: r.content,
-      startLine: r.start_line,
-      endLine: r.end_line,
-      fileType: r.file_type,
-      similarity: 1 - r._distance,
-    }));
+    .map((r) => rowToChunk(r as unknown as Record<string, unknown>, 1 - r._distance));
+  const merged = deduplicateChunks([...chunks, ...exactCandidates]);
 
-  if (queryTokens.length > 0) {
+  if (queryTokens.length > 0 || exactTokens.length > 0) {
     // Rerank: blend vector similarity with per-mode keyword boost weight, minus noise penalties.
     // Config noise penalty prevents build tool config files from ranking above application code.
     // Test file noise penalty prevents test files from ranking above impl files for generic queries.
-    // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact.
     // IMPORTANT: compute sort score FIRST using original similarity, THEN apply promotion.
     const boostWeight = opts.keywordBoostWeight ?? 0.10;
-    const scored = chunks.map(chunk => {
+    const scored = merged.map(chunk => {
+      const exact = isExactName(chunk.name, exactTokens);
       const boost = computeKeywordBoost(chunk, queryTokens);
       const score = chunk.similarity * (1 - boostWeight)
         + boost * boostWeight
         - computeNoisePenalty(chunk, query!)
         - computeTestFilePenalty(chunk, query!)
         - computeHistoryPenalty(chunk);
-      // RET-02: Promote similarity for name-matched chunks so compressChunk keeps them intact
-      const promotedSimilarity = boost > 0
+      const promotedSimilarity = !exact && boost > 0
         ? Math.max(chunk.similarity, HIGH_RELEVANCE_SIMILARITY_THRESHOLD)
         : chunk.similarity;
-      return { chunk: { ...chunk, similarity: promotedSimilarity }, score };
+      return { chunk: { ...chunk, similarity: promotedSimilarity }, score, exact };
     });
     return scored
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => Number(b.exact) - Number(a.exact) || b.score - a.score || compareIds(a.chunk, b.chunk))
+      .slice(0, opts.limit)
       .map(({ chunk }) => chunk);
   }
 
@@ -375,7 +413,10 @@ export async function keywordSearchChunks(
   const queryTokens = [...new Set(query.toLowerCase()
     .split(/[\s.,;:!?"()\[\]{}/]+/)
     .filter(token => token.length >= 3))];
-  if (queryTokens.length === 0) return [];
+  const exactTokens = exactSymbolTokens(query, queryTokens);
+  if (queryTokens.length === 0 && exactTokens.length === 0) return [];
+  const columns = await chunkColumns(table);
+  const exactCandidates = await exactNameCandidates(table, exactTokens, columns);
 
   const predicate = queryTokens
     .map(t => {
@@ -386,42 +427,30 @@ export async function keywordSearchChunks(
     })
     .join(' OR ');
 
-  const rows = await table
+  const rows = queryTokens.length === 0 ? [] : await table
     .query()
     .where(predicate)
-    .select(['id', 'file_path', 'chunk_type', 'scope', 'name', 'content', 'start_line', 'end_line', 'file_type', 'source_kind'])
+    .select(columns)
     .limit(Math.min(limit * 10, 500))
     .toArray();
 
-  const scored = rows.map((r: Record<string, unknown>) => {
-    const chunk: RetrievedChunk = {
-      id: r.id as string,
-      filePath: r.file_path as string,
-      chunkType: r.chunk_type as string,
-      sourceKind: r.source_kind === 'history' ? 'history' : 'file',
-      scope: (r.scope as string) ?? null,
-      name: (r.name as string) ?? null,
-      content: r.content as string,
-      startLine: r.start_line as number,
-      endLine: r.end_line as number,
-      similarity: 0,
-      fileType: (r.file_type as string) ?? 'source',
-    };
+  const scored = deduplicateChunks([...exactCandidates, ...rows.map(row => rowToChunk(row))]).map(chunk => {
+    const exact = isExactName(chunk.name, exactTokens);
     const identifiers = `${chunk.filePath} ${chunk.name ?? ''}`.toLowerCase();
     const identifierScore = Math.max(
       computeKeywordBoost(chunk, queryTokens),
-      queryTokens.filter(token => identifiers.includes(token)).length / queryTokens.length,
+      queryTokens.filter(token => identifiers.includes(token)).length / Math.max(1, queryTokens.length),
     );
     const body = chunk.content.toLowerCase();
-    const bodyScore = queryTokens.filter(token => body.includes(token)).length / queryTokens.length;
-    return { chunk, identifierScore, bodyScore };
+    const bodyScore = queryTokens.filter(token => body.includes(token)).length / Math.max(1, queryTokens.length);
+    return { chunk, identifierScore, bodyScore, exact };
   });
 
   return scored
-    .filter(({ identifierScore, bodyScore }) => identifierScore > 0 || bodyScore > 0)
-    .sort((a, b) => b.identifierScore - a.identifierScore
+    .filter(({ identifierScore, bodyScore, exact }) => exact || identifierScore > 0 || bodyScore > 0)
+    .sort((a, b) => Number(b.exact) - Number(a.exact) || b.identifierScore - a.identifierScore
       || b.bodyScore - a.bodyScore
-      || (a.chunk.id < b.chunk.id ? -1 : a.chunk.id > b.chunk.id ? 1 : 0))
+      || compareIds(a.chunk, b.chunk))
     .slice(0, limit)
     .map(({ chunk }) => chunk);
 }

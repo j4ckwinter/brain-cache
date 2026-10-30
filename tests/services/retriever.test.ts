@@ -21,6 +21,8 @@ vi.mock('../../src/services/lancedb.js', () => ({
 
 import {
   searchChunks,
+  computeKeywordBoost,
+  extractQueryTokens,
   deduplicateChunks,
   classifyRetrievalMode,
   RETRIEVAL_STRATEGIES,
@@ -40,8 +42,9 @@ function makeMockTable(rows: Record<string, unknown>[]) {
   const limit = vi.fn().mockReturnValue({ toArray });
   const distanceType = vi.fn().mockReturnValue({ limit });
   const nearestTo = vi.fn().mockReturnValue({ distanceType });
-  const query = vi.fn().mockReturnValue({ nearestTo });
-  return { query } as unknown as import('@lancedb/lancedb').Table;
+  const where = vi.fn().mockReturnValue({ select: () => ({ limit: () => ({ toArray: async () => [] }) }) });
+  const query = vi.fn().mockReturnValue({ nearestTo, where });
+  return { query, schema: async () => ({ fields: [{ name: 'file_type' }, { name: 'source_kind' }] }) } as unknown as import('@lancedb/lancedb').Table;
 }
 
 function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
@@ -62,6 +65,17 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<strin
 }
 
 describe('searchChunks', () => {
+  it('propagates exact-name query storage failures', async () => {
+    const table = makeMockTable([]);
+    const failure = new Error('unreadable table');
+    vi.mocked(table.query).mockReturnValueOnce({
+      nearestTo: () => ({ distanceType: () => ({ limit: () => ({ toArray: async () => [] }) }) }),
+    } as never).mockReturnValueOnce({
+      where: () => ({ select: () => ({ limit: () => ({ toArray: async () => { throw failure; } }) }) }),
+    } as never);
+    await expect(searchChunks(table, [1, 0], { limit: 5, distanceThreshold: 0.4 }, 'findNeedle')).rejects.toBe(failure);
+  });
+
   it('converts _distance to similarity (1 - _distance)', async () => {
     const row = makeRow({ _distance: 0.2 });
     const table = makeMockTable([row]);
@@ -584,33 +598,18 @@ describe('PREC-01 / PREC-02: tiered keyword boost', () => {
     expect(results[0].id).toBe('exact');
   });
 
-  // Test B: camelCase sub-token match — "searchChunks" decomposed to ["search", "chunks"],
-  // both appear in query "search chunks function".
-  // Old behavior: target "retriever.ts searchchunks" includes "search" and "chunks" — also partial match!
-  // Gap: set noMatch similarity high enough that old fallback can't overcome it.
-  //   Old camelMatch (d=0.45 → sim=0.55): "search" in "searchchunks" and "chunks" in "searchchunks" → 2/3 = 0.667 boost
-  //     score = 0.55 * 0.60 + 0.667 * 0.40 = 0.33 + 0.267 = 0.597
-  //   Old noMatch (d=0.18 → sim=0.82): "format" NOT in "formatchunk"? wait — "formatChunk" target = "formatter.ts formatchunk"
-  //     "search" not in target, "chunks" not in target, "function" not in target → 0 boost
-  //     score = 0.82 * 0.60 = 0.492
-  //   Actually old impl passes too! We need noMatch to have a name that accidentally matches tokens.
-  // Solution: use a noMatch whose name and file have no overlap with query at all, but a VERY high similarity.
-  //   Old camelMatch score: 0.597; Old noMatch score (d=0.10→sim=0.90): 0.90*0.60=0.54 — noMatch wins!
-  //   New Tier-2: all sub-tokens ["search","chunks"] in query → return 1.0
-  //     camelMatch score: 0.55 * 0.60 + 1.0 * 0.40 = 0.33 + 0.40 = 0.73 > 0.54 — PASS
-  it('camelCase sub-token match boosts matching chunk (PREC-01)', async () => {
-    const camelMatch = makeRow({ id: 'camel', file_path: 'src/services/retriever.ts', name: 'searchChunks', _distance: 0.45 });
-    const noMatch = makeRow({ id: 'nomatch', file_path: 'src/services/emitter.ts', name: 'emitEvent', _distance: 0.10 });
-    const table = makeMockTable([camelMatch, noMatch]);
+  it.each(['searchChunks', 'SearchChunks', 'HTTPClient'])('decomposes %s before lowercasing', (name) => {
+    const words = name === 'HTTPClient' ? 'http client' : 'search chunks';
+    const chunk = { filePath: 'src/unrelated.ts', name } as RetrievedChunk;
+    expect(computeKeywordBoost(chunk, extractQueryTokens(`please locate ${words} function`))).toBe(1);
+  });
 
-    const results = await searchChunks(
-      table,
-      [0.1],
-      { limit: 10, distanceThreshold: 0.5, keywordBoostWeight: 0.40 },
-      'search chunks function'
-    );
-
-    // searchChunks must rank first via camelCase sub-token decomposition
+  it('camelCase decomposition reverses a stronger vector distractor', async () => {
+    const table = makeMockTable([
+      makeRow({ id: 'camel', file_path: 'src/retriever.ts', name: 'searchChunks', _distance: 0.45 }),
+      makeRow({ id: 'other', file_path: 'src/emitter.ts', name: 'emitEvent', _distance: 0.10 }),
+    ]);
+    const results = await searchChunks(table, [0.1], { limit: 10, distanceThreshold: 0.5, keywordBoostWeight: 0.40 }, 'please locate search chunks function');
     expect(results[0].id).toBe('camel');
   });
 
@@ -730,9 +729,11 @@ describe('keywordSearchChunks', () => {
     const toArray = vi.fn().mockResolvedValue(rows);
     const limitFn = vi.fn().mockReturnValue({ toArray });
     const selectFn = vi.fn().mockReturnValue({ limit: limitFn });
-    const whereFn = vi.fn().mockReturnValue({ select: selectFn });
+    const whereFn = vi.fn().mockImplementation((predicate: string) => predicate.startsWith('lower(name) IN')
+      ? { select: () => ({ limit: () => ({ toArray: async () => [] }) }) }
+      : { select: selectFn });
     const queryFn = vi.fn().mockReturnValue({ where: whereFn });
-    const table = { query: queryFn } as unknown as import('@lancedb/lancedb').Table;
+    const table = { query: queryFn, schema: async () => ({ fields: [{ name: 'file_type' }, { name: 'source_kind' }] }) } as unknown as import('@lancedb/lancedb').Table;
     return { table, queryFn, whereFn, selectFn, limitFn, toArray };
   }
 
@@ -755,8 +756,8 @@ describe('keywordSearchChunks', () => {
   it('calls table.query().where() with LIKE predicates containing each query token', async () => {
     const { table, whereFn } = makeKeywordMockTable([makeKeywordRow()]);
     await keywordSearchChunks(table, 'retriever search', 10);
-    expect(whereFn).toHaveBeenCalledOnce();
-    const predicate: string = whereFn.mock.calls[0][0];
+    expect(whereFn).toHaveBeenCalledTimes(2);
+    const predicate: string = whereFn.mock.calls[1][0];
     expect(predicate).toContain("LIKE '%retriever%'");
     expect(predicate).toContain("LIKE '%search%'");
   });
@@ -794,14 +795,14 @@ describe('keywordSearchChunks', () => {
   it('escapes underscore in SQL LIKE predicate', async () => {
     const { table, whereFn } = makeKeywordMockTable([]);
     await keywordSearchChunks(table, 'test_fn', 10);
-    const predicate: string = whereFn.mock.calls[0][0];
+    const predicate: string = whereFn.mock.calls[1][0];
     expect(predicate).toContain("LIKE '%test\\_fn%' ESCAPE '\\'");
   });
 
   it('escapes percent sign in SQL LIKE predicate', async () => {
     const { table, whereFn } = makeKeywordMockTable([]);
     await keywordSearchChunks(table, '100%', 10);
-    const predicate: string = whereFn.mock.calls[0][0];
+    const predicate: string = whereFn.mock.calls[1][0];
     expect(predicate).toContain("LIKE '%100\\%%' ESCAPE '\\'");
     expect(predicate).toContain('lower(content)');
   });
