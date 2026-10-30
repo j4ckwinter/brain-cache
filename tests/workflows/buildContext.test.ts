@@ -284,18 +284,28 @@ describe('runBuildContext', () => {
     };
     mockSearchChunks.mockResolvedValue([sourceChunk, historyChunk]);
     mockDeduplicateChunks.mockReturnValue([sourceChunk, historyChunk]);
-    mockAssembleContext.mockReturnValue({
-      content: '## Source Context\n\nsource body',
-      chunks: [sourceChunk],
-      tokenCount: 120,
-    });
+    const realCounter = await vi.importActual<typeof import('../../src/services/tokenCounter.js')>(
+      '../../src/services/tokenCounter.js',
+    );
+    mockAssembleContext.mockImplementation(realCounter.assembleContext);
+    mockCountChunkTokens.mockImplementation(realCounter.countChunkTokens);
 
     const result = await runBuildContext('why was this changed?');
-    expect(result.content).toContain('## Source Context');
+    expect(result.content).toContain(sourceChunk.content);
     expect(result.content).toContain('## Git History');
-    expect(result.content.indexOf('## Source Context')).toBeLessThan(
+    expect(result.content.indexOf(sourceChunk.content)).toBeLessThan(
       result.content.indexOf('## Git History'),
     );
+    expect(result.chunks.map(chunk => chunk.id)).toEqual(['c1', 'h1']);
+    expect(result.metadata.tokensSent).toBe(realCounter.countChunkTokens(result.content));
+    expect(result.metadata.filesInContext).toBe(1);
+
+    const sourceBudget = realCounter.assembleContext([sourceChunk], { maxTokens: 4096 }).tokenCount;
+    const limited = await runBuildContext('why was this changed?', { maxTokens: sourceBudget });
+    expect(limited.content).not.toContain('## Git History');
+    expect(limited.chunks.map(chunk => chunk.id)).toEqual(['c1']);
+    expect(limited.metadata.tokensSent).toBe(realCounter.countChunkTokens(limited.content));
+    expect(limited.metadata.tokensSent).toBeLessThanOrEqual(sourceBudget);
   });
 
   it('calls expandByEdges when mode is trace and edges table exists', async () => {

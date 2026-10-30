@@ -85,16 +85,11 @@ describe('assembleContext', () => {
     expect(result.tokenCount).toBeGreaterThan(0);
   });
 
-  it('stops adding chunks when next chunk would exceed budget', () => {
-    // Each formatted chunk = "// File: src/x.ts (lines N-N)\n<content>"
-    // With mock (word count), each is ~6-7 tokens
-    // Set maxTokens = 10 so only first chunk fits, second cannot be added
+  it('omits chunks that would exceed budget', () => {
     const chunks: RetrievedChunk[] = [
       makeChunk({ id: '1', filePath: 'src/a.ts', content: 'alpha beta gamma', startLine: 1, endLine: 1 }),
       makeChunk({ id: '2', filePath: 'src/b.ts', content: 'delta epsilon zeta', startLine: 2, endLine: 2 }),
     ];
-    // First chunk: "// File: src/a.ts (lines 1-1)\nalpha beta gamma" = 8 tokens
-    // Second chunk: separator (4 tokens) + ~8 tokens = 12 more → would exceed 10
     const result = assembleContext(chunks, { maxTokens: 10 });
     expect(result.chunks).toHaveLength(1);
     expect(result.chunks[0].id).toBe('1');
@@ -141,4 +136,38 @@ describe('assembleContext', () => {
     const expected = countChunkTokens(formatted);
     expect(result.tokenCount).toBe(expected);
   });
+  it('skips an oversized first chunk and keeps a later fitting chunk', () => {
+    const large = makeChunk({ id: 'large', content: 'word '.repeat(100) });
+    const small = makeChunk({ id: 'small', content: 'return 1;' });
+    const result = assembleContext([large, small], { maxTokens: 10 });
+    expect(result.chunks.map(chunk => chunk.id)).toEqual(['small']);
+    expect(result.tokenCount).toBe(countChunkTokens(result.content));
+    expect(result.tokenCount).toBeLessThanOrEqual(10);
+  });
+
+  it('budgets history headings and content after source regardless of input order', () => {
+    const source = makeChunk({ id: 'source', content: 'source body' });
+    const history = makeChunk({ id: 'history', sourceKind: 'history', content: 'commit body' });
+    const result = assembleContext([history, source], { maxTokens: 100 });
+    expect(result.chunks.map(chunk => chunk.id)).toEqual(['source', 'history']);
+    expect(result.content).toContain('## Git History\n\n### myFunction\ncommit body');
+    expect(result.content.indexOf('source body')).toBeLessThan(result.content.indexOf('## Git History'));
+    expect(result.tokenCount).toBe(countChunkTokens(result.content));
+
+    const sourceOnly = assembleContext([source], { maxTokens: 100 });
+    const limited = assembleContext([history, source], { maxTokens: sourceOnly.tokenCount });
+    expect(limited).toEqual(sourceOnly);
+  });
+
+  it('skips oversized history without leaving an empty or duplicate heading', () => {
+    const large = makeChunk({ id: 'large', sourceKind: 'history', content: 'word '.repeat(100) });
+    const small = makeChunk({ id: 'small', sourceKind: 'history', content: 'fix' });
+    const result = assembleContext([large, small], { maxTokens: 10 });
+    expect(result.chunks.map(chunk => chunk.id)).toEqual(['small']);
+    expect(result.content.startsWith('## Git History')).toBe(true);
+    expect(result.content.match(/## Git History/g)).toHaveLength(1);
+    expect(result.tokenCount).toBe(countChunkTokens(result.content));
+    expect(result.tokenCount).toBeLessThanOrEqual(10);
+  });
+
 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.0.2 — 2026-10-30
+
+- Apply the approximate context budget to source and Git history together, and report token estimates for the complete returned context.
+- Skip oversized retrieval candidates so smaller relevant chunks can still fit.
+
 ## 4.0.1 — 2026-10-30
 
 - Raised the minimum Zod dependency to 4.6.7 to address the oversized-collection memory exhaustion advisory.

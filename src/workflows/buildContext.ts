@@ -73,8 +73,6 @@ export async function runBuildContext(
 
   let deduped = deduplicateChunks(results);
   deduped = filterDedupedForNonTestChunks(deduped, query);
-  const sourceChunks = deduped.filter((chunk) => chunk.sourceKind !== 'history');
-  const historyChunks = deduped.filter((chunk) => chunk.sourceKind === 'history');
 
   /** Raw chunk body tokens in the retrieval set (before formatting / budget assembly). */
   const matchedPoolTokens = deduped.reduce(
@@ -82,16 +80,7 @@ export async function runBuildContext(
     0,
   );
 
-  const assembled = assembleContext(sourceChunks, { maxTokens });
-  const historySection = historyChunks
-    .map(
-      (chunk) =>
-        `### ${chunk.name ?? chunk.id}\n${chunk.content}`,
-    )
-    .join('\n\n');
-  const contentWithHistory = historySection.length > 0
-    ? `${assembled.content}\n\n## Git History\n\n${historySection}`
-    : assembled.content;
+  const assembled = assembleContext(deduped, { maxTokens });
 
   const { tokenCounts } = await readFileHashes(rootDir);
 
@@ -143,11 +132,13 @@ export async function runBuildContext(
     filteringPct = Math.round((1 - tokensSent / matchedPoolTokens) * 100);
   }
 
-  const uniqueFiles = [...new Set(assembled.chunks.map((c) => c.filePath))];
+  const uniqueFiles = [...new Set(assembled.chunks
+    .filter((chunk) => chunk.sourceKind !== 'history')
+    .map((chunk) => chunk.filePath))];
   const numFiles = uniqueFiles.length;
 
   const result: ContextResult = {
-    content: contentWithHistory,
+    content: assembled.content,
     chunks: assembled.chunks,
     metadata: {
       tokensSent,
