@@ -1,6 +1,6 @@
 {
   "name": "brain-cache",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Local MCP-first context engine for Claude. Index your codebase, retrieve only what matters, and cut token usage.",
   "license": "MIT",
   "type": "module",
@@ -51,7 +51,7 @@
     "pino": "^9.0.0",
     "tree-sitter-wasms": "0.1.13",
     "web-tree-sitter": "~0.25.10",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "apache-arrow": "^21.1.0",

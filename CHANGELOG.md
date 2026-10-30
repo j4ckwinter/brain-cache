@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.1 — 2026-10-30
+
+- Raised the minimum Zod dependency to 4.6.7 to address the oversized-collection memory exhaustion advisory.
+- Removed obsolete GSD workflow requirements from repository instructions.
+
+This is the first npm release of the 4.x changes described below.
+
 ## 4.0.0 — 2026-10-24
 
 ### Runtime requirement

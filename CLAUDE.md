@@ -1,5 +1,3 @@
-<!-- GSD:project-start source:PROJECT.md -->
-
 ## Project
 
 **Braincache**
@@ -14,9 +12,6 @@ Braincache is a local AI runtime and tool layer for Claude that uses the develop
 - **Architecture**: Workflows-first structure with strict folder layout (src/workflows/, src/services/, src/tools/, src/cli/, src/lib/)
 - **Hardware**: Must gracefully handle machines with no GPU — fallback to CPU or defer to Claude
 - **Complexity**: No over-abstraction, no unnecessary complexity, no premature generalization
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:research/STACK.md -->
 
 ## Technology Stack
 
@@ -123,48 +118,14 @@ Braincache is a local AI runtime and tool layer for Claude that uses the develop
 - [Ollama embedding models](https://ollama.com/blog/embedding-models) — nomic-embed-text, mxbai-embed-large
 - [LanceDB vs ChromaDB](https://zilliz.com/comparison/chroma-vs-lancedb) — embedded comparison
 - [Chalk ESM issue](https://github.com/chalk/chalk/issues/281) — CJS incompatibility in v5+
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 
 ## Conventions
 
 Conventions not yet established. Will populate as patterns emerge during development.
 
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
-
 ## Architecture
 
 Architecture not yet mapped. Follow existing patterns found in the codebase.
-
-<!-- GSD:architecture-end -->
-
-## GSD Workflow Enforcement
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd:quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd:debug` for investigation and bug fixing
-- `/gsd:execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-
-<!-- GSD:profile-end -->
 
 | Query type                                      | Tool               | NOT this        |
 | ----------------------------------------------- | ------------------ | --------------- |
