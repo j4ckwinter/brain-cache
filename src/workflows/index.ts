@@ -526,9 +526,6 @@ export async function diffAndCleanup(
   return { newFiles, changedFiles, removedFiles, unchangedFiles, filesToProcess, updatedHashes, mergedStats, outTokenCounts };
 }
 
-/**
- * Stage 6: Run the chunk + embed pipeline for filesToProcess.
- */
 export async function runChunkEmbedPipeline(
   filesToProcess: string[],
   contentMap: Map<string, string>,
@@ -587,9 +584,6 @@ export async function runChunkEmbedPipeline(
   return { pipelineStats, processedTokenCounts };
 }
 
-/**
- * Stage 7: Merge hashes and token counts, write final manifest and index state.
- */
 export async function writeManifestAndState(opts: WriteManifestOpts): Promise<void> {
   const {
     rootDir,

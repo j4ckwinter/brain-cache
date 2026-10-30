@@ -60,17 +60,6 @@ async function triggerReindex(rootDir: string): Promise<boolean> {
   }
 }
 
-/**
- * Runs the brain-cache file watcher.
- *
- * Monitors `targetPath` (or cwd) with Node.js `fs.watch` (recursive mode),
- * debounces file changes at 500ms, applies the crawler file policy,
- * calls `runIndex()` on debounce fire,
- * retries lock contention, suppresses runIndex stderr output
- * and prints compact summaries, and handles graceful shutdown via SIGINT/SIGTERM.
- *
- * @param targetPath - Directory to watch (defaults to current directory)
- */
 export async function runWatch(targetPath?: string): Promise<void> {
   const rootDir = resolve(targetPath ?? '.');
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
