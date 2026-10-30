@@ -789,6 +789,27 @@ describe('runIndex stat fast-path', () => {
     expect(mockReadFile).not.toHaveBeenCalled();
   });
 
+  it('backfills unchanged-file token counts once without re-embedding', async () => {
+    const file = fakeFiles[0];
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    mockCrawlSourceFiles.mockResolvedValue([file]);
+    mockReadFile.mockResolvedValue(content);
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { [file]: createHash('sha256').update(content).digest('hex') },
+      tokenCounts: {}, stats: { [file]: { size: 100, mtimeMs: 1000 } },
+    });
+    await runIndexLocal('/project');
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    const manifest = mockWriteFileHashes.mock.calls.at(-1)![1];
+    expect(manifest.tokenCounts[file]).toBeGreaterThan(0);
+    expect(mockWriteIndexState.mock.calls.at(-1)![1].totalTokens).toBe(manifest.tokenCounts[file]);
+    mockReadFileHashes.mockResolvedValue(manifest);
+    mockReadFile.mockClear();
+    await runIndexLocal('/project');
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
+
   it('reads file when stat-unchanged but tokenCounts missing (backfill D-48-06)', async () => {
     // File has hash and stats but no tokenCounts — must backfill by reading
     mockCrawlSourceFiles.mockResolvedValue([fakeFiles[0]]);

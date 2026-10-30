@@ -797,6 +797,11 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
 
         const partition = await statAndPartition(files, setup);
         const hashed = await readAndHash(partition.filesNeedingRead);
+        for (const [filePath, content] of hashed.contentMap) {
+          if (partition.existingTokenCounts[filePath] === undefined) {
+            partition.existingTokenCounts[filePath] = countChunkTokens(content);
+          }
+        }
 
         // Step 6f: Build currentHashes — fresh for read files, stored for stat-skipped
         const currentHashes: Record<string, string> = {};
