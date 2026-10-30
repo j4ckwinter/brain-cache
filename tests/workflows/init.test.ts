@@ -51,11 +51,12 @@ vi.mock('../../src/services/embedder.js', () => ({
   embedBatchWithRetry: vi.fn().mockResolvedValue([[0.1, 0.2]]),
 }));
 
-vi.mock('ollama', () => ({
-  default: {
+vi.mock('ollama', () => {
+  const client = {
     list: vi.fn(),
-  },
-}));
+  };
+  return { default: client, Ollama: vi.fn(function () { return client; }) };
+});
 
 import {
   detectCapabilities,

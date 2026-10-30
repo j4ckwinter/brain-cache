@@ -1,4 +1,4 @@
-import ollama from 'ollama';
+import { getOllamaClient } from './ollamaClient.js';
 import { EMBED_TIMEOUT_MS, COLD_START_RETRY_DELAY_MS, DEFAULT_EMBEDDING_DIMENSION } from '../lib/config.js';
 import { childLogger } from './logger.js';
 
@@ -24,7 +24,7 @@ export async function embedBatch(
 
   log.debug({ model, batchSize: texts.length }, 'Embedding batch');
 
-  const embedCall = ollama.embed({ model, input: texts, truncate: true }).then((r) => r.embeddings);
+  const embedCall = getOllamaClient().embed({ model, input: texts, truncate: true }).then((r) => r.embeddings);
 
   let timerId: ReturnType<typeof setTimeout>;
   const timeoutPromise = new Promise<never>((_, reject) => {

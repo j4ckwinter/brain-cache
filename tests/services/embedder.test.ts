@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock ollama module before importing embedder
-vi.mock('ollama', () => ({
-  default: {
+vi.mock('ollama', () => {
+  const client = {
     embed: vi.fn(),
-  },
-}));
+  };
+  return { default: client, Ollama: vi.fn(function () { return client; }) };
+});
 
 import ollama from 'ollama';
 import { embedBatch, embedBatchWithRetry } from '../../src/services/embedder.js';

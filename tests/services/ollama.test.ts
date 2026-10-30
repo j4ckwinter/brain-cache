@@ -7,12 +7,13 @@ vi.mock('node:child_process', () => ({
 }));
 
 // Mock the ollama npm package
-vi.mock('ollama', () => ({
-  default: {
+vi.mock('ollama', () => {
+  const client = {
     list: vi.fn(),
     pull: vi.fn(),
-  },
-}));
+  };
+  return { default: client, Ollama: vi.fn(function () { return client; }) };
+});
 
 import {
   isOllamaInstalled,
