@@ -59,8 +59,15 @@ describe('runClean', () => {
 
   it('defaults to current directory when no argument given', async () => {
     const { runClean } = await import('../../src/workflows/clean.js');
-    // Run with no argument — should not throw (no .brain-cache/ in cwd)
-    // Just verify it runs without error (cwd is likely not sensitive)
-    await expect(runClean()).resolves.not.toThrow();
+    const tempDir = await mkdtemp(join(tmpdir(), 'brain-cache-clean-cwd-'));
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    try {
+      await mkdir(join(tempDir, '.brain-cache'));
+      await runClean();
+      expect(existsSync(join(tempDir, '.brain-cache'))).toBe(false);
+    } finally {
+      cwdSpy.mockRestore();
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });
