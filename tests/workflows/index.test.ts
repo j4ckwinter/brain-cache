@@ -514,6 +514,21 @@ describe('runIndex', () => {
     expect(callOrder.indexOf('insertHistoryChunks')).toBeGreaterThan(callOrder.indexOf('deleteHistoryChunks'));
   });
 
+  it('finalizes unchanged files and ingests history exactly once', async () => {
+    await runIndex('/project');
+    mockReadFileHashes.mockResolvedValue(mockWriteFileHashes.mock.calls.at(-1)![1]);
+    mockReadGitConfig.mockResolvedValue({ enabled: true });
+    mockFetchGitCommits.mockClear();
+    mockWriteFileHashes.mockClear();
+    mockWriteIndexState.mockClear();
+    mockEmbedBatchWithRetry.mockClear();
+    await runIndex('/project');
+    expect(mockFetchGitCommits).toHaveBeenCalledExactlyOnceWith('/project', 500);
+    expect(mockWriteFileHashes).toHaveBeenCalledTimes(1);
+    expect(mockWriteIndexState).toHaveBeenCalledTimes(1);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+  });
+
   it('skips history ingestion when git.enabled is false', async () => {
     mockReadGitConfig.mockResolvedValue({ enabled: false, maxCommits: 100 });
     await runIndex('/project');

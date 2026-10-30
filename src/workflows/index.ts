@@ -527,81 +527,14 @@ export async function diffAndCleanup(
 }
 
 /**
- * Stage 5 (early exit path): Write manifest and index state when nothing needs re-indexing.
- */
-export async function writeEarlyExitManifest(
-  setup: Pick<SetupResult, 'rootDir' | 'table' | 'profile' | 'dim' | 'gitCfg'>,
-  diff: DiffCleanupResult,
-  files: string[],
-  currentHashes: Record<string, string>,
-): Promise<void> {
-  const { rootDir, table, profile, dim, gitCfg } = setup;
-  const { updatedHashes, outTokenCounts, mergedStats, unchangedFiles } = diff;
-
-  process.stderr.write(`brain-cache: nothing to re-index\n`);
-
-  if (gitCfg.enabled === true) {
-    const maxCommits = gitCfg.maxCommits ?? 500;
-    try {
-      await runGitHistoryIngestion({
-        table,
-        rootDir,
-        embeddingModel: profile.embeddingModel,
-        dim,
-        maxCommits,
-      });
-    } catch (error) {
-      if (isGitCommandError(error)) {
-        process.stderr.write(`Warning: ${error.message}\n`);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  // Write updated manifest (may have removed some entries) and index state
-  const finalHashes = { ...updatedHashes };
-  for (const filePath of files) {
-    finalHashes[filePath] = currentHashes[filePath];
-  }
-  await writeFileHashes(rootDir, { hashes: finalHashes, tokenCounts: outTokenCounts, stats: mergedStats });
-
-  let allFilesTotalTokens = 0;
-  for (const fp of files) {
-    allFilesTotalTokens += outTokenCounts[fp] ?? 0;
-  }
-
-  // Update index state with current totals
-  const totalFiles = unchangedFiles.length;
-  const chunkCount = await table.countRows();
-  await writeIndexState(rootDir, {
-    version: 1,
-    chunkFormatVersion: CHUNK_FORMAT_VERSION,
-    embeddingModel: profile.embeddingModel,
-    dimension: dim,
-    indexedAt: new Date().toISOString(),
-    fileCount: totalFiles,
-    chunkCount,
-    totalTokens: allFilesTotalTokens,
-  });
-  process.stderr.write(
-    `brain-cache: indexing complete\n` +
-    `  Files:        ${totalFiles}\n` +
-    `  Chunks:       ${chunkCount}\n` +
-    `  Model:        ${profile.embeddingModel}\n` +
-    `  Stored in:    ${rootDir}/.brain-cache/\n`
-  );
-}
-
-/**
  * Stage 6: Run the chunk + embed pipeline for filesToProcess.
  */
 export async function runChunkEmbedPipeline(
   filesToProcess: string[],
   contentMap: Map<string, string>,
-  setup: Pick<SetupResult, 'table' | 'edgesTable' | 'profile' | 'dim' | 'rootDir' | 'gitCfg'>,
+  setup: Pick<SetupResult, 'table' | 'edgesTable' | 'profile' | 'dim'>,
 ): Promise<ChunkEmbedResult> {
-  const { table, edgesTable, profile, dim, rootDir, gitCfg } = setup;
+  const { table, edgesTable, profile, dim } = setup;
 
   const pipelineStats: IndexGroupStats = {
     totalRawTokens: 0,
@@ -612,6 +545,11 @@ export async function runChunkEmbedPipeline(
     skippedChunks: 0,
   };
   const processedTokenCounts: Record<string, number> = {};
+  if (filesToProcess.length === 0) {
+    process.stderr.write('brain-cache: nothing to re-index\n');
+    return { pipelineStats, processedTokenCounts };
+  }
+
 
   for (let groupStart = 0; groupStart < filesToProcess.length; groupStart += FILE_READ_CONCURRENCY) {
     const group = filesToProcess.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
@@ -645,25 +583,6 @@ export async function runChunkEmbedPipeline(
 
   // Step 8b: Create vector index if table is large enough
   await createVectorIndexIfNeeded(table, profile.embeddingModel);
-
-  if (gitCfg.enabled === true) {
-    const maxCommits = gitCfg.maxCommits ?? 500;
-    try {
-      await runGitHistoryIngestion({
-        table,
-        rootDir,
-        embeddingModel: profile.embeddingModel,
-        dim,
-        maxCommits,
-      });
-    } catch (error) {
-      if (isGitCommandError(error)) {
-        process.stderr.write(`Warning: ${error.message}\n`);
-      } else {
-        throw error;
-      }
-    }
-  }
 
   return { pipelineStats, processedTokenCounts };
 }
@@ -715,6 +634,7 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
 
   // Step 9b: Write index state
   const totalFiles = Object.keys(finalHashes).length;
+  const chunkCount = await table.countRows();
   await writeIndexState(rootDir, {
     version: 1,
     chunkFormatVersion: CHUNK_FORMAT_VERSION,
@@ -722,10 +642,20 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
     dimension: dim,
     indexedAt: new Date().toISOString(),
     fileCount: totalFiles,
-    chunkCount: await table.countRows(),
+    chunkCount,
     totalTokens: allFilesTotalTokens,
   });
 
+  if (filesToProcess.length === 0) {
+    process.stderr.write(
+      `brain-cache: indexing complete\n` +
+      `  Files:        ${totalFiles}\n` +
+      `  Chunks:       ${chunkCount}\n` +
+      `  Model:        ${profile.embeddingModel}\n` +
+      `  Stored in:    ${rootDir}/.brain-cache/\n`,
+    );
+    return;
+  }
   printSummary({
     totalFiles,
     totalChunks: pipelineStats.totalChunks,
@@ -816,12 +746,24 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
 
         const diff = await diffAndCleanup(files, currentHashes, partition, setup);
 
-        if (diff.filesToProcess.length === 0) {
-          await writeEarlyExitManifest(setup, diff, files, currentHashes);
-          return;
-        }
-
         const embed = await runChunkEmbedPipeline(diff.filesToProcess, hashed.contentMap, setup);
+        if (setup.gitCfg.enabled === true) {
+          try {
+            await runGitHistoryIngestion({
+              table: setup.table,
+              rootDir,
+              embeddingModel: setup.profile.embeddingModel,
+              dim: setup.dim,
+              maxCommits: setup.gitCfg.maxCommits ?? 500,
+            });
+          } catch (error) {
+            if (isGitCommandError(error)) {
+              process.stderr.write(`Warning: ${error.message}\n`);
+            } else {
+              throw error;
+            }
+          }
+        }
         await writeManifestAndState({
           rootDir: setup.rootDir,
           files,
