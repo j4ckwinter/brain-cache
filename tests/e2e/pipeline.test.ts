@@ -112,6 +112,22 @@ describe('e2e pipeline', () => {
     };
   }
 
+  it('recovers partially stored new files without duplicating real database rows', async () => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    await writeFile(join(projectRoot, 'src', 'new.ts'), Array.from({ length: 51 }, (_, i) =>
+      `export function added${i}() { return helper(); }`).join('\n'));
+    mockEmbedBatchWithRetry.mockImplementationOnce(async (_model: string, texts: string[]) => ({
+      embeddings: texts.map(() => fakeVec()), skipped: 0, zeroVectorIndices: new Set<number>(),
+    })).mockRejectedValueOnce(new Error('interrupted second batch'));
+    await expect(runIndex(projectRoot)).rejects.toThrow('interrupted second batch');
+    expect((await counts()).chunks).toBe(initial.chunks + 50);
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual({ chunks: initial.chunks + 51, edges: initial.edges + 51 });
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual({ chunks: initial.chunks + 51, edges: initial.edges + 51 });
+  });
+
   it('repeated forced rebuilds replace chunks and edges without duplicates', async () => {
     const runIndex = await indexFixture();
     const initial = await counts();

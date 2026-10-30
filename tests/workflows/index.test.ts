@@ -453,6 +453,31 @@ describe('runIndex', () => {
     expect(mockWriteFileHashes.mock.calls.at(-1)![1].hashes).toHaveProperty(badFile);
   });
 
+  it('replaces partial new-file chunks when retrying an interrupted run', async () => {
+    const file = fakeFiles[0];
+    mockCrawlSourceFiles.mockResolvedValue([file]);
+    mockChunkFile.mockImplementation((filePath) => ({
+      chunks: Array.from({ length: 51 }, (_, i) => fakeChunk(filePath, i)), edges: [],
+    }));
+    let storedRows: { id: string; file_path: string }[] = [];
+    mockInsertChunks.mockImplementation(async (_table, rows) => { storedRows.push(...rows); });
+    mockDeleteChunksByFilePaths.mockImplementation(async (_table, paths) => {
+      storedRows = storedRows.filter(row => !paths.includes(row.file_path));
+    });
+    mockEmbedBatchWithRetry.mockImplementation(async (_model, texts) => ({
+      embeddings: texts.map(() => zeroVector768), skipped: 0, zeroVectorIndices: new Set(),
+    }));
+    mockEmbedBatchWithRetry.mockResolvedValueOnce({
+      embeddings: Array.from({ length: 50 }, () => zeroVector768), skipped: 0, zeroVectorIndices: new Set(),
+    }).mockRejectedValueOnce(new Error('interrupted embedding'));
+    await expect(runIndex('/project')).rejects.toThrow('interrupted embedding');
+    expect(storedRows).toHaveLength(50);
+    expect(mockWriteFileHashes).not.toHaveBeenCalled();
+    await runIndex('/project');
+    expect(storedRows).toHaveLength(51);
+    expect(new Set(storedRows.map(row => row.id)).size).toBe(51);
+  });
+
   it('ingests git history after file indexing when git.enabled=true', async () => {
     mockReadGitConfig.mockResolvedValue({ enabled: true, maxCommits: 25 });
     mockFetchGitCommits.mockResolvedValue([

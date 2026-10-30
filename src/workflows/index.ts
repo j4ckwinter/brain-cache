@@ -486,8 +486,8 @@ export async function diffAndCleanup(
     `${removedFiles.length} removed (${unchangedFiles.length} unchanged)\n`
   );
 
-  // Step 6h: Delete chunks for removed + changed files (batch — PERF-02)
-  const filesToDelete = [...removedFiles, ...changedFiles];
+  // New files may have rows from a run interrupted before its manifest was saved.
+  const filesToDelete = [...removedFiles, ...changedFiles, ...newFiles];
   if (filesToDelete.length > 0) {
     await deleteChunksByFilePaths(table, filesToDelete);
     // Batch edge deletion with single IN predicate
