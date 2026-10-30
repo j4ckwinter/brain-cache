@@ -29,7 +29,7 @@ import {
   escapeSqlLiteral,
   type ChunkRow,
 } from '../services/lancedb.js';
-import { EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
+import { CHUNK_FORMAT_VERSION, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk, CallEdge, FileStatEntry } from '../lib/types.js';
 import { formatTokenSavings } from '../lib/format.js';
@@ -577,6 +577,7 @@ export async function writeEarlyExitManifest(
   const chunkCount = await table.countRows();
   await writeIndexState(rootDir, {
     version: 1,
+    chunkFormatVersion: CHUNK_FORMAT_VERSION,
     embeddingModel: profile.embeddingModel,
     dimension: dim,
     indexedAt: new Date().toISOString(),
@@ -716,6 +717,7 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
   const totalFiles = files.length;
   await writeIndexState(rootDir, {
     version: 1,
+    chunkFormatVersion: CHUNK_FORMAT_VERSION,
     embeddingModel: profile.embeddingModel,
     dimension: dim,
     indexedAt: new Date().toISOString(),

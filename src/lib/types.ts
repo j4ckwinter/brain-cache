@@ -28,6 +28,7 @@ export const CodeChunkSchema = z.object({
 export type CodeChunk = z.infer<typeof CodeChunkSchema>;
 
 export const IndexStateSchema = z.object({
+  chunkFormatVersion: z.number().int().positive().optional(),
   version:        z.literal(1),
   embeddingModel: z.string(),
   dimension:      z.number().int(),

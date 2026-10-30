@@ -144,8 +144,11 @@ function getLanguageCategory(ext: string): string {
   }
 }
 
-// Reads the name field from a tree-sitter node, or returns null.
 function extractName(node: SyntaxNode): string | null {
+  if (node.type === 'arrow_function' && node.parent?.type === 'variable_declarator') {
+    const binding = node.parent.childForFieldName('name');
+    return binding?.type === 'identifier' ? binding.text : null;
+  }
   return node.childForFieldName?.('name')?.text ?? null;
 }
 
@@ -228,8 +231,10 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   const chunks: CodeChunk[] = [];
   const edges: CallEdge[] = [];
 
-  let currentChunkId: string | null = null;
-  let currentSymbol: string | null = null;
+  const fileChunkId = `${filePath}:file`;
+  // The preorder walk has already registered every extracted ancestor when a
+  // call is visited. Node IDs are local to this tree and never persisted.
+  const chunksByNode = new Map<number, CodeChunk>();
 
   try {
     for (const node of walkNodes(tree.rootNode)) {
@@ -245,14 +250,19 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
           }
           // Skip dynamic call targets (subscript_expression, etc.) per pitfall 6
           if (toSymbol) {
-            const chunkId = currentChunkId ?? `${filePath}:0`;
-            const symbol = currentSymbol;
+            let ancestor = node.parent;
+            let owner: CodeChunk | undefined;
+            while (ancestor) {
+              owner = chunksByNode.get(ancestor.id);
+              if (owner) break;
+              ancestor = ancestor.parent;
+            }
             edges.push({
-              fromChunkId: chunkId,
+              fromChunkId: owner?.id ?? fileChunkId,
               fromFile: filePath,
-              fromSymbol: symbol,
+              fromSymbol: owner?.name ?? null,
               toSymbol,
-              toFile: null, // Resolved at query time, not index time
+              toFile: null,
               edgeType: 'call',
             });
           }
@@ -267,7 +277,7 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
           const isRelative = raw.startsWith('./') || raw.startsWith('../');
           const toFile = isRelative ? resolve(dirname(filePath), raw) : null;
           edges.push({
-            fromChunkId: `${filePath}:0`,
+            fromChunkId: fileChunkId,
             fromFile: filePath,
             fromSymbol: null,
             toSymbol: raw,
@@ -308,8 +318,8 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
       const name = extractName(node);
       const scope = extractScope(node);
 
-      chunks.push({
-        id:        `${filePath}:${node.startPosition.row}`,
+      const chunk: CodeChunk = {
+        id:        `${filePath}:${node.startIndex}:${node.endIndex}:${node.type}`,
         filePath,
         chunkType,
         scope,
@@ -317,11 +327,9 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
         content:   content.slice(node.startIndex, node.endIndex),
         startLine: node.startPosition.row + 1,
         endLine:   node.endPosition.row + 1,
-      });
-
-      // Update currentChunkId tracking for associating call_expressions with their enclosing chunk
-      currentChunkId = `${filePath}:${node.startPosition.row}`;
-      currentSymbol = extractName(node);
+      };
+      chunks.push(chunk);
+      chunksByNode.set(node.id, chunk);
     }
   } finally {
     tree.delete();
@@ -330,7 +338,7 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   // Fallback: if language was found but no chunks extracted, emit one file-type chunk
   if (chunks.length === 0) {
     chunks.push({
-      id:        `${filePath}:0`,
+      id:        fileChunkId,
       filePath,
       chunkType: 'file',
       scope:     null,

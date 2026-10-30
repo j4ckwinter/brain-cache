@@ -3,7 +3,7 @@
  * No live Ollama — embeddings are deterministic fake vectors.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -170,6 +170,55 @@ describe('e2e pipeline', () => {
     expect(await counts()).toEqual(initial);
     const schema = await (await db.openTable('chunks')).schema();
     expect(schema.fields.some(field => field.name === 'file_type')).toBe(true);
+  });
+
+  async function downgradeChunkFormat(revision?: number) {
+    const path = join(projectRoot, '.brain-cache', 'index_state.json');
+    const state = JSON.parse(await readFile(path, 'utf8'));
+    if (revision === undefined) delete state.chunkFormatVersion;
+    else state.chunkFormatVersion = revision;
+    await writeFile(path, JSON.stringify(state));
+  }
+
+  it.each([undefined, 1])('rebuilds unchanged files for obsolete chunk format %s and then reuses it', async (revision) => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    await downgradeChunkFormat(revision);
+    mockEmbedBatchWithRetry.mockClear();
+    await runIndex(projectRoot);
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+    expect(await counts()).toEqual(initial);
+    const { readIndexState } = await import('../../src/services/lancedb.js');
+    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: 2 });
+    mockEmbedBatchWithRetry.mockClear();
+    await runIndex(projectRoot);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    expect(await counts()).toEqual(initial);
+    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: 2 });
+  });
+
+  it('retries an interrupted chunk format rebuild on the next ordinary index', async () => {
+    const runIndex = await indexFixture();
+    const initial = await counts();
+    await downgradeChunkFormat();
+    mockEmbedBatchWithRetry.mockRejectedValueOnce(new Error('embedding unavailable'));
+    await expect(runIndex(projectRoot)).rejects.toThrow('embedding unavailable');
+    const { readIndexState } = await import('../../src/services/lancedb.js');
+    expect(await readIndexState(projectRoot)).toBeNull();
+    await runIndex(projectRoot);
+    expect(await counts()).toEqual(initial);
+    expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: 2 });
+  });
+
+  it('keeps same-line class and method chunks distinct through storage and retrieval', async () => {
+    await mkdir(join(projectRoot, 'src'), { recursive: true });
+    await writeFile(join(projectRoot, 'src', 'inline.ts'), 'class Example { one() { return 1; } two() { return 2; } }');
+    const { runIndex } = await import('../../src/workflows/index.js');
+    const { runSearch } = await import('../../src/workflows/search.js');
+    await runIndex(projectRoot);
+    const result = await runSearch('example methods', { path: projectRoot, limit: 10 });
+    expect(result.chunks.map(chunk => chunk.name).sort()).toEqual(['Example', 'one', 'two']);
+    expect(new Set(result.chunks.map(chunk => chunk.id)).size).toBe(3);
   });
 
 });

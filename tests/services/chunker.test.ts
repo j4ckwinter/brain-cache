@@ -231,3 +231,58 @@ describe('arrow function extraction', () => {
     expect(arrowChunks.every(c => c.name === 'outer' || c.name === 'middle')).toBe(true);
   });
 });
+
+describe('structural chunk identity and call ownership', () => {
+  it('keeps same-line classes, methods, and sibling functions distinct and deterministic', async () => {
+    const source = 'class A { one() { first(); } two() { second(); } } function sibling() { third(); }';
+    const result = await chunkFile('same.ts', source);
+    expect(result.chunks.map(c => c.name)).toEqual(['A', 'one', 'two', 'sibling']);
+    expect(new Set(result.chunks.map(c => c.id)).size).toBe(4);
+    expect((await chunkFile('same.ts', source)).chunks.map(c => c.id))
+      .toEqual(result.chunks.map(c => c.id));
+    for (const [owner, target] of [['one', 'first'], ['two', 'second'], ['sibling', 'third']]) {
+      const chunk = result.chunks.find(c => c.name === owner)!;
+      expect(result.edges.filter(e => e.fromChunkId === chunk.id).map(e => e.toSymbol)).toEqual([target]);
+    }
+  });
+
+  it('restores enclosing ownership after nested functions and resets ownership at module scope', async () => {
+    const { chunks, edges } = await chunkFile('nested.ts', [
+      'function outer() {',
+      '  before();',
+      '  function inner() { inside(); }',
+      '  after();',
+      '  items.map(() => callback());',
+      '}',
+      'moduleCall();',
+    ].join('\n'));
+    expect(chunks.map(c => c.name)).toEqual(['outer', 'inner']);
+    const outer = chunks.find(c => c.name === 'outer')!;
+    const inner = chunks.find(c => c.name === 'inner')!;
+    expect(edges.filter(e => e.fromChunkId === outer.id).map(e => e.toSymbol))
+      .toEqual(['before', 'after', 'map', 'callback']);
+    expect(edges.filter(e => e.fromChunkId === inner.id).map(e => e.toSymbol)).toEqual(['inside']);
+    expect(edges.find(e => e.toSymbol === 'moduleCall')).toMatchObject({ fromSymbol: null, fromChunkId: 'nested.ts:file' });
+  });
+
+  it('separates first-line structural chunks from file calls and imports', async () => {
+    const { chunks, edges } = await chunkFile('first.ts', 'import { x } from "./dep"; boot(); function f() { inside(); } tail();');
+    const fn = chunks.find(c => c.name === 'f')!;
+    expect(fn.id).not.toBe('first.ts:file');
+    expect(edges.filter(e => e.fromChunkId === fn.id).map(e => e.toSymbol)).toEqual(['inside']);
+    expect(edges.filter(e => e.fromChunkId === 'first.ts:file').map(e => [e.fromSymbol, e.toSymbol]))
+      .toEqual([[null, './dep'], [null, 'boot'], [null, 'tail']]);
+    const fallback = await chunkFile('fallback.ts', 'boot();');
+    expect(fallback.chunks[0].id).toBe('fallback.ts:file');
+    expect(fallback.edges[0].fromChunkId).toBe(fallback.chunks[0].id);
+  });
+
+  it('names admitted arrows from identifier declarators and uses that name for their calls', async () => {
+    const { chunks, edges } = await chunkFile('arrow.ts', 'const local = () => first(); export const exposed = () => second();');
+    expect(chunks.map(c => c.name)).toEqual(['local', 'exposed']);
+    expect(edges.map(e => [e.fromSymbol, e.toSymbol])).toEqual([['local', 'first'], ['exposed', 'second']]);
+    expect(edges.map(e => e.fromChunkId)).toEqual(chunks.map(c => c.id));
+    const destructured = await chunkFile('pattern.ts', 'const [item] = () => target();');
+    expect(destructured.chunks[0].name).toBeNull();
+  });
+});

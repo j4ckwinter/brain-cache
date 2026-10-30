@@ -4,7 +4,7 @@
 
 > Stop sending your entire repo to Claude.
 
-brain-cache is a local context engine for Claude Code. It indexes your codebase using AST-aware chunking and a call graph — so when Claude needs context, it gets the right functions and their dependencies, not a wall of files. Fewer tokens. Better answers. Runs entirely on your machine.
+brain-cache is a local context engine for Claude Code. It indexes your codebase using AST-aware chunking — so when Claude needs context, it gets relevant code chunks, not a wall of files. Fewer tokens. Better answers. Runs entirely on your machine.
 
 <p align="center">
   <img src="assets/brain-cache.gif" alt="brain-cache only sends the parts of your codebase that matter — not everything.">
@@ -16,7 +16,7 @@ brain-cache is a local context engine for Claude Code. It indexes your codebase 
 
 Most RAG tools split code by line count. brain-cache parses your source files into ASTs and chunks at function, class, and method boundaries — so a chunk is always a complete, meaningful unit of code, never an arbitrary slice of one.
 
-At index time, brain-cache also extracts call edges and import edges from the AST. At query time, `build_context` uses those edges to expand retrieval one hop out — pulling in not just the code that matches your query, but the functions it calls and the modules it depends on. You get context that's complete, not just similar.
+At index time, brain-cache also records call and import metadata from supported AST forms. Retrieval combines semantic matches and exact symbol names. General dependency resolution and import expansion are not implemented yet; the recorded metadata is not a complete call graph.
 
 Exact symbol-name matches are considered alongside semantic candidates and ranked first, so a definition can be found even when its embedding is a weak match. Keyword fallback also retrieves exact names separately from its broader candidate pool. Final result limits still apply.
 
@@ -26,7 +26,7 @@ Everything runs locally via Ollama. No embeddings leave your machine. No API cal
 
 ## Supported languages
 
-Full AST-aware chunking and call graph extraction:
+AST-aware chunking:
 
 - TypeScript / JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`)
 - Python (`.py`, `.pyi`)
@@ -43,7 +43,7 @@ The primary way to use brain-cache is as an MCP server. Run `brain-cache init` o
 
 Claude then has access to:
 
-- **`build_context`** — Assembles relevant context for any question. Retrieves semantically similar chunks, then expands one hop along call and import edges to include dependencies. Use instead of reading files.
+- **`build_context`** — Assembles relevant context for any question. Retrieves relevant code chunks and fits them to an approximate token budget. Use instead of reading files.
 - **`search_codebase`** — Finds functions, types, and symbols by meaning, not keyword. Chunks at AST boundaries, so results are always complete code units. Use instead of grep.
 - **`index_repo`** — Rebuilds the local vector index.
 
@@ -100,6 +100,8 @@ brain-cache tools are called automatically. You don't change how you work — th
 With an existing index, `search_codebase` and `build_context` fall back to keyword matching and label the results accordingly. Context still respects its approximate token budget. Building or refreshing an index requires Ollama; fallback results reflect the last successful index.
 
 ## Keeping the index fresh
+
+After upgrading to 4.0.7, the next `brain-cache index` rebuilds older indexes once to adopt collision-free chunk IDs and corrected call ownership. Later indexing runs remain incremental. Existing indexes remain readable until that rebuild.
 
 `brain-cache index` runs incrementally by default — unchanged files are skipped, so re-indexing a large repo after a few edits takes seconds, not minutes.
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.7 — 2026-10-30
+
+- Give same-line and nested code chunks distinct, deterministic structural IDs so retrieval does not discard valid chunks.
+- Associate calls with their actual enclosing chunk, and retain names for top-level arrow functions.
+- Clarify that general dependency resolution and import expansion are not yet implemented.
+- Rebuild older chunk formats automatically on the next indexing run, then resume incremental indexing. Interrupted rebuilds retry on the next run.
+
 ## 4.0.6 — 2026-10-30
 
 - Retrieve exact symbol names independently of vector and broad keyword candidate limits, prioritize them, and keep final result limits.

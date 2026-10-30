@@ -3,7 +3,7 @@ import { Index } from '@lancedb/lancedb';
 import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow';
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
-import { PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME, CONNECTION_POOL_TTL_MS } from '../lib/config.js';
+import { CHUNK_FORMAT_VERSION, PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME, CONNECTION_POOL_TTL_MS } from '../lib/config.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState, CallEdge, FileStatEntry } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
@@ -196,7 +196,7 @@ export interface EdgeRow {
 
 /**
  * Opens the 'chunks' table if it already exists and its index state matches
- * the requested model and dimension. If the model or dimension has changed,
+ * the requested model, dimension, and chunk format. If any have changed,
  * the old table is dropped and a fresh one is created.
  * If the table does not yet exist, it is created with an explicit Arrow schema.
  *
@@ -216,7 +216,8 @@ export async function openOrCreateChunkTable(
 
   if (tableNames.includes('chunks') && !force) {
     const state = await readIndexState(projectRoot);
-    if (state?.embeddingModel === model && state.dimension === dim) {
+    if (state?.embeddingModel === model && state.dimension === dim
+      && state.chunkFormatVersion === CHUNK_FORMAT_VERSION) {
       const existingTable = await db.openTable('chunks');
       const tableSchema = await existingTable.schema();
       if (tableSchema.fields.some(f => f.name === 'file_type')) {
