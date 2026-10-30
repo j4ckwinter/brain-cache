@@ -1,5 +1,5 @@
 import { readFile, writeFile, unlink, mkdir, rmdir, link } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PROJECT_DATA_DIR } from '../lib/config.js';
 
@@ -30,10 +30,8 @@ async function readOwner(path: string): Promise<string | null> {
   }
 }
 
-/** Atomically publish a complete PID + nonce file; accept legacy PID-only locks. */
-export async function acquireIndexLock(projectRoot: string): Promise<void> {
-  const directory = join(resolve(projectRoot), PROJECT_DATA_DIR);
-  const path = join(directory, 'index.lock');
+async function acquireLock(path: string): Promise<void> {
+  const directory = dirname(path);
   const token = `${process.pid} ${randomUUID()}`;
   const candidate = `${path}.${randomUUID()}`;
   await mkdir(directory, { recursive: true });
@@ -82,11 +80,38 @@ export async function acquireIndexLock(projectRoot: string): Promise<void> {
   }
 }
 
-/** Only the process that acquired this exact lock can release it. */
-export async function releaseIndexLock(projectRoot: string): Promise<void> {
-  const path = join(resolve(projectRoot), PROJECT_DATA_DIR, 'index.lock');
+async function releaseLock(path: string): Promise<void> {
   const token = owners.get(path);
   if (!token) return;
   if (await readOwner(path) === token) await unlink(path);
   owners.delete(path);
+}
+
+function lockPaths(projectRoot: string): { lifecycle: string; legacy: string } {
+  const root = resolve(projectRoot);
+  return {
+    lifecycle: join(root, `${PROJECT_DATA_DIR}.lock`),
+    legacy: join(root, PROJECT_DATA_DIR, 'index.lock'),
+  };
+}
+
+/** Keep the lifecycle lock outside the directory that clean removes. */
+export async function acquireIndexLock(projectRoot: string): Promise<void> {
+  const paths = lockPaths(projectRoot);
+  await acquireLock(paths.lifecycle);
+  try {
+    await acquireLock(paths.legacy);
+  } catch (error) {
+    await releaseLock(paths.lifecycle);
+    throw error;
+  }
+}
+
+export async function releaseIndexLock(projectRoot: string): Promise<void> {
+  const paths = lockPaths(projectRoot);
+  try {
+    await releaseLock(paths.legacy);
+  } finally {
+    await releaseLock(paths.lifecycle);
+  }
 }

@@ -40,6 +40,16 @@ describe('acquireIndexLock', () => {
     await releaseIndexLock(projectRoot);
   });
 
+  it('retains exclusivity while cleanup removes the data directory', async () => {
+    await acquireIndexLock(projectRoot);
+    await rm(join(projectRoot, '.brain-cache'), { recursive: true });
+    await expect(acquireIndexLock(projectRoot)).rejects.toThrow('Another index operation is in progress');
+    expect(await readFile(join(projectRoot, '.brain-cache.lock'), 'utf8')).toContain(String(process.pid));
+    await releaseIndexLock(projectRoot);
+    await expect(acquireIndexLock(projectRoot)).resolves.toBeUndefined();
+    await releaseIndexLock(projectRoot);
+  });
+
   it('allows only one concurrent stale-lock reclaimer', async () => {
     await writeFile(join(projectRoot, '.brain-cache', 'index.lock'), '99998');
     vi.spyOn(process, 'kill').mockImplementation((pid) => {

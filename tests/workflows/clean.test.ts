@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -28,6 +28,26 @@ describe('runClean', () => {
       const output = (stdoutSpy.mock.calls as [string][]).map((c) => c[0]).join('');
       expect(output).toContain('removed');
     } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects cleanup while indexing owns the lock and preserves its data', async () => {
+    const { runClean } = await import('../../src/workflows/clean.js');
+    const { acquireIndexLock, releaseIndexLock } = await import('../../src/services/indexLock.js');
+    const tempDir = await mkdtemp(join(tmpdir(), 'brain-cache-clean-lock-'));
+    try {
+      await acquireIndexLock(tempDir);
+      const sentinel = join(tempDir, '.brain-cache', 'sentinel');
+      await writeFile(sentinel, 'preserve');
+      await expect(runClean(tempDir)).rejects.toThrow('Another index operation is in progress');
+      expect(await readFile(sentinel, 'utf8')).toBe('preserve');
+      await releaseIndexLock(tempDir);
+      await runClean(tempDir);
+      expect(existsSync(join(tempDir, '.brain-cache'))).toBe(false);
+      expect(existsSync(join(tempDir, '.brain-cache.lock'))).toBe(false);
+    } finally {
+      await releaseIndexLock(tempDir);
       await rm(tempDir, { recursive: true, force: true });
     }
   });
