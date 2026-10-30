@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
@@ -206,4 +206,21 @@ describe('crawlSourceFiles with extraIgnorePatterns', () => {
     expect(basenames).toContain('app.test.ts');
     expect(basenames).toContain('data.ts');
   });
+});
+
+it('uses the same nested exclusions and ignore files as watch mode', async () => {
+  const { shouldProcess } = await import('../../src/workflows/watch.js');
+  const { loadSourceIgnore } = await import('../../src/services/filePolicy.js');
+  const paths = ['src/keep.ts', 'packages/app/dist/generated.js', 'packages/app/node_modules/lib/index.ts',
+    'src/ignored.ts', 'src/private.ts', 'src/vendor.min.js', '.hidden/code.ts'];
+  await writeFile(join(tempDir, '.gitignore'), 'src/ignored.ts\n');
+  await writeFile(join(tempDir, '.braincacheignore'), 'src/private.ts\n');
+  for (const path of paths) {
+    await mkdir(dirname(join(tempDir, path)), { recursive: true });
+    await writeFile(join(tempDir, path), 'export const value = 1;');
+  }
+  const ig = await loadSourceIgnore(tempDir);
+  const crawled = (await crawlSourceFiles(tempDir)).map(path => relative(tempDir, path));
+  expect(crawled).toEqual(['src/keep.ts']);
+  expect(paths.filter(path => shouldProcess(path, ig))).toEqual(crawled);
 });

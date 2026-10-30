@@ -1,46 +1,16 @@
 import { watch } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
-import ignore from 'ignore';
+import { resolve } from 'node:path';
+import type ignore from 'ignore';
 import { IndexLockedError } from '../services/indexLock.js';
 import { runIndex } from './index.js';
-import { SOURCE_EXTENSIONS } from '../services/crawler.js';
+import { SOURCE_EXTENSIONS, IGNORE_FILENAMES, isEligibleSourcePath, loadSourceIgnore } from '../services/filePolicy.js';
 import { childLogger } from '../services/logger.js';
 import { withStderrFilter } from '../lib/stderr.js';
 
 const log = childLogger('watch');
 
-// Paths to exclude at watch level (derived from ALWAYS_EXCLUDE_GLOBS in crawler.ts)
-const EXCLUDED_PREFIXES = ['node_modules/', '.git/', 'dist/', 'build/', '.next/', '__pycache__/'];
-
-/**
- * Determines whether a file change event should trigger a re-index.
- *
- * @param relativeFilename - Relative path from the watched root (as returned by fs.watch on Linux)
- * @param ig - ignore instance pre-loaded with .braincacheignore patterns
- * @returns true if the file should trigger re-indexing, false otherwise
- */
 export function shouldProcess(relativeFilename: string, ig: ReturnType<typeof ignore>): boolean {
-  if (!relativeFilename) return false;
-
-  // Extension check — naturally excludes .brain-cache/ writes (.json, .lock extensions)
-  const ext = extname(relativeFilename);
-  if (!SOURCE_EXTENSIONS.has(ext)) return false;
-
-  // Path prefix check — excludes node_modules/**.ts and similar
-  for (const prefix of EXCLUDED_PREFIXES) {
-    if (relativeFilename.startsWith(prefix)) return false;
-  }
-
-  // .braincacheignore check — wrap in try/catch since ignore throws for paths starting with ../
-  try {
-    if (ig.ignores(relativeFilename)) return false;
-  } catch {
-    // Defensive: if ignore throws, default to processing the file
-    return true;
-  }
-
-  return true;
+  return isEligibleSourcePath(relativeFilename, ig);
 }
 
 /**
@@ -94,8 +64,8 @@ async function triggerReindex(rootDir: string): Promise<boolean> {
  * Runs the brain-cache file watcher.
  *
  * Monitors `targetPath` (or cwd) with Node.js `fs.watch` (recursive mode),
- * debounces file changes at 500ms, filters by SOURCE_EXTENSIONS + excluded
- * path prefixes + .braincacheignore, calls `runIndex()` on debounce fire,
+ * debounces file changes at 500ms, applies the crawler file policy,
+ * calls `runIndex()` on debounce fire,
  * retries lock contention, suppresses runIndex stderr output
  * and prints compact summaries, and handles graceful shutdown via SIGINT/SIGTERM.
  *
@@ -128,14 +98,7 @@ export async function runWatch(targetPath?: string): Promise<void> {
   }
 
 
-  // Load .braincacheignore once at startup (D-04)
-  const ig = ignore();
-  try {
-    const ignoreContent = await readFile(join(rootDir, '.braincacheignore'), 'utf-8');
-    ig.add(ignoreContent);
-  } catch {
-    // No .braincacheignore — skip
-  }
+  let ig = await loadSourceIgnore(rootDir);
 
   // Startup banner (D-05)
   process.stderr.write(
@@ -144,8 +107,15 @@ export async function runWatch(targetPath?: string): Promise<void> {
     `  extensions: ${[...SOURCE_EXTENSIONS].join(', ')}\n`
   );
 
-  const watcher = watch(rootDir, { recursive: true, persistent: true }, (eventType, filename) => {
+  const watcher = watch(rootDir, { recursive: true, persistent: true }, (_eventType, filename) => {
     if (!filename) return;
+    if (IGNORE_FILENAMES.includes(filename)) {
+      void loadSourceIgnore(rootDir).then(next => {
+        ig = next;
+        scheduleReindex();
+      }).catch(err => log.error({ err }, 'Could not reload ignore rules'));
+      return;
+    }
     if (!shouldProcess(filename, ig)) return;
     scheduleReindex();
   });
