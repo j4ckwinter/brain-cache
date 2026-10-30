@@ -39,6 +39,7 @@ function mockContextResult(): ContextResult {
         id: '1',
         filePath: 'test.ts',
         chunkType: 'function',
+        sourceKind: 'file',
         scope: null,
         name: 'hello',
         content: 'function hello() {}',

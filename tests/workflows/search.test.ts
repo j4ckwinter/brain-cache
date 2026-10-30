@@ -69,12 +69,14 @@ const mockIndexState = {
   indexedAt: '2026-03-31T00:00:00.000Z',
   fileCount: 10,
   chunkCount: 50,
+  totalTokens: 0,
 };
 
 const fakeChunk = (id: string) => ({
   id,
   filePath: `/project/src/${id}.ts`,
   chunkType: 'function',
+  sourceKind: 'file' as const,
   scope: null,
   name: `fn_${id}`,
   content: `function fn_${id}() {}`,
@@ -127,7 +129,7 @@ describe('runSearch', () => {
     mockGetConnection.mockResolvedValue(mockDb);
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0, zeroVectorIndices: new Set() });
     mockClassifyRetrievalMode.mockReturnValue('explore');
 
     const rawChunks = [fakeChunk('a'), fakeChunk('b')];

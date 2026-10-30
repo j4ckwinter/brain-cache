@@ -18,6 +18,8 @@ function makeChunk(overrides: Partial<RetrievedChunk> = {}): RetrievedChunk {
     id: 'chunk-1',
     filePath: 'src/foo.ts',
     chunkType: 'function',
+    sourceKind: 'file',
+    fileType: 'source',
     scope: null,
     name: 'myFunction',
     content: 'function myFunction() {}',

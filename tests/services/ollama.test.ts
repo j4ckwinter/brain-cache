@@ -412,9 +412,9 @@ describe('pullModelIfMissing', () => {
   it('does nothing when model already exists in ollama.list()', async () => {
     mockOllama.list.mockResolvedValue({
       models: [
-        { name: 'nomic-embed-text:latest', model: 'nomic-embed-text:latest', modified_at: new Date(), size: 0, digest: '', details: { format: '', family: '', families: [], parameter_size: '', quantization_level: '' } },
+        { name: 'nomic-embed-text:latest', model: 'nomic-embed-text:latest', modified_at: new Date(), expires_at: new Date(), size_vram: 0, size: 0, digest: '', details: { parent_model: '', format: '', family: '', families: [], parameter_size: '', quantization_level: '' } },
       ],
-    } as Awaited<ReturnType<typeof ollama.list>>);
+    });
 
     await pullModelIfMissing('nomic-embed-text');
 
@@ -424,7 +424,7 @@ describe('pullModelIfMissing', () => {
   it('calls ollama.pull() with stream when model is missing', async () => {
     mockOllama.list.mockResolvedValue({
       models: [],
-    } as Awaited<ReturnType<typeof ollama.list>>);
+    });
 
     // Mock pull to return an async generator
     async function* mockPullGenerator() {

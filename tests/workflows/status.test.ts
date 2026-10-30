@@ -33,6 +33,7 @@ const mockIndexState = {
   indexedAt: '2026-03-31T12:00:00.000Z',
   fileCount: 42,
   chunkCount: 350,
+  totalTokens: 0,
 };
 
 let runStatus: (targetPath?: string) => Promise<void>;

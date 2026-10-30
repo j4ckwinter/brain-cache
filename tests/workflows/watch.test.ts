@@ -37,12 +37,17 @@ vi.mock('../../src/services/logger.js', () => ({
   }),
 }));
 
-import { watch } from 'node:fs';
+import { watch, type PathLike, type WatchOptionsWithStringEncoding, type WatchListener, type FSWatcher } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { runIndex } from '../../src/workflows/index.js';
 import { shouldProcess, buildSummary } from '../../src/workflows/watch.js';
 
-const mockWatch = vi.mocked(watch);
+const watchWithOptions: (
+  path: PathLike,
+  options: WatchOptionsWithStringEncoding,
+  listener: WatchListener<string>,
+) => FSWatcher = watch;
+const mockWatch = vi.mocked(watchWithOptions);
 const mockReadFile = vi.mocked(readFile);
 const mockRunIndex = vi.mocked(runIndex);
 
@@ -132,7 +137,7 @@ describe('buildSummary', () => {
  * Returns the watch callback and cleanup functions.
  */
 async function setupWatch(rootDir: string = '/tmp/test-watch'): Promise<{
-  watchCallback: (eventType: string, filename: string) => void;
+  watchCallback: WatchListener<string>;
   mockWatcher: { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 }> {
   const mockWatcher = {
@@ -159,7 +164,7 @@ async function setupWatch(rootDir: string = '/tmp/test-watch'): Promise<{
   exitSpy.mockRestore();
 
   const lastCall = mockWatch.mock.calls[mockWatch.mock.calls.length - 1];
-  const watchCallback = lastCall[2] as (eventType: string, filename: string) => void;
+  const watchCallback = lastCall[2];
 
   return { watchCallback, mockWatcher };
 }
@@ -431,7 +436,7 @@ describe('cleanup handler', () => {
     await Promise.resolve();
 
     const lastCall = mockWatch.mock.calls[mockWatch.mock.calls.length - 1];
-    const watchCallback = lastCall[2] as (eventType: string, filename: string) => void;
+    const watchCallback = lastCall[2];
 
     // Schedule a debounce (but SIGINT fires before 500ms)
     watchCallback('change', 'src/index.ts');

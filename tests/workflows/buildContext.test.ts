@@ -101,6 +101,7 @@ const mockIndexState = {
   indexedAt: '2026-03-31T00:00:00.000Z',
   fileCount: 5,
   chunkCount: 20,
+  totalTokens: 0,
 };
 
 const fakeChunk = (id: string, filePath: string) => ({
@@ -155,10 +156,10 @@ describe('runBuildContext', () => {
     mockReadIndexState.mockResolvedValue({ ...mockIndexState });
     mockGetConnection.mockResolvedValue(mockDb);
     // Return empty tokenCounts by default — exercises the fallback disk-read path
-    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0, zeroVectorIndices: new Set() });
     mockClassifyQueryIntent.mockReturnValue('explore');
     mockSearchChunks.mockResolvedValue(dedupedChunks);
     mockKeywordSearchChunks.mockResolvedValue(dedupedChunks);

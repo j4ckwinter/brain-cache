@@ -28,6 +28,7 @@ function makeChunk(id: string, filePath: string, contentLength: number): Retriev
     id,
     filePath,
     chunkType: 'function',
+    sourceKind: 'file',
     scope: null,
     name: `fn_${id}`,
     content: 'x'.repeat(contentLength),

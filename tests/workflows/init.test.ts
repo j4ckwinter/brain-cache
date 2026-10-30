@@ -150,7 +150,7 @@ describe('runInit', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     // Default fs mocks: CLAUDE.md already contains section (idempotent), no .mcp.json
     // statusline.mjs already installed (idempotent), settings.json already has statusLine
@@ -333,7 +333,7 @@ describe('.mcp.json management', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     // CLAUDE.md: already has section (idempotent)
     // statusline.mjs already installed (idempotent), settings.json already has statusLine
@@ -595,7 +595,7 @@ describe('statusline installation', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     mockWriteFile.mockResolvedValue(undefined);
     mockAppendFile.mockResolvedValue(undefined);
@@ -734,7 +734,7 @@ describe('settings.json management', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     mockWriteFile.mockResolvedValue(undefined);
     mockAppendFile.mockResolvedValue(undefined);
@@ -974,7 +974,7 @@ describe('PreToolUse hook installation', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     mockWriteFile.mockResolvedValue(undefined);
     mockAppendFile.mockResolvedValue(undefined);
@@ -1003,7 +1003,7 @@ describe('PreToolUse hook installation', () => {
       const ps = String(p);
       if (ps === 'CLAUDE.md') return Promise.resolve('## Brain-Cache MCP Tools\n');
       if (ps.endsWith('statusline.mjs')) return Promise.resolve('#!/usr/bin/env node\n// mock statusline content\n');
-      if (ps.endsWith('settings.json')) return settingsJson;
+      if (ps.endsWith('settings.json')) return Promise.resolve(settingsJson);
       const err = Object.assign(new Error('ENOENT: ' + String(p)), { code: 'ENOENT' }); return Promise.reject(err);
     });
   }

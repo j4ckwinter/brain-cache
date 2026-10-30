@@ -150,6 +150,8 @@ describe('statusline', () => {
         tokensSent: 1000,
         estimatedWithoutBraincache: 1000,
         callCount: 1,
+        lastTokensSent: 1000,
+        lastEstimatedWithoutBraincache: 1000,
         lastUpdatedAt: new Date().toISOString(),
       };
       expect(renderOutput(stats)).toBe(IDLE_OUTPUT);
@@ -160,6 +162,8 @@ describe('statusline', () => {
         tokensSent: 1500,
         estimatedWithoutBraincache: 1000,
         callCount: 1,
+        lastTokensSent: 1500,
+        lastEstimatedWithoutBraincache: 1000,
         lastUpdatedAt: new Date().toISOString(),
       };
       expect(renderOutput(stats)).toBe(IDLE_OUTPUT);
@@ -213,14 +217,21 @@ describe('statusline', () => {
       expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 10k tokens (98% less) \u00b7 last: 10k\n');
     });
 
-    it('omits last-call suffix when lastEstimatedWithoutBraincache is missing (legacy stats)', () => {
+    it('omits last-call suffix when lastEstimatedWithoutBraincache is missing (legacy stats)', async () => {
       const stats = {
         tokensSent: 500,
         estimatedWithoutBraincache: 1000,
         callCount: 1,
         lastUpdatedAt: new Date().toISOString(),
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 500 tokens (50% less)\n');
+      const legacyDir = await mkdtemp(join(tmpdir(), 'statusline-legacy-'));
+      try {
+        const statsPath = join(legacyDir, 'session-stats.json');
+        await writeFile(statsPath, JSON.stringify(stats), 'utf-8');
+        expect(renderOutput(_readStatsFromPath(statsPath))).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 500 tokens (50% less)\n');
+      } finally {
+        await rm(legacyDir, { recursive: true, force: true });
+      }
     });
 
     it('omits last-call suffix when last call had no savings', () => {

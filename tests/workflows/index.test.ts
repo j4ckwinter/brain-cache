@@ -190,7 +190,7 @@ describe('runIndex', () => {
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
     // chunkFile now returns { chunks, edges } — provide that shape
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -225,7 +225,7 @@ describe('runIndex', () => {
   it('calls pipeline in correct order: crawl -> chunk -> embed -> store -> writeIndexState', async () => {
     const callOrder: string[] = [];
     mockCrawlSourceFiles.mockImplementation(async () => { callOrder.push('crawl'); return fakeFiles; });
-    mockChunkFile.mockImplementation((fp, _c) => { callOrder.push('chunk'); return { chunks: [fakeChunk(fp, 1)], edges: [] }; });
+    mockChunkFile.mockImplementation(async (fp, _c) => { callOrder.push('chunk'); return { chunks: [fakeChunk(fp, 1)], edges: [] }; });
     mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return { embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() }; });
     mockInsertChunks.mockImplementation(async () => { callOrder.push('store'); });
     mockWriteIndexState.mockImplementation(async () => { callOrder.push('writeState'); });
@@ -275,7 +275,7 @@ describe('runIndex', () => {
     const testFilePath = '/project/src/foo.test.ts';
     const sourceFilePath = '/project/src/bar.ts';
     mockCrawlSourceFiles.mockResolvedValue([testFilePath, sourceFilePath]);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockClassifyFileType.mockImplementation((fp: string) => fp.includes('.test.') ? 'test' : 'source');
 
     await runIndex('/project');
@@ -412,7 +412,7 @@ describe('runIndex', () => {
     const badFile = '/project/src/foo.ts';
     mockCrawlSourceFiles.mockResolvedValue([badFile, goodFile]);
 
-    mockChunkFile.mockImplementation((filePath, _content) => {
+    mockChunkFile.mockImplementation(async (filePath, _content) => {
       if (filePath === badFile) throw new Error('parse failure');
       return { chunks: [fakeChunk(filePath, 1)], edges: [] };
     });
@@ -436,7 +436,7 @@ describe('runIndex', () => {
       tokenCounts: { [badFile]: 42 },
       stats: { [badFile]: { size: 1, mtimeMs: 1 } },
     });
-    mockChunkFile.mockImplementation((filePath) => {
+    mockChunkFile.mockImplementation(async (filePath) => {
       if (filePath === badFile) throw new Error('transient parser failure');
       return { chunks: [fakeChunk(filePath, 1)], edges: [] };
     });
@@ -447,7 +447,7 @@ describe('runIndex', () => {
     expect(manifest.stats).not.toHaveProperty(badFile);
     mockReadFileHashes.mockResolvedValue(manifest);
     mockChunkFile.mockClear();
-    mockChunkFile.mockImplementation((filePath) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     await runIndex('/project');
     expect(mockChunkFile).toHaveBeenCalledWith(badFile, expect.any(String));
     expect(mockWriteFileHashes.mock.calls.at(-1)![1].hashes).toHaveProperty(badFile);
@@ -456,7 +456,7 @@ describe('runIndex', () => {
   it('replaces partial new-file chunks when retrying an interrupted run', async () => {
     const file = fakeFiles[0];
     mockCrawlSourceFiles.mockResolvedValue([file]);
-    mockChunkFile.mockImplementation((filePath) => ({
+    mockChunkFile.mockImplementation(async (filePath) => ({
       chunks: Array.from({ length: 51 }, (_, i) => fakeChunk(filePath, i)), edges: [],
     }));
     let storedRows: { id: string; file_path: string }[] = [];
@@ -611,7 +611,7 @@ describe('incremental re-index file removal', () => {
     mockIsOllamaRunning.mockResolvedValue(true);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -641,7 +641,7 @@ describe('incremental re-index file removal', () => {
       stats: {},
     });
     mockCrawlSourceFiles.mockResolvedValue(['/proj/keep.ts']);
-    mockChunkFile.mockImplementation((fp, _c) => ({ chunks: [fakeChunk(fp, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (fp, _c) => ({ chunks: [fakeChunk(fp, 1)], edges: [] }));
 
     await runIndexLocal('/proj');
 
@@ -739,7 +739,7 @@ describe('runIndex stat fast-path', () => {
     mockReadProfile.mockResolvedValue({ ...mockProfile });
     mockIsOllamaRunning.mockResolvedValue(true);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -942,7 +942,7 @@ describe('embedding dimension fallback', () => {
     mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);

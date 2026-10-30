@@ -112,6 +112,7 @@ const mockIndexState = {
   indexedAt: '2026-03-31T00:00:00.000Z',
   fileCount: 5,
   chunkCount: 42,
+  totalTokens: 0,
 };
 
 const mockCapabilities = {
@@ -129,6 +130,7 @@ const fakeChunk = (id: string) => ({
   id,
   filePath: `src/test_${id}.ts`,
   chunkType: 'function',
+  sourceKind: 'file' as const,
   scope: null,
   name: `fn_${id}`,
   content: `function fn_${id}() {}`,
