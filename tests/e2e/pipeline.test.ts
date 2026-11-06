@@ -84,7 +84,7 @@ describe('e2e pipeline', () => {
       skipped: 0,
       zeroVectorIndices: new Set<number>(),
     }));
-    projectRoot = join(tmpdir(), `bc-e2e-${randomUUID()}`);
+    projectRoot = join(tmpdir(), `bc-e2e-999-${randomUUID()}`);
   });
 
   afterEach(async () => {
@@ -315,7 +315,7 @@ describe('e2e pipeline', () => {
       expect(result.chunks[0].content).toContain('return 1;');
       const context = await runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
       expect(context.content).toContain('return 1;');
-      expect(context.content).not.toContain('999');
+      expect(context.content).not.toContain('return 999;');
       const otherProcess = await readSnapshotInChild(projectRoot);
       expect(otherProcess.state).toEqual(oldState);
       expect(otherProcess.content).toContain('return 1;');
@@ -324,8 +324,8 @@ describe('e2e pipeline', () => {
       await refresh;
     }
     const result = await runSearch('helper', { path: projectRoot, limit: 1 });
-    expect(result.chunks[0].content).toContain('999');
-    expect((await readSnapshotInChild(projectRoot)).content).toContain('999');
+    expect(result.chunks[0].content).toContain('return 999;');
+    expect((await readSnapshotInChild(projectRoot)).content).toContain('return 999;');
     const pinned = await runSearch('helper', { path: projectRoot, limit: 1, indexDirectory: oldDirectory });
     expect(pinned.chunks[0].content).toContain('return 1;');
   });
@@ -371,9 +371,9 @@ describe('e2e pipeline', () => {
     const context = await request;
     expect(context.chunks.map(chunk => chunk.name)).toEqual(['hello', 'helper']);
     expect(context.content).toContain('return 1;');
-    expect(context.content).not.toContain('999');
+    expect(context.content).not.toContain('return 999;');
     const fresh = await runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
-    expect(fresh.content).toContain('999');
+    expect(fresh.content).toContain('return 999;');
     await runIndex(projectRoot);
     await expect(readFile(join(originalDirectory, 'index_state.json'))).rejects.toMatchObject({ code: 'ENOENT' });
     expect(await readdir(join(projectRoot, '.brain-cache', 'generations'))).toHaveLength(2);
