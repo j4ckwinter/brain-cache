@@ -71,15 +71,8 @@ export interface ReadHashResult {
   freshHashes: Record<string, string>;
 }
 
-export interface DiffCleanupResult {
-  newFiles: string[];
-  changedFiles: string[];
-  removedFiles: string[];
-  unchangedFiles: string[];
+export interface DiffCleanupResult extends FileDiffResult {
   filesToProcess: string[];
-  updatedHashes: Record<string, string>;
-  mergedStats: Record<string, FileStatEntry>;
-  outTokenCounts: Record<string, number>;
 }
 
 export interface ChunkEmbedResult {
@@ -88,19 +81,12 @@ export interface ChunkEmbedResult {
 }
 
 export interface WriteManifestOpts {
-  rootDir: string;
   files: string[];
-  filesToProcess: string[];
-  unchangedFiles: string[];
-  updatedHashes: Record<string, string>;
   currentHashes: Record<string, string>;
-  outTokenCounts: Record<string, number>;
-  processedTokenCounts: Record<string, number>;
-  mergedStats: Record<string, FileStatEntry>;
-  table: Table;
-  profile: { embeddingModel: string };
-  dim: number;
-  pipelineStats: IndexGroupStats;
+  partition: StatPartitionResult;
+  diff: DiffCleanupResult;
+  embed: ChunkEmbedResult;
+  setup: Pick<SetupResult, 'rootDir' | 'table' | 'profile' | 'dim'>;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +172,6 @@ export function computeFileDiffs(
   return { newFiles, changedFiles, removedFiles, unchangedFiles };
 }
 
-/** Mutable stats for the chunk+embed pipeline (REFAC-01). */
 export interface IndexGroupStats {
   totalRawTokens: number;
   totalChunkTokens: number;
@@ -194,96 +179,6 @@ export interface IndexGroupStats {
   processedFiles: number;
   processedChunks: number;
   skippedChunks: number;
-}
-
-/**
- * Chunks a batch of files, embeds in DEFAULT_BATCH_SIZE batches, inserts rows and edges.
- */
-export async function processFileGroup(
-  group: string[],
-  contentMap: Map<string, string>,
-  table: Table,
-  edgesTable: Table,
-  profile: { embeddingModel: string },
-  dim: number,
-  stats: IndexGroupStats,
-  tokenCounts: Record<string, number>,
-  filesToProcessLength: number,
-): Promise<void> {
-  const groupChunks: CodeChunk[] = [];
-  const groupEdges: CallEdge[] = [];
-
-  for (const filePath of group) {
-    const content = contentMap.get(filePath)!;
-    const rawTokens = countChunkTokens(content);
-    stats.totalRawTokens += rawTokens;
-    try {
-      const { chunks, edges } = await chunkFile(filePath, content);
-      groupChunks.push(...chunks);
-      groupEdges.push(...edges);
-      tokenCounts[filePath] = rawTokens;
-    } catch (err) {
-      log.warn({ filePath, err }, 'Failed to chunk file, skipping');
-    }
-  }
-  stats.processedFiles += group.length;
-  stats.totalChunks += groupChunks.length;
-
-  if (stats.processedFiles % 10 === 0 || stats.processedFiles === filesToProcessLength) {
-    process.stderr.write(`brain-cache: chunked ${stats.processedFiles}/${filesToProcessLength} files\n`);
-  }
-
-  for (let offset = 0; offset < groupChunks.length; offset += DEFAULT_BATCH_SIZE) {
-    const batch = groupChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
-
-    const embeddableBatch: Array<{ chunk: CodeChunk; tokens: number }> = [];
-    for (const chunk of batch) {
-      const tokens = countChunkTokens(chunk.content);
-      if (tokens > EMBED_MAX_TOKENS) {
-        stats.skippedChunks++;
-        continue;
-      }
-      embeddableBatch.push({ chunk, tokens });
-    }
-
-    if (embeddableBatch.length === 0) continue;
-
-    const texts = embeddableBatch.map(({ chunk }) => chunk.content);
-    stats.totalChunkTokens += embeddableBatch.reduce((sum, { tokens }) => sum + tokens, 0);
-    const { embeddings: vectors, skipped, zeroVectorIndices } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
-    stats.skippedChunks += skipped;
-
-    if (zeroVectorIndices.size > 0) {
-      log.warn({ count: zeroVectorIndices.size }, 'Skipping zero-vector chunks (content too large to embed)');
-    }
-
-    const rows: ChunkRow[] = embeddableBatch
-      .map(({ chunk }, i) => ({ chunk, i }))
-      .filter(({ i }) => !zeroVectorIndices.has(i))
-      .map(({ chunk, i }) => ({
-        id: chunk.id,
-        file_path: chunk.filePath,
-        chunk_type: chunk.chunkType,
-        scope: chunk.scope,
-        name: chunk.name,
-        content: chunk.content,
-        start_line: chunk.startLine,
-        end_line: chunk.endLine,
-        file_type: classifyFileType(chunk.filePath),
-        source_kind: 'file',
-        vector: vectors[i],
-      }));
-
-    await insertChunks(table, rows);
-    stats.processedChunks += batch.length;
-    process.stderr.write(
-      `brain-cache: embedding ${stats.processedChunks}/${stats.totalChunks} chunks (${Math.round((stats.processedChunks / stats.totalChunks) * 100)}%)\n`,
-    );
-  }
-
-  if (groupEdges.length > 0) {
-    await insertEdges(edgesTable, groupEdges);
-  }
 }
 
 export function printSummary(params: {
@@ -475,7 +370,7 @@ export async function diffAndCleanup(
   partition: StatPartitionResult,
   setup: Pick<SetupResult, 'table' | 'edgesTable'>,
 ): Promise<DiffCleanupResult> {
-  const { storedHashes, existingTokenCounts, currentStats } = partition;
+  const { storedHashes } = partition;
   const { table, edgesTable } = setup;
 
   const { newFiles, changedFiles, removedFiles, unchangedFiles } = computeFileDiffs(files, currentHashes, storedHashes);
@@ -497,33 +392,7 @@ export async function diffAndCleanup(
     });
   }
 
-  // Step 6i: Remove hash entries for removed files
-  const updatedHashes = { ...storedHashes };
-  for (const filePath of removedFiles) {
-    delete updatedHashes[filePath];
-  }
-
-  // Step 6j: Filter to only new + changed files for processing
-  const filesToProcess = [...newFiles, ...changedFiles];
-
-  // Build merged stats for all currently crawled files (from currentStats, for manifest write)
-  const mergedStats: Record<string, FileStatEntry> = {};
-  for (const fp of files) {
-    const s = currentStats.get(fp);
-    if (s !== undefined) {
-      mergedStats[fp] = { size: s.size, mtimeMs: s.mtimeMs };
-    }
-  }
-
-  // Build outTokenCounts: carry forward from manifest for stat-skipped files
-  const outTokenCounts: Record<string, number> = {};
-  for (const fp of files) {
-    if (existingTokenCounts[fp] !== undefined) {
-      outTokenCounts[fp] = existingTokenCounts[fp];
-    }
-  }
-
-  return { newFiles, changedFiles, removedFiles, unchangedFiles, filesToProcess, updatedHashes, mergedStats, outTokenCounts };
+  return { newFiles, changedFiles, removedFiles, unchangedFiles, filesToProcess: [...newFiles, ...changedFiles] };
 }
 
 export async function runChunkEmbedPipeline(
@@ -550,17 +419,80 @@ export async function runChunkEmbedPipeline(
 
   for (let groupStart = 0; groupStart < filesToProcess.length; groupStart += FILE_READ_CONCURRENCY) {
     const group = filesToProcess.slice(groupStart, groupStart + FILE_READ_CONCURRENCY);
-    await processFileGroup(
-      group,
-      contentMap,
-      table,
-      edgesTable,
-      profile,
-      dim,
-      pipelineStats,
-      processedTokenCounts,
-      filesToProcess.length,
-    );
+    const groupChunks: CodeChunk[] = [];
+    const groupEdges: CallEdge[] = [];
+
+    for (const filePath of group) {
+      const content = contentMap.get(filePath)!;
+      const rawTokens = countChunkTokens(content);
+      pipelineStats.totalRawTokens += rawTokens;
+      try {
+        const { chunks, edges } = await chunkFile(filePath, content);
+        groupChunks.push(...chunks);
+        groupEdges.push(...edges);
+        processedTokenCounts[filePath] = rawTokens;
+      } catch (err) {
+        log.warn({ filePath, err }, 'Failed to chunk file, skipping');
+      }
+    }
+    pipelineStats.processedFiles += group.length;
+    pipelineStats.totalChunks += groupChunks.length;
+
+    if (pipelineStats.processedFiles % 10 === 0 || pipelineStats.processedFiles === filesToProcess.length) {
+      process.stderr.write(`brain-cache: chunked ${pipelineStats.processedFiles}/${filesToProcess.length} files\n`);
+    }
+
+    for (let offset = 0; offset < groupChunks.length; offset += DEFAULT_BATCH_SIZE) {
+      const batch = groupChunks.slice(offset, offset + DEFAULT_BATCH_SIZE);
+
+      const embeddableBatch: Array<{ chunk: CodeChunk; tokens: number }> = [];
+      for (const chunk of batch) {
+        const tokens = countChunkTokens(chunk.content);
+        if (tokens > EMBED_MAX_TOKENS) {
+          pipelineStats.skippedChunks++;
+          continue;
+        }
+        embeddableBatch.push({ chunk, tokens });
+      }
+
+      if (embeddableBatch.length === 0) continue;
+
+      const texts = embeddableBatch.map(({ chunk }) => chunk.content);
+      pipelineStats.totalChunkTokens += embeddableBatch.reduce((sum, { tokens }) => sum + tokens, 0);
+      const { embeddings: vectors, skipped, zeroVectorIndices } = await embedBatchWithRetry(profile.embeddingModel, texts, dim);
+      pipelineStats.skippedChunks += skipped;
+
+      if (zeroVectorIndices.size > 0) {
+        log.warn({ count: zeroVectorIndices.size }, 'Skipping zero-vector chunks (content too large to embed)');
+      }
+
+      const rows: ChunkRow[] = embeddableBatch
+        .map(({ chunk }, i) => ({ chunk, i }))
+        .filter(({ i }) => !zeroVectorIndices.has(i))
+        .map(({ chunk, i }) => ({
+          id: chunk.id,
+          file_path: chunk.filePath,
+          chunk_type: chunk.chunkType,
+          scope: chunk.scope,
+          name: chunk.name,
+          content: chunk.content,
+          start_line: chunk.startLine,
+          end_line: chunk.endLine,
+          file_type: classifyFileType(chunk.filePath),
+          source_kind: 'file',
+          vector: vectors[i],
+        }));
+
+      await insertChunks(table, rows);
+      pipelineStats.processedChunks += batch.length;
+      process.stderr.write(
+        `brain-cache: embedding ${pipelineStats.processedChunks}/${pipelineStats.totalChunks} chunks (${Math.round((pipelineStats.processedChunks / pipelineStats.totalChunks) * 100)}%)\n`,
+      );
+    }
+
+    if (groupEdges.length > 0) {
+      await insertEdges(edgesTable, groupEdges);
+    }
   }
 
   if (pipelineStats.skippedChunks > 0) {
@@ -585,38 +517,23 @@ export async function runChunkEmbedPipeline(
 }
 
 export async function writeManifestAndState(opts: WriteManifestOpts): Promise<void> {
-  const {
-    rootDir,
-    files,
-    filesToProcess,
-    unchangedFiles,
-    updatedHashes,
-    currentHashes,
-    outTokenCounts,
-    processedTokenCounts,
-    mergedStats,
-    table,
-    profile,
-    dim,
-    pipelineStats,
-  } = opts;
-
-  const finalHashes = { ...updatedHashes };
-  const finalTokenCounts = { ...outTokenCounts };
-  const finalStats = { ...mergedStats };
-  for (const filePath of filesToProcess) {
-    if (processedTokenCounts[filePath] !== undefined) {
-      finalHashes[filePath] = currentHashes[filePath];
-      finalTokenCounts[filePath] = processedTokenCounts[filePath];
-    } else {
-      delete finalHashes[filePath];
-      delete finalTokenCounts[filePath];
-      delete finalStats[filePath];
-    }
-  }
-  // Also ensure unchanged files stay in manifest
-  for (const filePath of unchangedFiles) {
+  const { files, currentHashes, partition, diff, embed, setup } = opts;
+  const { rootDir, table, profile, dim } = setup;
+  const { filesToProcess, unchangedFiles } = diff;
+  const { processedTokenCounts, pipelineStats } = embed;
+  const unchanged = new Set(unchangedFiles);
+  const finalHashes: Record<string, string> = {};
+  const finalTokenCounts: Record<string, number> = {};
+  const finalStats: Record<string, FileStatEntry> = {};
+  for (const filePath of files) {
+    const tokenCount = unchanged.has(filePath)
+      ? partition.existingTokenCounts[filePath]
+      : processedTokenCounts[filePath];
+    if (tokenCount === undefined) continue;
     finalHashes[filePath] = currentHashes[filePath];
+    finalTokenCounts[filePath] = tokenCount;
+    const stat = partition.currentStats.get(filePath);
+    if (stat) finalStats[filePath] = { size: stat.size, mtimeMs: stat.mtimeMs };
   }
 
   let allFilesTotalTokens = 0;
@@ -758,21 +675,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
             }
           }
         }
-        await writeManifestAndState({
-          rootDir: setup.rootDir,
-          files,
-          filesToProcess: diff.filesToProcess,
-          unchangedFiles: diff.unchangedFiles,
-          updatedHashes: diff.updatedHashes,
-          currentHashes,
-          outTokenCounts: diff.outTokenCounts,
-          processedTokenCounts: embed.processedTokenCounts,
-          mergedStats: diff.mergedStats,
-          table: setup.table,
-          profile: setup.profile,
-          dim: setup.dim,
-          pipelineStats: embed.pipelineStats,
-        });
+        await writeManifestAndState({ files, currentHashes, partition, diff, embed, setup });
       } finally {
         setLogLevel(previousLogLevel as Parameters<typeof setLogLevel>[0]);
         await releaseIndexLock(rootDir);
