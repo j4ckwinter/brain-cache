@@ -16,7 +16,7 @@ brain-cache is a local context engine for Claude Code. It indexes your codebase 
 
 Most RAG tools split code by line count. brain-cache parses your source files into ASTs and chunks at function, class, and method boundaries — so a chunk is always a complete, meaningful unit of code, never an arbitrary slice of one.
 
-At index time, brain-cache also records call and import metadata from supported AST forms. Retrieval combines semantic matches and exact symbol names. General dependency resolution and import expansion are not implemented yet; the recorded metadata is not a complete call graph.
+At index time, brain-cache also records call and import metadata from supported AST forms. Retrieval combines semantic matches and exact symbol names. Trace queries follow direct calls to unambiguous module-level functions and const arrow functions within JavaScript/TypeScript files. Shadowed, reassigned, member, and cross-file targets remain unresolved. General dependency resolution and import expansion are not implemented; the recorded metadata is not a complete call graph.
 
 Exact symbol-name matches are considered alongside semantic candidates and ranked first, so a definition can be found even when its embedding is a weak match. Keyword fallback also retrieves exact names separately from its broader candidate pool. Final result limits still apply.
 

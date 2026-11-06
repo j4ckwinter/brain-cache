@@ -3,6 +3,7 @@ import { dirname, join, extname, resolve } from 'node:path';
 import { Parser, Language, type Node } from 'web-tree-sitter';
 import { childLogger } from './logger.js';
 import type { CodeChunk, CallEdge, ChunkResult } from '../lib/types.js';
+import { resolveLocalCallTargets, type DirectCall } from './localCallTargets.js';
 import { chunkDocFile } from './docChunker.js';
 
 // Captured at module scope — esbuild rewrites import.meta.url inside callbacks.
@@ -242,9 +243,11 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   // The preorder walk has already registered every extracted ancestor when a
   // call is visited. Node IDs are local to this tree and never persisted.
   const chunksByNode = new Map<number, CodeChunk>();
+  const directCalls: DirectCall[] = [];
 
   try {
-    for (const node of walkNodes(tree.rootNode)) {
+    const nodes = [...walkNodes(tree.rootNode)];
+    for (const node of nodes) {
       // Extract call edges from call_expression nodes (runs for ALL nodes)
       if (node.type === 'call_expression') {
         const funcNode = node.childForFieldName('function');
@@ -264,14 +267,16 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
               if (owner) break;
               ancestor = ancestor.parent;
             }
-            edges.push({
+            const edge: CallEdge = {
               fromChunkId: owner?.id ?? fileChunkId,
               fromFile: filePath,
               fromSymbol: owner?.name ?? null,
               toSymbol,
               toFile: null,
               edgeType: 'call',
-            });
+            };
+            edges.push(edge);
+            if (funcNode.type === 'identifier') directCalls.push({ target: funcNode, edge });
           }
         }
       }
@@ -368,6 +373,7 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
         chunksByNode.set(node.id, chunk);
       }
     }
+    if (category === 'typescript') resolveLocalCallTargets(nodes, chunksByNode, directCalls);
   } finally {
     tree.delete();
   }

@@ -318,3 +318,40 @@ it('retains Rust trait signatures alongside default method bodies', async () => 
   expect(chunks.find(chunk => chunk.name === 'Cache')?.content).toContain('fn get(&self)');
   expect(chunks.find(chunk => chunk.name === 'ready')).toBeDefined();
 });
+
+
+describe('local call targets', () => {
+  it('resolves forward declarations, recursion, and const arrow functions', async () => {
+    const { edges } = await chunkFile('calls.ts', `
+      export function entry() { helper(); arrow(); }
+      function helper() { helper(); }
+      const arrow = () => 42;
+    `);
+    expect(edges.filter(edge => edge.edgeType === 'call')).toHaveLength(3);
+    expect(edges.every(edge => edge.toFile === 'calls.ts')).toBe(true);
+  });
+
+  it.each([
+    'function entry(helper: () => void) { helper(); }',
+    'function entry() { const helper = () => 2; helper(); }',
+    'function entry({ helper }) { helper(); }',
+    'function entry() { helper = replacement; helper(); }',
+    'function entry() { class helper {} helper(); }',
+    'function entry() { with (object) { helper(); } }',
+    'function entry() { eval(code); helper(); }',
+    'function entry() { object.helper(); }',
+    'function entry() { helper(); } function helper() { return 2; }',
+  ])('leaves ambiguous or member calls unresolved: %s', async (caller) => {
+    const { edges } = await chunkFile('calls.ts', `function helper() { return 1; } ${caller}`);
+    expect(edges.filter(edge => edge.edgeType === 'call').every(edge => edge.toFile === null)).toBe(true);
+  });
+  it('does not resolve a name shared with a method chunk', async () => {
+    const { edges } = await chunkFile('calls.ts', `
+      class Example { helper() { return 0; } }
+      function helper() { return 42; }
+      function entry() { return helper(); }
+    `);
+    expect(edges.find(edge => edge.fromSymbol === 'entry')?.toFile).toBeNull();
+  });
+
+});

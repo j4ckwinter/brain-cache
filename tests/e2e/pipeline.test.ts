@@ -210,7 +210,7 @@ describe('e2e pipeline', () => {
     await writeFile(path, JSON.stringify(state));
   }
 
-  it.each([undefined, 1, 2])('rebuilds unchanged files for obsolete chunk format %s and then reuses it', async (revision) => {
+  it.each([undefined, 1, 2, 3])('rebuilds unchanged files for obsolete chunk format %s and then reuses it', async (revision) => {
     const runIndex = await indexFixture();
     const initial = await counts();
     await downgradeChunkFormat(revision);
@@ -249,6 +249,18 @@ describe('e2e pipeline', () => {
     const result = await runSearch('example methods', { path: projectRoot, limit: 10 });
     expect(result.chunks.map(chunk => chunk.name).sort()).toEqual(['Example', 'one', 'two']);
     expect(new Set(result.chunks.map(chunk => chunk.id)).size).toBe(3);
+  });
+
+  it('expands a trace from a parsed caller to its local callee', async () => {
+    await mkdir(join(projectRoot, 'src'), { recursive: true });
+    await writeFile(join(projectRoot, 'src', 'calls.ts'),
+      'export function entry() { return helper(); }\nfunction helper() { return 42; }');
+    const { runIndex } = await import('../../src/workflows/index.js');
+    const { runBuildContext } = await import('../../src/workflows/buildContext.js');
+    await runIndex(projectRoot);
+    const context = await runBuildContext('trace from entry', { path: projectRoot, limit: 1 });
+    expect(context.chunks.map(chunk => chunk.name)).toEqual(['entry', 'helper']);
+    expect(context.metadata.localTasksPerformed).toContain('edge_expansion');
   });
 
 });
