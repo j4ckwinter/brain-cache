@@ -105,6 +105,10 @@ When an upgrade changes the chunk format, the next `brain-cache index` rebuilds 
 
 `brain-cache index` runs incrementally by default — unchanged files are skipped, so re-indexing a large repo after a few edits takes seconds, not minutes.
 
+Refreshes build a separate index generation and publish it only after its database and metadata are complete. Searches already in progress keep their original snapshot; new searches use the newly published generation. A failed refresh leaves the previous index available. Legacy indexes are migrated on their next successful refresh.
+
+This consistency guarantee uses extra local disk space: each refresh copies the active index (using filesystem copy-on-write where available). Previous generations remain until `brain-cache clean` so readers in other processes can finish safely. `clean` removes all generations; run it when no searches are active, then reindex. Publication protects against interrupted indexing processes, not storage-device failure or power-loss durability.
+
 For continuous sync, `brain-cache watch` runs a debounced incremental re-index on every file save. Note: file watchers may be flagged by enterprise EDR tools (Cortex XDR, CrowdStrike, etc.) due to their behavioural profile. If you're on a managed machine, incremental indexing via `brain-cache index` is the safer default.
 
 ---

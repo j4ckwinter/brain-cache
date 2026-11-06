@@ -6,7 +6,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { resolveIndexDirectory } from '../../src/services/indexStorage.js';
 import { CHUNK_FORMAT_VERSION } from '../../src/lib/config.js';
 
 const mockReadProfile = vi.fn();
@@ -51,6 +56,23 @@ const profile = {
 
 const dim = 768;
 const fakeVec = () => new Array(dim).fill(0.02);
+
+async function readSnapshotInChild(projectRoot: string) {
+  const script = `
+    const { readIndexState, withIndexConnection } = await import(process.argv[1]);
+    const { resolveIndexDirectory } = await import(process.argv[2]);
+    const root = process.argv[3];
+    const directory = await resolveIndexDirectory(root);
+    const state = await readIndexState(root, directory);
+    const content = await withIndexConnection(root, directory, async db =>
+      (await (await db.openTable('chunks')).query().where("name = 'helper'").toArray())[0].content);
+    process.stdout.write(JSON.stringify({ state, content }));
+  `;
+  const result = await promisify(execFile)(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script,
+    pathToFileURL(resolve('src/services/lancedb.ts')).href,
+    pathToFileURL(resolve('src/services/indexStorage.ts')).href, projectRoot]);
+  return JSON.parse(result.stdout) as { state: { chunkCount: number }; content: string };
+}
 
 describe('e2e pipeline', () => {
   let projectRoot: string;
@@ -113,7 +135,7 @@ describe('e2e pipeline', () => {
     };
   }
 
-  it('recovers partially stored new files without duplicating real database rows', async () => {
+  it('keeps partial new-file rows unpublished and retries without duplicates', async () => {
     const runIndex = await indexFixture();
     const initial = await counts();
     await writeFile(join(projectRoot, 'src', 'new.ts'), Array.from({ length: 51 }, (_, i) =>
@@ -122,7 +144,7 @@ describe('e2e pipeline', () => {
       embeddings: texts.map(() => fakeVec()), skipped: 0, zeroVectorIndices: new Set<number>(),
     })).mockRejectedValueOnce(new Error('interrupted second batch'));
     await expect(runIndex(projectRoot)).rejects.toThrow('interrupted second batch');
-    expect((await counts()).chunks).toBe(initial.chunks + 50);
+    expect(await counts()).toEqual(initial);
     await runIndex(projectRoot);
     expect(await counts()).toEqual({ chunks: initial.chunks + 51, edges: initial.edges + 51 });
     await runIndex(projectRoot);
@@ -198,12 +220,12 @@ describe('e2e pipeline', () => {
     await (await db.openTable('chunks')).dropColumns(['file_type']);
     await runIndex(projectRoot);
     expect(await counts()).toEqual(initial);
-    const schema = await (await db.openTable('chunks')).schema();
+    const schema = await (await (await getConnection(projectRoot)).openTable('chunks')).schema();
     expect(schema.fields.some(field => field.name === 'file_type')).toBe(true);
   });
 
   async function downgradeChunkFormat(revision?: number) {
-    const path = join(projectRoot, '.brain-cache', 'index_state.json');
+    const path = join(await resolveIndexDirectory(projectRoot), 'index_state.json');
     const state = JSON.parse(await readFile(path, 'utf8'));
     if (revision === undefined) delete state.chunkFormatVersion;
     else state.chunkFormatVersion = revision;
@@ -234,7 +256,8 @@ describe('e2e pipeline', () => {
     mockEmbedBatchWithRetry.mockRejectedValueOnce(new Error('embedding unavailable'));
     await expect(runIndex(projectRoot)).rejects.toThrow('embedding unavailable');
     const { readIndexState } = await import('../../src/services/lancedb.js');
-    expect(await readIndexState(projectRoot)).toBeNull();
+    expect((await readIndexState(projectRoot))?.chunkFormatVersion).toBeUndefined();
+    expect(await counts()).toEqual(initial);
     await runIndex(projectRoot);
     expect(await counts()).toEqual(initial);
     expect(await readIndexState(projectRoot)).toMatchObject({ chunkFormatVersion: CHUNK_FORMAT_VERSION });
@@ -261,6 +284,93 @@ describe('e2e pipeline', () => {
     const context = await runBuildContext('trace from entry', { path: projectRoot, limit: 1 });
     expect(context.chunks.map(chunk => chunk.name)).toEqual(['entry', 'helper']);
     expect(context.metadata.localTasksPerformed).toContain('edge_expansion');
+  });
+
+  it('keeps readers on a complete snapshot while a refresh is paused', async () => {
+    const runIndex = await indexFixture();
+    const { runSearch } = await import('../../src/workflows/search.js');
+    const { runBuildContext } = await import('../../src/workflows/buildContext.js');
+    const { readIndexState, readFileHashes } = await import('../../src/services/lancedb.js');
+    const oldDirectory = await resolveIndexDirectory(projectRoot);
+    const oldState = await readIndexState(projectRoot);
+    const oldHashes = await readFileHashes(projectRoot);
+    await writeFile(join(projectRoot, 'src', 'hello.ts'),
+      'export function helper() { return 999; }\nexport function hello() { return helper(); }');
+    let resume!: () => void;
+    let reached!: () => void;
+    const paused = new Promise<void>(resolve => { reached = resolve; });
+    const release = new Promise<void>(resolve => { resume = resolve; });
+    mockEmbedBatchWithRetry.mockImplementationOnce(async (_model: string, texts: string[]) => {
+      reached();
+      await release;
+      return { embeddings: texts.map(() => fakeVec()), skipped: 0, zeroVectorIndices: new Set<number>() };
+    });
+    const refresh = runIndex(projectRoot);
+    try {
+      await paused;
+      expect(await resolveIndexDirectory(projectRoot)).toBe(oldDirectory);
+      expect(await readIndexState(projectRoot)).toEqual(oldState);
+      expect(await readFileHashes(projectRoot)).toEqual(oldHashes);
+      const result = await runSearch('helper', { path: projectRoot, limit: 1 });
+      expect(result.chunks[0].content).toContain('return 1;');
+      const context = await runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
+      expect(context.content).toContain('return 1;');
+      expect(context.content).not.toContain('999');
+      const otherProcess = await readSnapshotInChild(projectRoot);
+      expect(otherProcess.state).toEqual(oldState);
+      expect(otherProcess.content).toContain('return 1;');
+    } finally {
+      resume();
+      await refresh;
+    }
+    const result = await runSearch('helper', { path: projectRoot, limit: 1 });
+    expect(result.chunks[0].content).toContain('999');
+    expect((await readSnapshotInChild(projectRoot)).content).toContain('999');
+    const pinned = await runSearch('helper', { path: projectRoot, limit: 1, indexDirectory: oldDirectory });
+    expect(pinned.chunks[0].content).toContain('return 1;');
+  });
+
+  it('preserves the active model and content after a failed model migration', async () => {
+    const runIndex = await indexFixture();
+    const { readIndexState } = await import('../../src/services/lancedb.js');
+    const oldDirectory = await resolveIndexDirectory(projectRoot);
+    const oldState = await readIndexState(projectRoot);
+    const initial = await counts();
+    mockReadProfile.mockResolvedValue({ ...profile, embeddingModel: 'mxbai-embed-large' });
+    mockEmbedBatchWithRetry.mockRejectedValueOnce(new Error('model unavailable'));
+    await expect(runIndex(projectRoot)).rejects.toThrow('model unavailable');
+    expect(await resolveIndexDirectory(projectRoot)).toBe(oldDirectory);
+    expect(await readIndexState(projectRoot)).toEqual(oldState);
+    expect(await counts()).toEqual(initial);
+  });
+
+  it('pins an in-flight context request while a replacement is published', async () => {
+    const runIndex = await indexFixture();
+    const { runBuildContext } = await import('../../src/workflows/buildContext.js');
+    let resume!: () => void;
+    let reached!: () => void;
+    const paused = new Promise<void>(resolve => { reached = resolve; });
+    const release = new Promise<void>(resolve => { resume = resolve; });
+    mockEmbedBatchWithRetry.mockImplementationOnce(async () => {
+      reached();
+      await release;
+      return { embeddings: [fakeVec()], skipped: 0, zeroVectorIndices: new Set<number>() };
+    });
+    const request = runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
+    try {
+      await paused;
+      await writeFile(join(projectRoot, 'src', 'hello.ts'),
+        'export function helper() { return 999; }\nexport function hello() { return helper(); }');
+      await runIndex(projectRoot);
+    } finally {
+      resume();
+    }
+    const context = await request;
+    expect(context.chunks.map(chunk => chunk.name)).toEqual(['hello', 'helper']);
+    expect(context.content).toContain('return 1;');
+    expect(context.content).not.toContain('999');
+    const fresh = await runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
+    expect(fresh.content).toContain('999');
   });
 
 });

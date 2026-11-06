@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('../../src/services/indexStorage.js', () => ({
+  publishIndexGeneration: async (_root: string, build: (directory: string) => Promise<void>) => build('/staged-index'),
+}));
+
 // Mock all service dependencies before importing the workflow
 vi.mock('../../src/services/capability.js', () => ({
   readProfile: vi.fn(),
@@ -28,6 +32,9 @@ vi.mock('../../src/services/indexLock.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   getConnection: vi.fn(),
+  withIndexConnection: async (root: string, directory: string, operation: (db: import('@lancedb/lancedb').Connection) => Promise<unknown>) =>
+    operation(await getConnection(root, false, directory)),
+  closeIndexConnection: vi.fn(),
   openOrCreateChunkTable: vi.fn(),
   openOrCreateEdgesTable: vi.fn(),
   insertChunks: vi.fn(),
@@ -299,7 +306,8 @@ describe('runIndex', () => {
         dimension: 768,
         fileCount: fakeFiles.length,
         chunkCount: fakeFiles.length, // one chunk per file in mock
-      })
+      }),
+      '/staged-index',
     );
   });
 
@@ -345,7 +353,9 @@ describe('runIndex', () => {
   it('records an empty index after a zero-file crawl', async () => {
     mockCrawlSourceFiles.mockResolvedValue([]);
     await runIndex('/project');
-    expect(mockWriteIndexState).toHaveBeenCalledWith('/project', expect.objectContaining({ fileCount: 0 }));
+    expect(mockWriteIndexState).toHaveBeenCalledWith('/project', expect.objectContaining({ fileCount: 0 }),
+      '/staged-index',
+    );
   });
 
   it('defaults to process.cwd() when no path argument provided', async () => {
@@ -896,6 +906,7 @@ describe('runIndex stat fast-path', () => {
           [fakeFiles[0]]: expect.objectContaining({ size: expect.any(Number), mtimeMs: expect.any(Number) }),
         }),
       }),
+      '/staged-index',
     );
   });
 
@@ -926,6 +937,7 @@ describe('runIndex stat fast-path', () => {
           [fakeFiles[0]]: expect.objectContaining({ size: 55, mtimeMs: 9999 }),
         }),
       }),
+      '/staged-index',
     );
   });
 
@@ -952,6 +964,7 @@ describe('runIndex stat fast-path', () => {
     expect(mockWriteIndexState).toHaveBeenCalledWith(
       '/project',
       expect.objectContaining({ totalTokens: 100 }), // 40 + 60
+      '/staged-index',
     );
   });
 });
@@ -1011,6 +1024,7 @@ describe('embedding dimension fallback', () => {
       'unknown-model-xyz',
       768,
       false,
+      '/staged-index',
     );
     const combined = stderrOutput.join('');
     expect(combined).toContain("Unknown embedding model 'unknown-model-xyz'");

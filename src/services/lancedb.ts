@@ -4,6 +4,7 @@ import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { CHUNK_FORMAT_VERSION, PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME, CONNECTION_POOL_TTL_MS } from '../lib/config.js';
+import { resolveIndexDirectory } from './indexStorage.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState, CallEdge, FileStatEntry } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
@@ -85,6 +86,7 @@ export function edgeSchema(): Schema {
 interface PoolEntry {
   connection: lancedb.Connection;
   createdAt: number;
+  users: number;
 }
 
 const _connectionPool = new Map<string, PoolEntry>();
@@ -98,56 +100,89 @@ export function _setPoolEntryForTest(
   connection: lancedb.Connection,
   createdAt: number
 ): void {
-  _connectionPool.set(projectRoot, { connection, createdAt });
+  _connectionPool.set(join(projectRoot, PROJECT_DATA_DIR), { connection, createdAt, users: 0 });
 }
 
-/**
- * Returns a cached LanceDB connection for the given project root.
- * Opens a new connection if none is cached.
- * Pass force=true to evict the cached connection (used after --force reindex).
- *
- * PERF-01: One Connection per project directory, reused across operations.
- * D-03: Keys by project path only. D-04: Evicts on force flag.
- * DEBT-04: TTL eviction (30min) and isOpen() health validation prevent stale connections.
- */
-export async function getConnection(
-  projectRoot: string,
-  force?: boolean
-): Promise<lancedb.Connection> {
-  if (force) {
-    const entry = _connectionPool.get(projectRoot);
-    if (entry) {
-      if (entry.connection.isOpen()) entry.connection.close();
-      _connectionPool.delete(projectRoot);
-    }
-  }
+const MAX_IDLE_CONNECTIONS = 8;
 
-  const existing = _connectionPool.get(projectRoot);
+function evictIdleConnections(protectedKey?: string): void {
+  const idle = [..._connectionPool.entries()]
+    .filter(([key, entry]) => key !== protectedKey && entry.users === 0)
+    .sort((a, b) => a[1].createdAt - b[1].createdAt);
+  let surplus = Math.max(0, idle.length - MAX_IDLE_CONNECTIONS);
+  for (const [key, entry] of idle) {
+    if (surplus <= 0 && Date.now() - entry.createdAt <= CONNECTION_POOL_TTL_MS) continue;
+    closeIndexConnection(key);
+    surplus--;
+  }
+}
+
+async function connectionEntry(
+  projectRoot: string,
+  dataDirectory: string,
+  force: boolean,
+  retain: boolean,
+): Promise<PoolEntry> {
+  evictIdleConnections(dataDirectory);
+  if (force) closeIndexConnection(dataDirectory);
+  const existing = _connectionPool.get(dataDirectory);
   if (existing) {
     const expired = Date.now() - existing.createdAt > CONNECTION_POOL_TTL_MS;
-    const healthy = existing.connection.isOpen();
-    if (!expired && healthy) {
-      return existing.connection;
+    if (existing.connection.isOpen() && (!expired || existing.users > 0)) {
+      if (retain) existing.users++;
+      return existing;
     }
-    // Evict stale or unhealthy connection
-    if (healthy) existing.connection.close();
-    _connectionPool.delete(projectRoot);
+    closeIndexConnection(dataDirectory);
   }
+  const connection = await openDatabase(projectRoot, dataDirectory);
+  const entry = { connection, createdAt: Date.now(), users: retain ? 1 : 0 };
+  const displaced = _connectionPool.get(dataDirectory);
+  if (displaced?.users === 0 && displaced.connection.isOpen()) displaced.connection.close();
+  _connectionPool.set(dataDirectory, entry);
+  return entry;
+}
 
-  const connection = await openDatabase(projectRoot);
-  _connectionPool.set(projectRoot, { connection, createdAt: Date.now() });
-  return connection;
+export async function getConnection(
+  projectRoot: string,
+  force = false,
+  dataDirectory?: string,
+): Promise<lancedb.Connection> {
+  const directory = dataDirectory ?? await resolveIndexDirectory(projectRoot);
+  return (await connectionEntry(projectRoot, directory, force, false)).connection;
+}
+
+/** Keep the connection leased across all awaits that use this snapshot. */
+export async function withIndexConnection<T>(
+  projectRoot: string,
+  dataDirectory: string,
+  operation: (connection: lancedb.Connection) => Promise<T>,
+): Promise<T> {
+  const entry = await connectionEntry(projectRoot, dataDirectory, false, true);
+  try {
+    return await operation(entry.connection);
+  } finally {
+    entry.users--;
+    if (entry.users === 0 && _connectionPool.get(dataDirectory) !== entry && entry.connection.isOpen()) {
+      entry.connection.close();
+    }
+    evictIdleConnections();
+  }
 }
 
 /**
- * Opens a LanceDB connection at <projectRoot>/.brain-cache/index.
- * Creates the .brain-cache directory if it does not exist.
+ * Opens the selected snapshot, or the active index when no directory is supplied.
  */
-export async function openDatabase(projectRoot: string): Promise<lancedb.Connection> {
-  const dataDir = join(projectRoot, PROJECT_DATA_DIR);
+export async function openDatabase(projectRoot: string, dataDirectory?: string): Promise<lancedb.Connection> {
+  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
   await mkdir(dataDir, { recursive: true });
   const dbPath = join(dataDir, 'index');
   return lancedb.connect(dbPath);
+}
+
+export function closeIndexConnection(dataDirectory: string): void {
+  const entry = _connectionPool.get(dataDirectory);
+  if (entry?.users === 0 && entry.connection.isOpen()) entry.connection.close();
+  _connectionPool.delete(dataDirectory);
 }
 
 /**
@@ -211,11 +246,13 @@ export async function openOrCreateChunkTable(
   model: string,
   dim: number,
   force = false,
+  dataDirectory?: string,
 ): Promise<lancedb.Table> {
+  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
   const tableNames = await db.tableNames();
 
   if (tableNames.includes('chunks') && !force) {
-    const state = await readIndexState(projectRoot);
+    const state = await readIndexState(projectRoot, dataDir);
     if (state?.embeddingModel === model && state.dimension === dim
       && state.chunkFormatVersion === CHUNK_FORMAT_VERSION) {
       const existingTable = await db.openTable('chunks');
@@ -232,8 +269,8 @@ export async function openOrCreateChunkTable(
 
   // A manifest is valid only for the tables it describes. Invalidate state first:
   // if rebuilding fails, the next attempt must rebuild rather than reuse partial data.
-  await rm(join(projectRoot, PROJECT_DATA_DIR, 'index_state.json'), { force: true });
-  await writeFileHashes(projectRoot, { hashes: {}, tokenCounts: {}, stats: {} });
+  await rm(join(dataDir, 'index_state.json'), { force: true });
+  await writeFileHashes(projectRoot, { hashes: {}, tokenCounts: {}, stats: {} }, dataDir);
   if (tableNames.includes('chunks')) await db.dropTable('chunks');
   if (tableNames.includes('edges')) await db.dropTable('edges');
 
@@ -313,11 +350,12 @@ export async function createVectorIndexIfNeeded(
 
 /**
  * Reads and validates the index state JSON file from
- * <projectRoot>/.brain-cache/index_state.json.
+ * the selected snapshot directory.
  * Returns null if the file is missing or invalid.
  */
-export async function readIndexState(projectRoot: string): Promise<IndexState | null> {
-  const statePath = join(projectRoot, PROJECT_DATA_DIR, 'index_state.json');
+export async function readIndexState(projectRoot: string, dataDirectory?: string): Promise<IndexState | null> {
+  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
+  const statePath = join(dataDir, 'index_state.json');
   try {
     const raw = await readFile(statePath, 'utf-8');
     const parsed = IndexStateSchema.safeParse(JSON.parse(raw));
@@ -328,11 +366,11 @@ export async function readIndexState(projectRoot: string): Promise<IndexState | 
 }
 
 /**
- * Writes the index state to <projectRoot>/.brain-cache/index_state.json.
+ * Writes index state into the selected snapshot directory.
  * Creates the directory if it does not exist.
  */
-export async function writeIndexState(projectRoot: string, state: IndexState): Promise<void> {
-  const dataDir = join(projectRoot, PROJECT_DATA_DIR);
+export async function writeIndexState(projectRoot: string, state: IndexState, dataDirectory?: string): Promise<void> {
+  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
   await mkdir(dataDir, { recursive: true });
   const statePath = join(dataDir, 'index_state.json');
   await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
@@ -352,12 +390,13 @@ export interface FileHashManifest {
 }
 
 /**
- * Reads the file hash manifest from <projectRoot>/.brain-cache/file-hashes.json.
+ * Reads the file hash manifest from the selected snapshot directory.
  * Returns a FileHashManifest with hashes and tokenCounts.
  * Gracefully degrades from the legacy format (plain Record<string, string>).
  */
-export async function readFileHashes(projectRoot: string): Promise<FileHashManifest> {
-  const hashPath = join(projectRoot, PROJECT_DATA_DIR, FILE_HASHES_FILENAME);
+export async function readFileHashes(projectRoot: string, dataDirectory?: string): Promise<FileHashManifest> {
+  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
+  const hashPath = join(dataDir, FILE_HASHES_FILENAME);
   try {
     const raw = await readFile(hashPath, 'utf-8');
     const parsed = JSON.parse(raw);
@@ -377,14 +416,15 @@ export async function readFileHashes(projectRoot: string): Promise<FileHashManif
 }
 
 /**
- * Writes the file hash manifest to <projectRoot>/.brain-cache/file-hashes.json.
+ * Writes the file hash manifest into the selected snapshot directory.
  * Creates the directory if it does not exist.
  */
 export async function writeFileHashes(
   projectRoot: string,
-  manifest: FileHashManifest
+  manifest: FileHashManifest,
+  dataDirectory?: string,
 ): Promise<void> {
-  const dataDir = join(projectRoot, PROJECT_DATA_DIR);
+  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
   await mkdir(dataDir, { recursive: true });
   const hashPath = join(dataDir, FILE_HASHES_FILENAME);
   await writeFile(hashPath, JSON.stringify(manifest, null, 2), 'utf-8');

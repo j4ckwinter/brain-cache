@@ -1,3 +1,4 @@
+import { resolveIndexDirectory } from '../services/indexStorage.js';
 import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -193,8 +194,9 @@ export function createMcpServer(): McpServer {
       async ({ query, limit, path }) => {
         const resolvedPath = resolve(path ?? ".");
         validateIndexPath(resolvedPath);
-        const { chunks, fallback } = await runSearch(query, { limit, path: resolvedPath });
-        const { tokenCounts } = await readFileHashes(resolvedPath);
+        const indexDirectory = await resolveIndexDirectory(resolvedPath);
+        const { chunks, fallback } = await runSearch(query, { limit, path: resolvedPath, indexDirectory });
+        const { tokenCounts } = await readFileHashes(resolvedPath, indexDirectory);
         const savings = await computeTokenSavings(chunks, {
           rootDir: resolvedPath,
           query,

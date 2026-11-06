@@ -1,19 +1,21 @@
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import type { Table } from '@lancedb/lancedb';
+import type { Table, Connection } from '@lancedb/lancedb';
 import { requireProfile, requireOllama } from '../lib/guards.js';
 import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import { acquireIndexLock, releaseIndexLock } from '../services/indexLock.js';
+import { publishIndexGeneration } from '../services/indexStorage.js';
 import { childLogger, setLogLevel } from '../services/logger.js';
 import { withStderrFilter } from '../lib/stderr.js';
 import { statAllFiles } from '../lib/fsUtils.js';
 
 const log = childLogger('index');
 import {
-  getConnection,
+  closeIndexConnection,
+  withIndexConnection,
   openOrCreateChunkTable,
   insertChunks,
   createVectorIndexIfNeeded,
@@ -50,6 +52,7 @@ export interface SetupResult {
   verifyEffective: boolean;
   previousLogLevel: string;
   rootDir: string;
+  dataDirectory?: string;
   profile: { embeddingModel: string; [key: string]: unknown };
   gitCfg: GitConfig;
   dim: number;
@@ -86,7 +89,7 @@ export interface WriteManifestOpts {
   partition: StatPartitionResult;
   diff: DiffCleanupResult;
   embed: ChunkEmbedResult;
-  setup: Pick<SetupResult, 'rootDir' | 'table' | 'profile' | 'dim'>;
+  setup: Pick<SetupResult, 'rootDir' | 'table' | 'profile' | 'dim' | 'dataDirectory'>;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,14 +269,11 @@ async function runGitHistoryIngestion(params: {
 // Pipeline stage functions
 // ---------------------------------------------------------------------------
 
-/**
- * Stage 1: Load profile, check Ollama, open LanceDB.
- * Called inside the try block after lock acquisition. runIndex handles flag resolution,
- * log level suppression, path resolution, and lock acquisition/release before calling this.
- */
 export async function resolveAndSetup(
   targetPath: string | undefined,
   opts: { force?: boolean; verify?: boolean } | undefined,
+  dataDirectory: string,
+  db: Connection,
 ): Promise<SetupResult> {
   const force = opts?.force ?? false;
   // D-48-05: --force wins over --verify
@@ -294,12 +294,10 @@ export async function resolveAndSetup(
     );
   }
 
-  // Step 5: Open LanceDB
-  const db = await getConnection(rootDir, force);
-  const table = await openOrCreateChunkTable(db, rootDir, profile.embeddingModel, dim, force);
+  const table = await openOrCreateChunkTable(db, rootDir, profile.embeddingModel, dim, force, dataDirectory);
   const edgesTable = await openOrCreateEdgesTable(db);
 
-  return { force, verifyEffective, previousLogLevel, rootDir, profile, gitCfg, dim, db, table, edgesTable };
+  return { force, verifyEffective, previousLogLevel, rootDir, dataDirectory, profile, gitCfg, dim, db, table, edgesTable };
 }
 
 /**
@@ -307,7 +305,7 @@ export async function resolveAndSetup(
  */
 export async function statAndPartition(
   files: string[],
-  setup: Pick<SetupResult, 'force' | 'verifyEffective' | 'rootDir'>,
+  setup: Pick<SetupResult, 'force' | 'verifyEffective' | 'rootDir' | 'dataDirectory'>,
 ): Promise<StatPartitionResult> {
   const { force, verifyEffective, rootDir } = setup;
 
@@ -317,7 +315,7 @@ export async function statAndPartition(
   // Step 6c: Load stored manifest (skip if force — empty baseline for full reindex)
   const { hashes: storedHashes, tokenCounts: existingTokenCounts, stats: storedStats } = force
     ? { hashes: {} as Record<string, string>, tokenCounts: {} as Record<string, number>, stats: {} as Record<string, FileStatEntry> }
-    : await readFileHashes(rootDir);
+    : await readFileHashes(rootDir, setup.dataDirectory);
 
   // Step 6d: Determine which files need full read+hash
   let filesNeedingRead: string[];
@@ -541,7 +539,7 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
     allFilesTotalTokens += finalTokenCounts[fp] ?? 0;
   }
 
-  await writeFileHashes(rootDir, { hashes: finalHashes, tokenCounts: finalTokenCounts, stats: finalStats });
+  await writeFileHashes(rootDir, { hashes: finalHashes, tokenCounts: finalTokenCounts, stats: finalStats }, setup.dataDirectory);
 
   // Step 9b: Write index state
   const totalFiles = Object.keys(finalHashes).length;
@@ -555,7 +553,7 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
     fileCount: totalFiles,
     chunkCount,
     totalTokens: allFilesTotalTokens,
-  });
+  }, setup.dataDirectory);
 
   if (filesToProcess.length === 0) {
     process.stderr.write(
@@ -575,6 +573,64 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
     totalRawTokens: pipelineStats.totalRawTokens,
     rootDir,
   });
+}
+
+async function buildIndexGeneration(
+  rootDir: string,
+  opts: { force?: boolean; verify?: boolean } | undefined,
+  dataDirectory: string,
+  db: Connection,
+): Promise<void> {
+  const setup = await resolveAndSetup(rootDir, opts, dataDirectory, db);
+
+  // Step 6: Crawl source files
+  const files = await crawlSourceFiles(rootDir);
+  process.stderr.write(`brain-cache: found ${files.length} source files\n`);
+
+  if (files.length === 0) {
+    process.stderr.write(`No source files found in ${rootDir}\n`);
+  }
+
+  const partition = await statAndPartition(files, setup);
+  const hashed = await readAndHash(partition.filesNeedingRead);
+  for (const [filePath, content] of hashed.contentMap) {
+    if (partition.existingTokenCounts[filePath] === undefined) {
+      partition.existingTokenCounts[filePath] = countChunkTokens(content);
+    }
+  }
+
+  // Step 6f: Build currentHashes — fresh for read files, stored for stat-skipped
+  const currentHashes: Record<string, string> = {};
+  for (const fp of files) {
+    if (fp in hashed.freshHashes) {
+      currentHashes[fp] = hashed.freshHashes[fp];
+    } else if (fp in partition.storedHashes) {
+      currentHashes[fp] = partition.storedHashes[fp];
+    }
+    // Files with no hash (shouldn't happen) are omitted
+  }
+
+  const diff = await diffAndCleanup(files, currentHashes, partition, setup);
+
+  const embed = await runChunkEmbedPipeline(diff.filesToProcess, hashed.contentMap, setup);
+  if (setup.gitCfg.enabled === true) {
+    try {
+      await runGitHistoryIngestion({
+        table: setup.table,
+        rootDir,
+        embeddingModel: setup.profile.embeddingModel,
+        dim: setup.dim,
+        maxCommits: setup.gitCfg.maxCommits ?? 500,
+      });
+    } catch (error) {
+      if (isGitCommandError(error)) {
+        process.stderr.write(`Warning: ${error.message}\n`);
+      } else {
+        throw error;
+      }
+    }
+  }
+  await writeManifestAndState({ files, currentHashes, partition, diff, embed, setup });
 }
 
 // ---------------------------------------------------------------------------
@@ -599,7 +655,7 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
  * - *(default)*: stat fast-path skips readFile+hash for files with matching size+mtime in manifest.
  * - `opts.verify`: bypass stat cache — re-read and re-hash all files; still incremental embeds
  *   (unchanged content hashes equal → no chunk/embed work). Use when stat cache may be stale.
- * - `opts.force`: full reindex — ignore manifest entirely, drop and rebuild tables.
+ * - `opts.force`: full reindex — ignore the manifest and build fresh staged tables.
  *   **`force` wins over `verify`**: if both are true, `verify` is ignored.
  *
  * @param targetPath - Directory to index (defaults to current directory)
@@ -625,57 +681,15 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
       await acquireIndexLock(rootDir);
       try {
         setLogLevel('silent');
-        // resolveAndSetup handles profile, Ollama, gitCfg, dim, LanceDB (inside try)
-        const setup = await resolveAndSetup(targetPath, opts);
-
-        // Step 6: Crawl source files
-        const files = await crawlSourceFiles(rootDir);
-        process.stderr.write(`brain-cache: found ${files.length} source files\n`);
-
-        if (files.length === 0) {
-          process.stderr.write(`No source files found in ${rootDir}\n`);
-        }
-
-        const partition = await statAndPartition(files, setup);
-        const hashed = await readAndHash(partition.filesNeedingRead);
-        for (const [filePath, content] of hashed.contentMap) {
-          if (partition.existingTokenCounts[filePath] === undefined) {
-            partition.existingTokenCounts[filePath] = countChunkTokens(content);
-          }
-        }
-
-        // Step 6f: Build currentHashes — fresh for read files, stored for stat-skipped
-        const currentHashes: Record<string, string> = {};
-        for (const fp of files) {
-          if (fp in hashed.freshHashes) {
-            currentHashes[fp] = hashed.freshHashes[fp];
-          } else if (fp in partition.storedHashes) {
-            currentHashes[fp] = partition.storedHashes[fp];
-          }
-          // Files with no hash (shouldn't happen) are omitted
-        }
-
-        const diff = await diffAndCleanup(files, currentHashes, partition, setup);
-
-        const embed = await runChunkEmbedPipeline(diff.filesToProcess, hashed.contentMap, setup);
-        if (setup.gitCfg.enabled === true) {
+        await publishIndexGeneration(rootDir, async (dataDirectory) => {
           try {
-            await runGitHistoryIngestion({
-              table: setup.table,
-              rootDir,
-              embeddingModel: setup.profile.embeddingModel,
-              dim: setup.dim,
-              maxCommits: setup.gitCfg.maxCommits ?? 500,
+            await withIndexConnection(rootDir, dataDirectory, async (db) => {
+              await buildIndexGeneration(rootDir, opts, dataDirectory, db);
             });
-          } catch (error) {
-            if (isGitCommandError(error)) {
-              process.stderr.write(`Warning: ${error.message}\n`);
-            } else {
-              throw error;
-            }
+          } finally {
+            closeIndexConnection(dataDirectory);
           }
-        }
-        await writeManifestAndState({ files, currentHashes, partition, diff, embed, setup });
+        }, opts?.force);
       } finally {
         setLogLevel(previousLogLevel as Parameters<typeof setLogLevel>[0]);
         await releaseIndexLock(rootDir);

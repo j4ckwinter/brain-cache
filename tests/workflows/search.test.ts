@@ -11,6 +11,8 @@ vi.mock('../../src/services/ollama.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   getConnection: vi.fn(),
+  withIndexConnection: async (root: string, directory: string, operation: (db: import('@lancedb/lancedb').Connection) => Promise<unknown>) =>
+    operation(await getConnection(root, false, directory)),
   readIndexState: vi.fn(),
 }));
 
