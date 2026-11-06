@@ -16,7 +16,7 @@ brain-cache is a local context engine for Claude Code. It indexes your codebase 
 
 Most RAG tools split code by line count. brain-cache parses your source files into ASTs and chunks at function, class, and method boundaries — so a chunk is always a complete, meaningful unit of code, never an arbitrary slice of one.
 
-At index time, brain-cache also records call and import metadata from supported AST forms. Retrieval combines semantic matches and exact symbol names. General dependency resolution and import expansion are not implemented yet; the recorded metadata is not a complete call graph.
+At index time, brain-cache also records call and import metadata from supported AST forms. Retrieval combines semantic matches and exact symbol names. Trace queries follow direct calls to unambiguous module-level functions and const arrow functions within JavaScript/TypeScript files. Shadowed, reassigned, member, and cross-file targets remain unresolved. General dependency resolution and import expansion are not implemented; the recorded metadata is not a complete call graph.
 
 Exact symbol-name matches are considered alongside semantic candidates and ranked first, so a definition can be found even when its embedding is a weak match. Keyword fallback also retrieves exact names separately from its broader candidate pool. Final result limits still apply.
 
@@ -104,6 +104,14 @@ With an existing index, `search_codebase` and `build_context` fall back to keywo
 When an upgrade changes the chunk format, the next `brain-cache index` rebuilds older indexes once to adopt the latest format. Later indexing runs remain incremental. Existing indexes remain readable until that rebuild.
 
 `brain-cache index` runs incrementally by default — unchanged files are skipped, so re-indexing a large repo after a few edits takes seconds, not minutes.
+
+With Git-history ingestion disabled, unchanged indexes reuse their existing generation without copying storage or changing the indexed timestamp. `--verify` also checks content hashes before reuse; `--force`, missing metadata, and model/schema/format changes still trigger indexing.
+
+Refreshes build a separate index generation and publish it only after its database and metadata are complete. Searches already in progress keep their original snapshot; new searches use the newly published generation. A failed refresh leaves the previous index available. Legacy indexes are migrated on their next successful refresh.
+
+Each changed refresh copies the active index (using filesystem copy-on-write where available). Automatic cleanup keeps the active and previous generations, plus any older snapshots still used by readers in other processes. The next index run, including an unchanged run, collects released snapshots; pins from exited processes are reclaimed. Unknown reader ownership is retained conservatively. This bounds the number of unused managed snapshots, not the size of each database.
+
+Legacy layouts and generations created before reader tracking remain until `brain-cache clean`, because older clients cannot register their readers. Stop older indexers before upgrading and restart MCP clients afterward. Published 4.0.9 and earlier clients do not understand generation storage and can keep reading the retained legacy index; intermediate builds that understand only version 1 pointers reject the new publication format. To downgrade, clean and reindex with the older build. `clean` removes all generations; run it when no searches are active, then reindex. Publication protects against interrupted indexing processes, not storage-device failure or power-loss durability.
 
 For continuous sync, `brain-cache watch` runs a debounced incremental re-index on every file save. Note: file watchers may be flagged by enterprise EDR tools (Cortex XDR, CrowdStrike, etc.) due to their behavioural profile. If you're on a managed machine, incremental indexing via `brain-cache index` is the safer default.
 

@@ -287,7 +287,7 @@ describe('MCP tool handlers', () => {
       const { handler } = registeredTools.get('search_codebase')!;
       await handler({ query: 'test query', limit: 20, path: '/my/project' });
 
-      expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: '/my/project' });
+      expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: '/my/project', indexDirectory: '/my/project/.brain-cache' });
     });
 
     it('returns isError when path points to a sensitive system directory', async () => {

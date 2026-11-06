@@ -1,3 +1,4 @@
+vi.mock('../../src/services/indexStorage.js', () => ({ withIndexSnapshot: async (root: string, read: (directory: string) => Promise<unknown>) => read(`${root}/.brain-cache`) }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock all service dependencies before importing the workflow
@@ -11,6 +12,8 @@ vi.mock('../../src/services/ollama.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   getConnection: vi.fn(),
+  withIndexConnection: async (root: string, directory: string, operation: (db: import('@lancedb/lancedb').Connection) => Promise<unknown>) =>
+    operation(await getConnection(root, false, directory)),
   readIndexState: vi.fn(),
   readFileHashes: vi.fn(),
 }));

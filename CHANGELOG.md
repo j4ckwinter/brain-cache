@@ -1,5 +1,16 @@
 # Changelog
 
+## 4.1.0 — 2026-11-06
+
+- Publish complete index generations atomically, leaving the previous index available when a refresh fails.
+- Keep in-flight search and context requests on one snapshot, with reader tracking across processes.
+- Reuse unchanged indexes without copying storage when Git-history ingestion is disabled; verify content hashes with `--verify`.
+- Automatically retain the active and previous generations, plus older snapshots still used by readers. Collect released snapshots on the next index run.
+- Resolve unambiguous local JavaScript and TypeScript function calls for context expansion. Imports, cross-file calls, and dynamic calls remain unresolved.
+- Share retrieval and fallback decisions, isolate Claude setup installation, and centralize indexing state and metadata assembly.
+
+Stop older indexers before upgrading and restart MCP clients afterward. The next successful index run migrates legacy storage and rebuilds the chunk format. Published 4.0.9 and earlier clients can otherwise continue reading stale legacy data. Legacy and unmarked generations remain until explicit `brain-cache clean`; stop active searches before cleaning, then reindex. Downgrading requires cleaning and reindexing with the older version.
+
 ## 4.0.9 — 2026-10-30
 
 - Coordinate cleanup and indexing with a lifecycle lock outside index storage.
