@@ -3,21 +3,16 @@ import { resolve } from 'node:path';
 import { requireProfile } from '../lib/guards.js';
 import { getConnection, readIndexState, readFileHashes } from '../services/lancedb.js';
 import { NoIndexError } from '../lib/errors.js';
-import { isOllamaRunning } from '../services/ollama.js';
-import { embedBatchWithRetry } from '../services/embedder.js';
+import { retrieveQuery } from '../services/queryRetrieval.js';
 import {
-  searchChunks,
-  keywordSearchChunks,
   deduplicateChunks,
-  classifyRetrievalMode,
-  RETRIEVAL_STRATEGIES,
   filterDedupedForNonTestChunks,
   expandByEdges,
 } from '../services/retriever.js';
 import { assembleContext, countChunkTokens } from '../services/tokenCounter.js';
 import { DEFAULT_TOKEN_BUDGET } from '../lib/config.js';
 import { computeGrepStyleBaseline } from '../lib/grepStyleBaseline.js';
-import type { ContextResult, SearchOptions, SavingsDisplayMode, RetrievedChunk } from '../lib/types.js';
+import type { ContextResult, SavingsDisplayMode } from '../lib/types.js';
 import { childLogger } from '../services/logger.js';
 
 const log = childLogger('build-context');
@@ -47,29 +42,15 @@ export async function runBuildContext(
   }
   const table = await db.openTable('chunks');
 
-  const mode = classifyRetrievalMode(query);
-  const strategy: SearchOptions = {
-    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
-    distanceThreshold: RETRIEVAL_STRATEGIES[mode].distanceThreshold,
-    keywordBoostWeight: RETRIEVAL_STRATEGIES[mode].keywordBoostWeight,
-  };
-
   const maxTokens = opts?.maxTokens ?? DEFAULT_TOKEN_BUDGET;
-
-  process.stderr.write(
-    `brain-cache: building context (intent=${mode}, budget=${maxTokens} tokens)\n`
-  );
-
-  const ollamaAvailable = await isOllamaRunning();
-  let results: RetrievedChunk[];
-  if (ollamaAvailable) {
-    const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
-    results = await searchChunks(table, vectors[0], strategy, query);
-  } else {
+  process.stderr.write(`brain-cache: building context (budget=${maxTokens} tokens)\n`);
+  const retrieval = await retrieveQuery(table, indexState.embeddingModel, query, opts?.limit);
+  const { mode, fallback } = retrieval;
+  let results = retrieval.chunks;
+  if (fallback) {
     process.stderr.write(
       'brain-cache: [FALLBACK] Ollama is unavailable. Building context from keyword matches — results may be less relevant.\n',
     );
-    results = await keywordSearchChunks(table, query, strategy.limit);
   }
 
   // Expand trace results by following call edges one hop
@@ -157,7 +138,7 @@ export async function runBuildContext(
       filteringPct,
       savingsDisplayMode,
       localTasksPerformed: [
-        ...(ollamaAvailable ? ['embed_query', 'vector_search'] : ['keyword_search']),
+        ...(!fallback ? ['embed_query', 'vector_search'] : ['keyword_search']),
         'dedup', 'token_budget',
         ...(mode === 'trace' && tableNames.includes('edges') ? ['edge_expansion'] : []),
       ],

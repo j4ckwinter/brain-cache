@@ -1,17 +1,10 @@
 import { resolve } from "node:path";
 import { requireProfile } from "../lib/guards.js";
-import { isOllamaRunning } from "../services/ollama.js";
 import { getConnection, readIndexState } from "../services/lancedb.js";
 import { NoIndexError } from "../lib/errors.js";
-import { embedBatchWithRetry } from "../services/embedder.js";
-import {
-  searchChunks,
-  deduplicateChunks,
-  classifyRetrievalMode,
-  RETRIEVAL_STRATEGIES,
-  keywordSearchChunks,
-} from "../services/retriever.js";
-import type { RetrievedChunk, SearchOptions } from "../lib/types.js";
+import { retrieveQuery } from "../services/queryRetrieval.js";
+import { deduplicateChunks } from "../services/retriever.js";
+import type { RetrievedChunk } from "../lib/types.js";
 
 export interface SearchRunOptions {
   limit?: number;
@@ -28,7 +21,6 @@ export async function runSearch(
   opts?: SearchRunOptions,
 ): Promise<SearchResult> {
   await requireProfile();
-  const ollamaAvailable = await isOllamaRunning();
 
   const rootDir = resolve(opts?.path ?? ".");
   const indexState = await readIndexState(rootDir);
@@ -50,37 +42,16 @@ export async function runSearch(
     );
   }
 
-  if (!ollamaAvailable) {
+  process.stderr.write("brain-cache: searching...\n");
+  const { chunks: results, fallback } = await retrieveQuery(
+    table, indexState.embeddingModel, query, opts?.limit,
+  );
+  if (fallback) {
     process.stderr.write(
       "brain-cache: [FALLBACK] Ollama is unavailable. Using keyword search — results may be less relevant.\n",
     );
-    const mode = classifyRetrievalMode(query);
-    const limit = opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit;
-    const results = await keywordSearchChunks(table, query, limit);
-    const deduped = deduplicateChunks(results);
-
-    process.stderr.write(
-      `brain-cache: found ${deduped.length} chunks via keyword fallback\n`,
-    );
-
-    return { chunks: deduped, fallback: true };
   }
 
-  const mode = classifyRetrievalMode(query);
-  const strategy: SearchOptions = {
-    limit: opts?.limit ?? RETRIEVAL_STRATEGIES[mode].limit,
-    distanceThreshold: RETRIEVAL_STRATEGIES[mode].distanceThreshold,
-    keywordBoostWeight: RETRIEVAL_STRATEGIES[mode].keywordBoostWeight,
-  };
-
-  process.stderr.write(
-    `brain-cache: searching (mode=${mode}, limit=${strategy.limit})\n`,
-  );
-
-  const { embeddings: vectors } = await embedBatchWithRetry(indexState.embeddingModel, [query]);
-  const queryVector = vectors[0];
-
-  const results = await searchChunks(table, queryVector, strategy, query);
   const deduped = deduplicateChunks(results);
 
   process.stderr.write(
@@ -92,5 +63,5 @@ export async function runSearch(
     );
   }
 
-  return { chunks: deduped, fallback: false };
+  return { chunks: deduped, fallback };
 }
