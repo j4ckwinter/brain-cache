@@ -21,7 +21,7 @@ Use Node.js >= 22.12.0 and install dependencies with `npm ci`.
 - `src/lib/`: shared types, configuration, validation, formatting, and generated setup content.
 - `tests/`: behavior tests organized by subsystem, plus pipeline and distribution checks.
 
-Project indexes live in `.brain-cache/`; new indexes use immutable generation directories selected by `active.json`, with legacy layouts readable until the next successful refresh. Readers resolve a snapshot once and pass its directory to storage operations. Index writers hold the lifecycle lock and publish only after all writes succeed. Old generations are retained until `clean`; the capability profile, configuration, and cumulative stats live in `~/.brain-cache/`.
+Project indexes live in `.brain-cache/`; new indexes use immutable generation directories selected by `active.json`, with legacy layouts readable until the next successful refresh. Readers use withIndexSnapshot for their entire operation and pass its pinned directory to storage operations. Index writers hold the lifecycle lock and publish only after all writes succeed. Cleanup retains active, previous, and reader-pinned generations; legacy and unmarked generations remain until `clean`; the capability profile, configuration, and cumulative stats live in `~/.brain-cache/`.
 
 `brain-cache init` writes `.mcp.json` using `process.execPath` and the installed package’s absolute `dist/mcp.js` path. There is no `mcp` CLI subcommand. It preserves an existing project skill file; merge packaged skill updates manually after backing up project customizations.
 

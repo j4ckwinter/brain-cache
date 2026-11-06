@@ -1,21 +1,19 @@
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { requireProfile } from '../lib/guards.js';
-import { PROJECT_DATA_DIR, CHUNK_FORMAT_VERSION, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_READ_CONCURRENCY } from '../lib/config.js';
+import { CHUNK_FORMAT_VERSION, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_READ_CONCURRENCY } from '../lib/config.js';
 import { statAllFiles } from '../lib/fsUtils.js';
 import { crawlSourceFiles } from './crawler.js';
 import { readGitConfig } from './gitHistory.js';
-import { resolveIndexDirectory } from './indexStorage.js';
+import { resolveIndexDirectory, hasManagedIndex } from './indexStorage.js';
 import { readIndexState, readFileHashes, withIndexConnection } from './lancedb.js';
 
 export async function canReuseIndex(
   rootDir: string,
   opts?: { force?: boolean; verify?: boolean },
 ): Promise<boolean> {
-  if (opts?.force) return false;
+  if (opts?.force || !await hasManagedIndex(rootDir)) return false;
   const directory = await resolveIndexDirectory(rootDir);
-  if (directory === join(resolve(rootDir), PROJECT_DATA_DIR)) return false;
   const state = await readIndexState(rootDir, directory);
   if (!state || state.chunkFormatVersion !== CHUNK_FORMAT_VERSION) return false;
   const profile = await requireProfile();

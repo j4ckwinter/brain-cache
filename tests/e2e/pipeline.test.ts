@@ -346,6 +346,7 @@ describe('e2e pipeline', () => {
 
   it('pins an in-flight context request while a replacement is published', async () => {
     const runIndex = await indexFixture();
+    const originalDirectory = await resolveIndexDirectory(projectRoot);
     const { runBuildContext } = await import('../../src/workflows/buildContext.js');
     let resume!: () => void;
     let reached!: () => void;
@@ -362,6 +363,8 @@ describe('e2e pipeline', () => {
       await writeFile(join(projectRoot, 'src', 'hello.ts'),
         'export function helper() { return 999; }\nexport function hello() { return helper(); }');
       await runIndex(projectRoot);
+      await runIndex(projectRoot, { force: true });
+      await runIndex(projectRoot, { force: true });
     } finally {
       resume();
     }
@@ -371,6 +374,9 @@ describe('e2e pipeline', () => {
     expect(context.content).not.toContain('999');
     const fresh = await runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
     expect(fresh.content).toContain('999');
+    await runIndex(projectRoot);
+    await expect(readFile(join(originalDirectory, 'index_state.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readdir(join(projectRoot, '.brain-cache', 'generations'))).toHaveLength(2);
   });
 
   it('reuses an unchanged generation without embedding or rewriting metadata', async () => {

@@ -2,6 +2,7 @@ vi.mock('../../src/services/indexFreshness.js', () => ({ canReuseIndex: async ()
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../src/services/indexStorage.js', () => ({
+  pruneIndexGenerations: async () => {},
   publishIndexGeneration: async (_root: string, build: (directory: string) => Promise<void>) => build('/staged-index'),
 }));
 

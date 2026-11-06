@@ -1,4 +1,4 @@
-vi.mock('../../src/services/indexStorage.js', () => ({ resolveIndexDirectory: async (root: string) => `${root}/.brain-cache` }));
+vi.mock('../../src/services/indexStorage.js', () => ({ withIndexSnapshot: async (root: string, read: (directory: string) => Promise<unknown>) => read(`${root}/.brain-cache`) }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock all service dependencies before importing the workflow

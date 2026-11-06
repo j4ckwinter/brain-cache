@@ -4,7 +4,7 @@ import { Schema, Field, Utf8, Int32, Float32, FixedSizeList } from 'apache-arrow
 import { join } from 'node:path';
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { CHUNK_FORMAT_VERSION, PROJECT_DATA_DIR, VECTOR_INDEX_THRESHOLD, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, FILE_HASHES_FILENAME, CONNECTION_POOL_TTL_MS } from '../lib/config.js';
-import { resolveIndexDirectory } from './indexStorage.js';
+import { resolveIndexDirectory, withIndexSnapshot } from './indexStorage.js';
 import { childLogger } from './logger.js';
 import type { CodeChunk, IndexState, CallEdge, FileStatEntry } from '../lib/types.js';
 import { IndexStateSchema } from '../lib/types.js';
@@ -354,7 +354,8 @@ export async function createVectorIndexIfNeeded(
  * Returns null if the file is missing or invalid.
  */
 export async function readIndexState(projectRoot: string, dataDirectory?: string): Promise<IndexState | null> {
-  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
+  if (!dataDirectory) return withIndexSnapshot(projectRoot, directory => readIndexState(projectRoot, directory));
+  const dataDir = dataDirectory;
   const statePath = join(dataDir, 'index_state.json');
   try {
     const raw = await readFile(statePath, 'utf-8');
@@ -395,7 +396,8 @@ export interface FileHashManifest {
  * Gracefully degrades from the legacy format (plain Record<string, string>).
  */
 export async function readFileHashes(projectRoot: string, dataDirectory?: string): Promise<FileHashManifest> {
-  const dataDir = dataDirectory ?? await resolveIndexDirectory(projectRoot);
+  if (!dataDirectory) return withIndexSnapshot(projectRoot, directory => readFileHashes(projectRoot, directory));
+  const dataDir = dataDirectory;
   const hashPath = join(dataDir, FILE_HASHES_FILENAME);
   try {
     const raw = await readFile(hashPath, 'utf-8');

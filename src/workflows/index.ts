@@ -8,7 +8,7 @@ import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import { acquireIndexLock, releaseIndexLock } from '../services/indexLock.js';
 import { canReuseIndex } from '../services/indexFreshness.js';
-import { publishIndexGeneration } from '../services/indexStorage.js';
+import { publishIndexGeneration, pruneIndexGenerations } from '../services/indexStorage.js';
 import { childLogger, setLogLevel } from '../services/logger.js';
 import { withStderrFilter } from '../lib/stderr.js';
 import { statAllFiles } from '../lib/fsUtils.js';
@@ -683,6 +683,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
       try {
         setLogLevel('silent');
         if (await canReuseIndex(rootDir, opts)) {
+          await pruneIndexGenerations(rootDir);
           process.stderr.write('brain-cache: index unchanged; reusing the active generation\n');
           return;
         }
