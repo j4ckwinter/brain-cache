@@ -3,7 +3,7 @@
  * No live Ollama — embeddings are deterministic fake vectors.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, readdir, cp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
@@ -371,6 +371,72 @@ describe('e2e pipeline', () => {
     expect(context.content).not.toContain('999');
     const fresh = await runBuildContext('trace from hello', { path: projectRoot, limit: 1 });
     expect(fresh.content).toContain('999');
+  });
+
+  it('reuses an unchanged generation without embedding or rewriting metadata', async () => {
+    const runIndex = await indexFixture();
+    const directory = await resolveIndexDirectory(projectRoot);
+    const state = await readFile(join(directory, 'index_state.json'), 'utf8');
+    mockEmbedBatchWithRetry.mockClear();
+    for (let i = 0; i < 5; i++) await runIndex(projectRoot);
+    await runIndex(projectRoot, { verify: true });
+    expect(await resolveIndexDirectory(projectRoot)).toBe(directory);
+    expect(await readdir(join(projectRoot, '.brain-cache', 'generations'))).toHaveLength(1);
+    expect(await readFile(join(directory, 'index_state.json'), 'utf8')).toBe(state);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+  });
+
+  it('publishes a forced generation even when files are unchanged', async () => {
+    const runIndex = await indexFixture();
+    const directory = await resolveIndexDirectory(projectRoot);
+    await runIndex(projectRoot, { force: true });
+    expect(await resolveIndexDirectory(projectRoot)).not.toBe(directory);
+  });
+
+  it('does not skip missing metadata or verified hash mismatches', async () => {
+    const runIndex = await indexFixture();
+    const { readFileHashes, writeFileHashes } = await import('../../src/services/lancedb.js');
+    const original = await resolveIndexDirectory(projectRoot);
+    const manifest = await readFileHashes(projectRoot);
+    const file = join(projectRoot, 'src', 'hello.ts');
+    delete manifest.tokenCounts[file];
+    await writeFileHashes(projectRoot, manifest);
+    mockEmbedBatchWithRetry.mockClear();
+    await runIndex(projectRoot);
+    expect(await resolveIndexDirectory(projectRoot)).not.toBe(original);
+    expect((await readFileHashes(projectRoot)).tokenCounts[file]).toBeGreaterThan(0);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    const repaired = await resolveIndexDirectory(projectRoot);
+    const wrongHash = await readFileHashes(projectRoot);
+    wrongHash.hashes[file] = 'incorrect hash';
+    await writeFileHashes(projectRoot, wrongHash);
+    await runIndex(projectRoot, { verify: true });
+    expect(await resolveIndexDirectory(projectRoot)).not.toBe(repaired);
+    expect(mockEmbedBatchWithRetry).toHaveBeenCalled();
+  });
+
+  it('migrates an unchanged legacy layout instead of treating it as a no-op', async () => {
+    const runIndex = await indexFixture();
+    const directory = await resolveIndexDirectory(projectRoot);
+    const legacy = join(projectRoot, '.brain-cache');
+    for (const name of ['index', 'index_state.json', 'file-hashes.json']) {
+      await cp(join(directory, name), join(legacy, name), { recursive: true });
+    }
+    await rm(join(legacy, 'active.json'));
+    expect(await resolveIndexDirectory(projectRoot)).toBe(legacy);
+    await runIndex(projectRoot);
+    expect(await resolveIndexDirectory(projectRoot)).not.toBe(legacy);
+  });
+
+  it('uses the same text decoding for indexing and verification', async () => {
+    const runIndex = await indexFixture();
+    await writeFile(join(projectRoot, 'src', 'hello.ts'), Buffer.concat([
+      Buffer.from('export function hello() { return 1; } // '), Buffer.from([0xff]),
+    ]));
+    await runIndex(projectRoot);
+    const directory = await resolveIndexDirectory(projectRoot);
+    await runIndex(projectRoot, { verify: true });
+    expect(await resolveIndexDirectory(projectRoot)).toBe(directory);
   });
 
 });

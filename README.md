@@ -105,6 +105,8 @@ When an upgrade changes the chunk format, the next `brain-cache index` rebuilds 
 
 `brain-cache index` runs incrementally by default — unchanged files are skipped, so re-indexing a large repo after a few edits takes seconds, not minutes.
 
+With Git-history ingestion disabled, unchanged indexes reuse their existing generation without copying storage or changing the indexed timestamp. `--verify` also checks content hashes before reuse; `--force`, missing metadata, and model/schema/format changes still trigger indexing.
+
 Refreshes build a separate index generation and publish it only after its database and metadata are complete. Searches already in progress keep their original snapshot; new searches use the newly published generation. A failed refresh leaves the previous index available. Legacy indexes are migrated on their next successful refresh.
 
 This consistency guarantee uses extra local disk space: each refresh copies the active index (using filesystem copy-on-write where available). Previous generations remain until `brain-cache clean` so readers in other processes can finish safely. `clean` removes all generations; run it when no searches are active, then reindex. Publication protects against interrupted indexing processes, not storage-device failure or power-loss durability.

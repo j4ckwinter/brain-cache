@@ -1,3 +1,4 @@
+vi.mock('../../src/services/indexFreshness.js', () => ({ canReuseIndex: async () => false }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../src/services/indexStorage.js', () => ({

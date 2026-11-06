@@ -7,6 +7,7 @@ import { crawlSourceFiles } from '../services/crawler.js';
 import { chunkFile } from '../services/chunker.js';
 import { embedBatchWithRetry } from '../services/embedder.js';
 import { acquireIndexLock, releaseIndexLock } from '../services/indexLock.js';
+import { canReuseIndex } from '../services/indexFreshness.js';
 import { publishIndexGeneration } from '../services/indexStorage.js';
 import { childLogger, setLogLevel } from '../services/logger.js';
 import { withStderrFilter } from '../lib/stderr.js';
@@ -681,6 +682,10 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
       await acquireIndexLock(rootDir);
       try {
         setLogLevel('silent');
+        if (await canReuseIndex(rootDir, opts)) {
+          process.stderr.write('brain-cache: index unchanged; reusing the active generation\n');
+          return;
+        }
         await publishIndexGeneration(rootDir, async (dataDirectory) => {
           try {
             await withIndexConnection(rootDir, dataDirectory, async (db) => {
