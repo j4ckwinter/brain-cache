@@ -7,15 +7,15 @@ import { realpathSync } from 'node:fs';
  * Per D-03: resolve-then-blocklist approach.
  * Per D-04: blocklist covers sensitive dirs only, NOT /usr or /bin.
  */
-export const SENSITIVE_DIRS: string[] = [
-  ...(process.platform === 'win32'
+function systemDirs(): string[] {
+  return process.platform === 'win32'
     ? [process.env.SystemRoot, process.env.ProgramData].filter((value): value is string => Boolean(value))
-    : ['/etc', '/var']),
-  join(homedir(), '.ssh'),
-  join(homedir(), '.aws'),
-  join(homedir(), '.gnupg'),
-  join(homedir(), '.config'),
-];
+    : ['/etc', '/var'];
+}
+
+function protectedHomeDirs(): string[] {
+  return ['.ssh', '.aws', '.gnupg', '.config'].map(name => join(homedir(), name));
+}
 
 // Default Windows and macOS filesystems ignore case, so `c:\users\me` and `/Users/ME` name the home directory.
 const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin';
@@ -87,17 +87,20 @@ function validateResolvedPath(resolved: string): void {
     );
   }
   // Reject home directory root — prevents accidental wipe of entire home dir
-  if (withCanonical(homedir()).some(home => relativeTo(home, resolved) === '')) {
+  const homes = withCanonical(homedir());
+  if (homes.some(home => relativeTo(home, resolved) === '')) {
     throw new Error(
       `Path '${resolved}' is the home directory root. Access denied.`
     );
   }
-  // macOS stores user temp dirs under /var/folders — not the same threat model as /var/log, /var/db, etc.
-  if (process.platform === 'darwin' && withCanonical('/var/folders').some(temp => isSameOrChild(resolved, temp))) {
-    return;
-  }
+  // Homes can live under a system directory (ostree Linux links /home to /var/home), so system
+  // directories only apply outside the home directory. macOS stores user temp dirs under /var/folders,
+  // which is not the same threat model as /var/log, /var/db, etc.
+  const insideHome = homes.some(home => isSameOrChild(resolved, home));
+  const macTemp = process.platform === 'darwin' && withCanonical('/var/folders').some(temp => isSameOrChild(resolved, temp));
+  const protectedDirs = insideHome || macTemp ? protectedHomeDirs() : [...systemDirs(), ...protectedHomeDirs()];
 
-  for (const sensitive of SENSITIVE_DIRS.flatMap(withCanonical)) {
+  for (const sensitive of protectedDirs.flatMap(withCanonical)) {
     if (isSameOrChild(resolved, sensitive)) {
       throw new Error(
         `Path '${resolved}' points to a sensitive system directory. Access denied.`

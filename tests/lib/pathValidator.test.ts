@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { homedir } from 'node:os';
 import { join, parse } from 'node:path';
 import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
@@ -157,6 +157,35 @@ describe('validateIndexPath', () => {
         rmSync(join(dir, 'link'), { force: true });
         rmSync(dir, { recursive: true, force: true });
       }
+    });
+  });
+
+  describe.runIf(process.platform === 'win32')('handles Windows aliases of protected directories', () => {
+    it.each([
+      [join(homedir(), '.SSH', 'keys'), 'sensitive system directory'],
+      [join(process.env.ProgramData!.toLowerCase(), 'app'), 'sensitive system directory'],
+      ['C:\\Users\\All Users', 'sensitive system directory'],
+    ])('rejects %s', (path, message) => {
+      expect(() => validateIndexPath(path)).toThrow(message);
+    });
+  });
+
+  describe.runIf(process.platform === 'linux')('handles homes under /var (ostree systems)', () => {
+    const originalHome = process.env.HOME;
+    afterEach(() => {
+      process.env.HOME = originalHome;
+    });
+
+    it('allows projects in a home directory under /var/home', () => {
+      process.env.HOME = '/var/home/dev';
+      expect(() => validateIndexPath('/var/home/dev/projects/app')).not.toThrow();
+    });
+
+    it('still rejects protected folders and the home root under /var/home', () => {
+      process.env.HOME = '/var/home/dev';
+      expect(() => validateIndexPath('/var/home/dev/.ssh')).toThrow('sensitive system directory');
+      expect(() => validateIndexPath('/var/home/dev')).toThrow('home directory root');
+      expect(() => validateIndexPath('/var/log')).toThrow('sensitive system directory');
     });
   });
 
