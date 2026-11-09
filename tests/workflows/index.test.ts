@@ -1,5 +1,6 @@
 vi.mock('../../src/services/indexFreshness.js', () => ({ canReuseIndex: async () => false }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resolve } from 'node:path';
 
 vi.mock('../../src/services/indexStorage.js', () => ({
   pruneIndexGenerations: async () => {},
@@ -250,7 +251,7 @@ describe('runIndex', () => {
 
   it('calls crawlSourceFiles with the resolved target path', async () => {
     await runIndex('/project');
-    expect(mockCrawlSourceFiles).toHaveBeenCalledWith('/project');
+    expect(mockCrawlSourceFiles).toHaveBeenCalledWith(resolve('/project'));
   });
 
   it('calls chunkFile for each crawled file', async () => {
@@ -301,7 +302,7 @@ describe('runIndex', () => {
   it('calls writeIndexState with correct model, dimension, and counts', async () => {
     await runIndex('/project');
     expect(mockWriteIndexState).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({
         version: 1,
         embeddingModel: 'nomic-embed-text',
@@ -355,7 +356,7 @@ describe('runIndex', () => {
   it('records an empty index after a zero-file crawl', async () => {
     mockCrawlSourceFiles.mockResolvedValue([]);
     await runIndex('/project');
-    expect(mockWriteIndexState).toHaveBeenCalledWith('/project', expect.objectContaining({ fileCount: 0 }),
+    expect(mockWriteIndexState).toHaveBeenCalledWith(resolve('/project'), expect.objectContaining({ fileCount: 0 }),
       '/staged-index',
     );
   });
@@ -396,7 +397,7 @@ describe('runIndex', () => {
 
   it('calls acquireIndexLock with the resolved project path before indexing begins', async () => {
     await runIndex('/project');
-    expect(mockAcquireIndexLock).toHaveBeenCalledWith('/project');
+    expect(mockAcquireIndexLock).toHaveBeenCalledWith(resolve('/project'));
     expect(mockAcquireIndexLock).toHaveBeenCalledTimes(1);
   });
 
@@ -409,7 +410,7 @@ describe('runIndex', () => {
       // expected
     }
 
-    expect(mockReleaseIndexLock).toHaveBeenCalledWith('/project');
+    expect(mockReleaseIndexLock).toHaveBeenCalledWith(resolve('/project'));
   });
 
   it('propagates lock contention error immediately without calling crawlSourceFiles', async () => {
@@ -520,7 +521,7 @@ describe('runIndex', () => {
 
     await runIndex('/project');
 
-    expect(mockFetchGitCommits).toHaveBeenCalledWith('/project', 25);
+    expect(mockFetchGitCommits).toHaveBeenCalledWith(resolve('/project'), 25);
     expect(callOrder.indexOf('insertFileChunks')).toBeGreaterThan(-1);
     expect(callOrder.indexOf('deleteHistoryChunks')).toBeGreaterThan(callOrder.indexOf('insertFileChunks'));
     expect(callOrder.indexOf('insertHistoryChunks')).toBeGreaterThan(callOrder.indexOf('deleteHistoryChunks'));
@@ -535,7 +536,7 @@ describe('runIndex', () => {
     mockWriteIndexState.mockClear();
     mockEmbedBatchWithRetry.mockClear();
     await runIndex('/project');
-    expect(mockFetchGitCommits).toHaveBeenCalledExactlyOnceWith('/project', 500);
+    expect(mockFetchGitCommits).toHaveBeenCalledExactlyOnceWith(resolve('/project'), 500);
     expect(mockWriteFileHashes).toHaveBeenCalledTimes(1);
     expect(mockWriteIndexState).toHaveBeenCalledTimes(1);
     expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
@@ -552,7 +553,7 @@ describe('runIndex', () => {
     mockReadGitConfig.mockResolvedValue({ enabled: true });
     mockFetchGitCommits.mockResolvedValue([]);
     await runIndex('/project');
-    expect(mockFetchGitCommits).toHaveBeenCalledWith('/project', 500);
+    expect(mockFetchGitCommits).toHaveBeenCalledWith(resolve('/project'), 500);
   });
 });
 
@@ -902,7 +903,7 @@ describe('runIndex stat fast-path', () => {
     await runIndexLocal('/project');
 
     expect(mockWriteFileHashes).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({
         stats: expect.objectContaining({
           [fakeFiles[0]]: expect.objectContaining({ size: expect.any(Number), mtimeMs: expect.any(Number) }),
@@ -933,7 +934,7 @@ describe('runIndex stat fast-path', () => {
     expect(mockReadFile).not.toHaveBeenCalled();
     // stats should be written
     expect(mockWriteFileHashes).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({
         stats: expect.objectContaining({
           [fakeFiles[0]]: expect.objectContaining({ size: 55, mtimeMs: 9999 }),
@@ -964,7 +965,7 @@ describe('runIndex stat fast-path', () => {
     await runIndexLocal('/project');
 
     expect(mockWriteIndexState).toHaveBeenCalledWith(
-      '/project',
+      resolve('/project'),
       expect.objectContaining({ totalTokens: 100 }), // 40 + 60
       '/staged-index',
     );
@@ -1022,7 +1023,7 @@ describe('embedding dimension fallback', () => {
 
     expect(mockOpenOrCreateChunkTable).toHaveBeenCalledWith(
       mockDb,
-      '/project',
+      resolve('/project'),
       'unknown-model-xyz',
       768,
       false,

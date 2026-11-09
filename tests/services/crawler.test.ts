@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, isAbsolute } from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 
@@ -119,7 +119,7 @@ describe('crawlSourceFiles', () => {
 
     expect(files.length).toBeGreaterThan(0);
     for (const f of files) {
-      expect(f.startsWith('/')).toBe(true); // absolute path starts with /
+      expect(isAbsolute(f)).toBe(true);
     }
   });
 
@@ -220,7 +220,7 @@ it('uses the same nested exclusions and ignore files as watch mode', async () =>
     await writeFile(join(tempDir, path), 'export const value = 1;');
   }
   const ig = await loadSourceIgnore(tempDir);
-  const crawled = (await crawlSourceFiles(tempDir)).map(path => relative(tempDir, path));
+  const crawled = (await crawlSourceFiles(tempDir)).map(path => relative(tempDir, path).replaceAll('\\', '/'));
   expect(crawled).toEqual(['src/keep.ts']);
   expect(paths.filter(path => shouldProcess(path, ig))).toEqual(crawled);
 });

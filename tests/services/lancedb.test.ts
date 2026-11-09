@@ -77,6 +77,34 @@ describe('chunkSchema', () => {
   });
 });
 
+describe('readIndexState', () => {
+  let testDir: string;
+
+  beforeEach(async () => {
+    testDir = join(tmpdir(), `index-state-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(join(testDir, '.brain-cache'), { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  it('accepts index state written by 4.1.x, whose LanceDB tables remain readable', async () => {
+    const state = {
+      version: 1 as const,
+      embeddingModel: 'nomic-embed-text',
+      dimension: 768,
+      indexedAt: new Date().toISOString(),
+      fileCount: 1,
+      chunkCount: 1,
+      totalTokens: 10,
+    };
+    await writeFile(join(testDir, '.brain-cache', 'index_state.json'), JSON.stringify(state));
+    const { readIndexState } = await import('../../src/services/lancedb.js');
+    await expect(readIndexState(testDir)).resolves.toEqual(state);
+  });
+});
+
 // --- readFileHashes / writeFileHashes tests ---
 
 describe('readFileHashes', () => {

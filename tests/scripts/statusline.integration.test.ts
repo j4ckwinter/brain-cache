@@ -76,6 +76,7 @@ describe("statusline.mjs subprocess integration", () => {
     const { stdout, code } = await runScript(STDIN_JSON, {
       ...process.env,
       HOME: tempDir,
+      USERPROFILE: tempDir,
     });
 
     expect(code).toBe(0);
@@ -89,6 +90,7 @@ describe("statusline.mjs subprocess integration", () => {
     const { stdout, code } = await runScript(STDIN_JSON, {
       ...process.env,
       HOME: tempDir,
+      USERPROFILE: tempDir,
     });
 
     expect(code).toBe(0);
@@ -111,6 +113,7 @@ describe("statusline.mjs subprocess integration", () => {
     const { stdout, code } = await runScript(STDIN_JSON, {
       ...process.env,
       HOME: tempDir,
+      USERPROFILE: tempDir,
     });
 
     expect(code).toBe(0);
@@ -124,6 +127,7 @@ describe("statusline.mjs subprocess integration", () => {
     const { stdout, code } = await runScript(STDIN_JSON, {
       ...process.env,
       HOME: tempDir,
+      USERPROFILE: tempDir,
     });
 
     expect(code).toBe(0);
@@ -146,6 +150,7 @@ describe("statusline.mjs subprocess integration", () => {
     const { stdout, code } = await runScript(STDIN_JSON, {
       ...process.env,
       HOME: tempDir,
+      USERPROFILE: tempDir,
     });
 
     expect(code).toBe(0);
@@ -171,6 +176,7 @@ describe("statusline.mjs subprocess integration", () => {
     const { code } = await runScript(STDIN_JSON, {
       ...process.env,
       HOME: tempDir,
+      USERPROFILE: tempDir,
     });
     const elapsed = performance.now() - start;
 

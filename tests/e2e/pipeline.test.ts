@@ -404,7 +404,7 @@ describe('e2e pipeline', () => {
     const { readFileHashes, writeFileHashes } = await import('../../src/services/lancedb.js');
     const original = await resolveIndexDirectory(projectRoot);
     const manifest = await readFileHashes(projectRoot);
-    const file = join(projectRoot, 'src', 'hello.ts');
+    const file = join(projectRoot, 'src', 'hello.ts').replaceAll('\\', '/');
     delete manifest.tokenCounts[file];
     await writeFileHashes(projectRoot, manifest);
     mockEmbedBatchWithRetry.mockClear();

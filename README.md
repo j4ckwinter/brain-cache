@@ -195,6 +195,23 @@ Context budgets and savings use an offline approximation. The bundled legacy Ant
 - Ollama running locally (`nomic-embed-text` model recommended)
 - Anthropic API key (for `ask` command only)
 
+### Upgrading to 4.2
+
+Version 4.2 updates LanceDB to 0.39. Indexes built by 4.1.x keep working
+without a rebuild, and 4.1.1 can read indexes built by 4.2.
+
+### Maintainer checks
+
+`npm run verify:dist` builds and inspects the package, verifies the exact WASM
+payload, installs the generated tarball, and smoke-tests the installed CLI.
+`npm run eval:retrieval` runs the live Ollama retrieval benchmark and writes JSON
+plus Markdown reports. CI uses `--deterministic` to validate the fixture and
+metric pipeline without treating synthetic scores as a quality baseline.
+
+`web-tree-sitter` remains on the latest compatible 0.25 release because the
+published `tree-sitter-wasms@0.1.13` grammars are rejected by the 0.27 runtime.
+The runtime can move to 0.27 once compatible grammar artifacts are available.
+
 ---
 
 ## Development checks

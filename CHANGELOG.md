@@ -1,5 +1,18 @@
 # Changelog
 
+## 4.2.0 — 2026-11-09
+
+- Support Windows. CI now runs typecheck, tests, distribution checks, and audits on Windows, macOS, and Linux with Node 22.12 and 24.
+- Path protection now covers Windows. Drive roots, `%SystemRoot%`, and `%ProgramData%` are rejected there, and `.ssh`, `.aws`, `.gnupg`, and `.config` under the home directory are rejected on every platform, including subdirectories. `brain-cache index` now applies the same check as the MCP tools and `clean`.
+- Path checks are case-insensitive on Windows and macOS and follow junctions and symlinks for existing local paths. On Windows, `\\?\` and `\\.\` paths and the `C$`, `ADMIN$`, `IPC$`, and `PRINT$` shares are rejected; other hidden shares such as `\\server\users$` remain allowed.
+- The status line renders on Windows. Re-running `brain-cache init` now replaces any unmodified status-line script from an earlier version; customized scripts are still preserved.
+- Update LanceDB to 0.39, the Anthropic SDK to 0.128, Commander to 15, Marked to 18, and Pino to 10. Pin security-sensitive transitive dependencies (including sharp, hono, body-parser, qs, and fast-uri) to patched releases through overrides. LanceDB 0.39 brings optional `@huggingface/transformers` and ONNX runtime packages that brain-cache does not use, which makes installs noticeably larger.
+- Replace shell-dependent WASM copying with a portable Node script. Add `npm run verify:dist` and `npm run eval:retrieval` maintainer checks.
+
+### Upgrading
+
+Indexes built by 4.1.x keep working without a rebuild, including keyword fallback when Ollama is unavailable. 4.1.1 can also read indexes built by 4.2.0, so downgrading needs no `clean`.
+
 ## 4.1.1 — 2026-11-09
 
 - Fix indexing in global installs. Since 4.0, brain-cache overrode `apache-arrow` to 21, outside the `<=18.1.0` range LanceDB supports. Global installs apply that override to LanceDB, so `brain-cache index` failed with "Failed to read IPC file". Local installs keep LanceDB on its own compatible Arrow copy.

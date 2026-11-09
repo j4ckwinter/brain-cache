@@ -35,7 +35,9 @@ import {
 import { CHUNK_FORMAT_VERSION, EMBEDDING_DIMENSIONS, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_BATCH_SIZE, FILE_READ_CONCURRENCY, EMBED_MAX_TOKENS } from '../lib/config.js';
 import { countChunkTokens } from '../services/tokenCounter.js';
 import type { CodeChunk, CallEdge, FileStatEntry } from '../lib/types.js';
+import { CURRENT_INDEX_VERSION } from '../lib/types.js';
 import { formatTokenSavings } from '../lib/format.js';
+import { validateIndexPath } from '../lib/pathValidator.js';
 import {
   fetchGitCommits,
   buildCommitContent,
@@ -546,7 +548,7 @@ export async function writeManifestAndState(opts: WriteManifestOpts): Promise<vo
   const totalFiles = Object.keys(finalHashes).length;
   const chunkCount = await table.countRows();
   await writeIndexState(rootDir, {
-    version: 1,
+    version: CURRENT_INDEX_VERSION,
     chunkFormatVersion: CHUNK_FORMAT_VERSION,
     embeddingModel: profile.embeddingModel,
     dimension: dim,
@@ -678,6 +680,7 @@ export async function runIndex(targetPath?: string, opts?: { force?: boolean; ve
       // Resolve path and suppress logging before lock — these don't throw
       const previousLogLevel = process.env.BRAIN_CACHE_LOG ?? 'warn';
       const rootDir = resolve(targetPath ?? '.');
+      validateIndexPath(rootDir);
 
       await acquireIndexLock(rootDir);
       try {

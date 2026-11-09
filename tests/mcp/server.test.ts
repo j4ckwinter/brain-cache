@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { NoIndexError as NoIndexErrorType } from '../../src/lib/errors.js';
+import { resolve } from 'node:path';
 
 // Capture registered tool handlers before any imports
 const registeredTools = new Map<string, { schema: any; handler: Function }>();
@@ -287,7 +288,7 @@ describe('MCP tool handlers', () => {
       const { handler } = registeredTools.get('search_codebase')!;
       await handler({ query: 'test query', limit: 20, path: '/my/project' });
 
-      expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: '/my/project', indexDirectory: '/my/project/.brain-cache' });
+      expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: resolve('/my/project'), indexDirectory: resolve('/my/project/.brain-cache') });
     });
 
     it('returns isError when path points to a sensitive system directory', async () => {
@@ -295,7 +296,8 @@ describe('MCP tool handlers', () => {
       mockIsOllamaRunning.mockResolvedValue(true);
 
       const { handler } = registeredTools.get('search_codebase')!;
-      const result = await handler({ query: 'find auth functions', path: '/etc' });
+      const sensitivePath = process.platform === 'win32' ? process.env.SystemRoot! : '/etc';
+      const result = await handler({ query: 'find auth functions', path: sensitivePath });
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('sensitive system directory');

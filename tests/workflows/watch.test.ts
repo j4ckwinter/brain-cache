@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ignore from 'ignore';
+import { resolve } from 'node:path';
 import { IndexLockedError } from '../../src/services/indexLock.js';
 
 // Mock all dependencies before importing the module
@@ -184,7 +185,7 @@ describe('debounce coalescing', () => {
 
     // runIndex should be called exactly once
     expect(mockRunIndex).toHaveBeenCalledTimes(1);
-    expect(mockRunIndex).toHaveBeenCalledWith('/tmp/coalesce-1');
+    expect(mockRunIndex).toHaveBeenCalledWith(resolve('/tmp/coalesce-1'));
   });
 
   it('reloads ignore files and reindexes when the policy changes', async () => {

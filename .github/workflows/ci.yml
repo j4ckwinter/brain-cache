@@ -10,10 +10,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: ['22.12.0', '24']
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -24,4 +24,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:distribution
+      - run: npm run verify:dist
+      # PowerShell's npm.ps1 shim drops `--`, so the flags would reach npm instead of the script.
+      - run: npm run eval:retrieval -- --deterministic --output "${{ runner.temp }}/brain-cache-eval"
+        shell: bash
       - run: npm audit --audit-level=low

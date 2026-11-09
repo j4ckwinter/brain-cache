@@ -38,6 +38,7 @@ export const IndexStateSchema = z.object({
   totalTokens:    z.number().int().default(0),
 });
 export type IndexState = z.infer<typeof IndexStateSchema>;
+export const CURRENT_INDEX_VERSION = 1 as const;
 
 // --- Phase 3: Retrieval types ---
 
