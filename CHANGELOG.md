@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.2.0 — 2026-11-09
+
+- Support Windows. CI now runs typecheck, tests, distribution checks, and audits on Windows, macOS, and Linux with Node 22.12 and 24.
+- Path protection now covers Windows. Drive roots, `%SystemRoot%`, and `%ProgramData%` are rejected there, and `.ssh`, `.aws`, `.gnupg`, and `.config` under the home directory are rejected on every platform, including subdirectories. `brain-cache index` now applies the same check as the MCP tools and `clean`.
+- The status line renders on Windows.
+- Update LanceDB to 0.39, the Anthropic SDK to 0.128, Commander to 15, Marked to 18, and Pino to 10. Move security overrides to patched releases.
+- Replace shell-dependent WASM copying with a portable Node script. Add `npm run verify:dist` and `npm run eval:retrieval` maintainer checks.
+
+### Upgrading
+
+The index state format advances to version 2. Indexes built by 4.1.x and earlier report "No index found"; run `brain-cache index` once to rebuild. Rebuilding replaces only data under `.brain-cache/`. To downgrade, run `brain-cache clean` and reindex with the older version.
+
 ## 4.1.1 — 2026-11-09
 
 - Fix indexing in global installs. Since 4.0, brain-cache overrode `apache-arrow` to 21, outside the `<=18.1.0` range LanceDB supports. Global installs apply that override to LanceDB, so `brain-cache index` failed with "Failed to read IPC file". Local installs keep LanceDB on its own compatible Arrow copy.
@@ -108,25 +120,3 @@ Node.js 22.12.0 or newer is required. This replaces the previous package manifes
 Use Node 22.12.0 or newer. Re-run `brain-cache init` to refresh MCP configuration and the unmodified bundled status-line script; customized status-line scripts are preserved. If prior forced indexing created duplicate results, run `brain-cache index --force` once after upgrading.
 
 Indexing, search, and context assembly remain local. Token budgets are approximate and do not include the full conversation or MCP framing; the tokenizer is not accurate for modern Claude billing counts.
-
-## 3.7.0
-
-- Requires Node.js 22.12 or newer and tests Node 22.12 and 24 on Windows,
-  macOS, and Linux.
-- Updates Anthropic, LanceDB, Pino, Marked, Commander, MCP, Vitest, and their
-  security-sensitive transitive dependencies.
-- Advances the derived index format to version 2 and provides a safe reindex
-  path for older indexes.
-- Adds a checked-in retrieval fixture and `npm run eval:retrieval` for live and
-  deterministic evaluation reports.
-- Keeps `web-tree-sitter` 0.25 pending compatible 0.27 grammar WASM artifacts.
-
-## 3.6.3
-
-- Replaces shell-dependent WASM copying and package inspection with portable
-  Node scripts.
-- Makes path protection, status-line execution, tests, and generated-template
-  comparisons platform-aware.
-- Adds `npm run verify:dist` and a six-job cross-platform CI matrix.
-- Refreshes dependencies within their existing major-version ranges and gates
-  releases on high or critical production advisories.

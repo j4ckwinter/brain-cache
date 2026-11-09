@@ -195,12 +195,12 @@ Context budgets and savings use an offline approximation. The bundled legacy Ant
 - Ollama running locally (`nomic-embed-text` model recommended)
 - Anthropic API key (for `ask` command only)
 
-### Upgrading to 3.7
+### Upgrading to 4.2
 
-Version 3.7 updates LanceDB and advances the derived index format. Existing
-indexes are reported as stale with an instruction to run `brain-cache index`;
-guarded MCP operations retain their normal automatic indexing path. Rebuilding
-only replaces data under `.brain-cache/` and never modifies project source.
+Version 4.2 updates LanceDB and advances the index state format. Indexes built
+by 4.1.x and earlier report "No index found"; run `brain-cache index` once to
+rebuild. Rebuilding only replaces data under `.brain-cache/` and never modifies
+project source.
 
 ### Maintainer checks
 
