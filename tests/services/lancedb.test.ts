@@ -89,23 +89,9 @@ describe('readIndexState', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  it('treats a version 1 index as stale so callers can request a reindex', async () => {
-    await writeFile(join(testDir, '.brain-cache', 'index_state.json'), JSON.stringify({
-      version: 1,
-      embeddingModel: 'nomic-embed-text',
-      dimension: 768,
-      indexedAt: new Date().toISOString(),
-      fileCount: 1,
-      chunkCount: 1,
-      totalTokens: 10,
-    }));
-    const { readIndexState } = await import('../../src/services/lancedb.js');
-    await expect(readIndexState(testDir)).resolves.toBeNull();
-  });
-
-  it('accepts a version 2 index', async () => {
+  it('accepts index state written by 4.1.x, whose LanceDB tables remain readable', async () => {
     const state = {
-      version: 2 as const,
+      version: 1 as const,
       embeddingModel: 'nomic-embed-text',
       dimension: 768,
       indexedAt: new Date().toISOString(),

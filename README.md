@@ -197,10 +197,8 @@ Context budgets and savings use an offline approximation. The bundled legacy Ant
 
 ### Upgrading to 4.2
 
-Version 4.2 updates LanceDB and advances the index state format. Indexes built
-by 4.1.x and earlier report "No index found"; run `brain-cache index` once to
-rebuild. Rebuilding only replaces data under `.brain-cache/` and never modifies
-project source.
+Version 4.2 updates LanceDB to 0.39. Indexes built by 4.1.x keep working
+without a rebuild, and 4.1.1 can read indexes built by 4.2.
 
 ### Maintainer checks
 

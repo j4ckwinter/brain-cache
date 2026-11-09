@@ -77,7 +77,7 @@ async function writeIndexState(dir: string, model: string, dim: number): Promise
   await writeFile(
     join(stateDir, 'index_state.json'),
     JSON.stringify({
-      version: 2,
+      version: 1,
       embeddingModel: model,
       dimension: dim,
       indexedAt: new Date().toISOString(),

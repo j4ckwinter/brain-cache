@@ -304,7 +304,7 @@ describe('runIndex', () => {
     expect(mockWriteIndexState).toHaveBeenCalledWith(
       resolve('/project'),
       expect.objectContaining({
-        version: 2,
+        version: 1,
         embeddingModel: 'nomic-embed-text',
         dimension: 768,
         fileCount: fakeFiles.length,

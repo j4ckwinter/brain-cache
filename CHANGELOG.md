@@ -10,7 +10,7 @@
 
 ### Upgrading
 
-The index state format advances to version 2. Indexes built by 4.1.x and earlier report "No index found"; run `brain-cache index` once to rebuild. Rebuilding replaces only data under `.brain-cache/`. To downgrade, run `brain-cache clean` and reindex with the older version.
+Indexes built by 4.1.x keep working without a rebuild, including keyword fallback when Ollama is unavailable. 4.1.1 can also read indexes built by 4.2.0, so downgrading needs no `clean`.
 
 ## 4.1.1 — 2026-11-09
 

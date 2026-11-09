@@ -10,7 +10,7 @@ vi.mock('node:fs/promises', async original => {
 });
 
 let root: string;
-const state = { version: 2, embeddingModel: 'nomic-embed-text', dimension: 768,
+const state = { version: 1, embeddingModel: 'nomic-embed-text', dimension: 768,
   indexedAt: '2026-11-06T00:00:00.000Z', fileCount: 1, chunkCount: 1 };
 async function publish(value: string) {
   await publishIndexGeneration(root, async dir => {

@@ -42,7 +42,7 @@ describe('offline context with a real LanceDB index', () => {
       }]);
     }
     await writeIndexState(project, {
-      version: 2, embeddingModel: 'nomic-embed-text', dimension: 768,
+      version: 1, embeddingModel: 'nomic-embed-text', dimension: 768,
       indexedAt: new Date().toISOString(), fileCount: withChunks ? 1 : 0, chunkCount: withChunks ? 1 : 0, totalTokens: 0,
     });
   }

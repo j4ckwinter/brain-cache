@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { publishIndexGeneration, resolveIndexDirectory, withIndexSnapshot, pruneIndexGenerations } from '../../src/services/indexStorage.js';
 
 const state = {
-  version: 2, embeddingModel: 'nomic-embed-text', dimension: 768,
+  version: 1, embeddingModel: 'nomic-embed-text', dimension: 768,
   indexedAt: '2026-11-06T00:00:00.000Z', fileCount: 1, chunkCount: 1,
 };
 

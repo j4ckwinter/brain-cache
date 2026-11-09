@@ -98,7 +98,7 @@ const mockProfile = {
 };
 
 const mockIndexState = {
-  version: 2 as const,
+  version: 1 as const,
   embeddingModel: 'nomic-embed-text',
   dimension: 768,
   indexedAt: '2026-03-31T00:00:00.000Z',
