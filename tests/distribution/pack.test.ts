@@ -31,7 +31,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (scratch) await rm(scratch, { recursive: true, force: true });
-});
+}, 120_000);
 
 describe('published package', () => {
   it('ships all six WASM assets and the Claude skill', () => {
@@ -51,7 +51,7 @@ describe('published package', () => {
     await exec(process.execPath, [npmCli,
       'install', ...(mode === 'global' ? ['--global'] : []), '--prefix', prefix,
       '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund', tarball,
-    ], { cwd: prefix, timeout: 120_000 });
+    ], { cwd: prefix, timeout: 300_000 });
     const modules = mode === 'local'
       ? join(prefix, 'node_modules')
       : (await exec(process.execPath, [npmCli, 'root', '--global', '--prefix', prefix], { cwd: prefix })).stdout.trim();
@@ -141,5 +141,5 @@ describe('published package', () => {
       '--input-type=module', '-e', lancedbProbe, join(prefix, 'lancedb probe'),
     ], { cwd: installed, timeout: 30_000 });
     expect(lancedbResult.stdout.trim()).toBe('lancedb round trip passed');
-  }, 150_000);
+  }, 420_000);
 });

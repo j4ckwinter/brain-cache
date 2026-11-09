@@ -24,10 +24,13 @@ function runNpm(args, options = {}) {
 }
 
 runNpm(['run', 'build'], { stdio: 'inherit' });
-const json = runNpm(['pack', '--dry-run', '--json', '--ignore-scripts'], {
+const output = runNpm(['pack', '--dry-run', '--json'], {
   encoding: 'utf8',
 });
-const pack = JSON.parse(json)[0];
+// `prepare` rebuilds here, and npm 10 prints that build output to stdout before the JSON.
+const jsonStart = output.search(/^\[$/m);
+if (jsonStart < 0) throw new Error(`npm pack did not print JSON:\n${output}`);
+const pack = JSON.parse(output.slice(jsonStart))[0];
 const packaged = new Set(pack.files.map((file) => file.path.replaceAll('\\', '/')));
 const wasm = [...packaged].filter((file) => file.endsWith('.wasm'));
 
