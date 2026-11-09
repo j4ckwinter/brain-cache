@@ -665,9 +665,9 @@ describe('statusline installation', () => {
     expect(combined).toContain('already installed');
   });
 
-  it('updates the unmodified v3.6.2 statusline while preserving custom scripts', async () => {
+  it.each(['v3.6.2', 'v4.1.1'])('updates the unmodified %s statusline while preserving custom scripts', async version => {
     const fs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
-    const legacy = (await fs.readFile(new URL('../fixtures/statusline-v3.6.2.mjs', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+    const legacy = (await fs.readFile(new URL(`../fixtures/statusline-${version}.mjs`, import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
     mockReadFile.mockImplementation(async path => {
       if (String(path).endsWith('statusline.mjs')) return legacy;
       throw Object.assign(new Error('missing'), { code: 'ENOENT' });
