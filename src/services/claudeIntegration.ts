@@ -118,8 +118,8 @@ async function installSkill(packageRoot: string): Promise<void> {
 
 // SHA-256 of every statusline.mjs brain-cache has bundled. Only exact matches are replaced; anything else is a user customization.
 const BUNDLED_STATUSLINE_SHA256 = new Set([
-  '8de32c125de3eb535f96778163af0acc028d5559ae3eb49839e28c82efffc133', // 4.0.1-4.1.1
-  '24536abf269b1c05f3c5d28415eaace01a6feb6a0719efede24fd2f754c2511c', // 3.6.2
+  '8de32c125de3eb535f96778163af0acc028d5559ae3eb49839e28c82efffc133', // 4.0.0-4.1.1
+  '24536abf269b1c05f3c5d28415eaace01a6feb6a0719efede24fd2f754c2511c', // 3.6.2; the remainder are earlier 3.x releases
   '457af9aa4b25cee98723b4930ea1d050e369b3e060375a65c2dc6c61d09c9fdc',
   '617b771e0c00c1579e3b56ec40ca22c0aff6106bb1ec0842e2e3f476beea5c4b',
   '613cbba90aa82c46c5458992216ee7a6457f5864b0b56ea6821b3e831d8ac851',

@@ -23,7 +23,6 @@ function runNpm(args, options = {}) {
   });
 }
 
-runNpm(['run', 'build'], { stdio: 'inherit' });
 const output = runNpm(['pack', '--dry-run', '--json'], {
   encoding: 'utf8',
 });
@@ -46,7 +45,7 @@ try {
   const npmCache = join(smokeRoot, 'npm-cache');
   const installRoot = join(smokeRoot, 'install');
   await mkdir(installRoot, { recursive: true });
-  const tarball = runNpm(['pack', '--silent', '--ignore-scripts', '--pack-destination', smokeRoot], {
+  const tarball = runNpm(['pack', '--silent', '--pack-destination', smokeRoot], {
     encoding: 'utf8',
   }).trim().split(/\r?\n/).at(-1);
   runNpm(['init', '-y'], { cwd: installRoot, stdio: 'ignore' });
@@ -55,8 +54,14 @@ try {
     stdio: 'ignore',
     env: { ...process.env, npm_config_cache: npmCache },
   });
-  const installedPackage = JSON.parse(await readFile(join(installRoot, 'node_modules', 'brain-cache', 'package.json'), 'utf8'));
+  const installedRoot = join(installRoot, 'node_modules', 'brain-cache');
+  const installedPackage = JSON.parse(await readFile(join(installedRoot, 'package.json'), 'utf8'));
   if (!installedPackage.version) throw new Error('Installed package has no version');
+  for (const file of requiredWasm) {
+    await readFile(join(installedRoot, file)).catch(() => {
+      throw new Error(`Installed package is missing ${file}`);
+    });
+  }
   const cli = join(installRoot, 'node_modules', 'brain-cache', 'dist', 'cli.js');
   const version = execFileSync(process.execPath, [cli, '--version'], {
     cwd: installRoot,
