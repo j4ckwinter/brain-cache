@@ -11,6 +11,8 @@ vi.mock('../../src/services/ollama.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   getConnection: vi.fn(),
+  withIndexConnection: async (root: string, directory: string, operation: (db: import('@lancedb/lancedb').Connection) => Promise<unknown>) =>
+    operation(await getConnection(root, false, directory)),
   readIndexState: vi.fn(),
 }));
 
@@ -63,18 +65,20 @@ const mockProfile = {
 };
 
 const mockIndexState = {
-  version: 1 as const,
+  version: 2 as const,
   embeddingModel: 'mxbai-embed-large', // different from profile to test model source
   dimension: 1024,
   indexedAt: '2026-03-31T00:00:00.000Z',
   fileCount: 10,
   chunkCount: 50,
+  totalTokens: 0,
 };
 
 const fakeChunk = (id: string) => ({
   id,
   filePath: `/project/src/${id}.ts`,
   chunkType: 'function',
+  sourceKind: 'file' as const,
   scope: null,
   name: `fn_${id}`,
   content: `function fn_${id}() {}`,
@@ -127,7 +131,7 @@ describe('runSearch', () => {
     mockGetConnection.mockResolvedValue(mockDb);
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0, zeroVectorIndices: new Set() });
     mockClassifyRetrievalMode.mockReturnValue('explore');
 
     const rawChunks = [fakeChunk('a'), fakeChunk('b')];

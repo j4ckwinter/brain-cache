@@ -1,47 +1,16 @@
 import { watch } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { extname, join, resolve } from 'node:path';
-import ignore from 'ignore';
+import { resolve } from 'node:path';
+import type ignore from 'ignore';
+import { IndexLockedError } from '../services/indexLock.js';
 import { runIndex } from './index.js';
-import { SOURCE_EXTENSIONS } from '../services/crawler.js';
+import { SOURCE_EXTENSIONS, IGNORE_FILENAMES, isEligibleSourcePath, loadSourceIgnore } from '../services/filePolicy.js';
 import { childLogger } from '../services/logger.js';
 import { withStderrFilter } from '../lib/stderr.js';
 
 const log = childLogger('watch');
 
-// Paths to exclude at watch level (derived from ALWAYS_EXCLUDE_GLOBS in crawler.ts)
-const EXCLUDED_PREFIXES = ['node_modules/', '.git/', 'dist/', 'build/', '.next/', '__pycache__/'];
-
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-/**
- * Determines whether a file change event should trigger a re-index.
- *
- * @param relativeFilename - Relative path from the watched root (as returned by fs.watch on Linux)
- * @param ig - ignore instance pre-loaded with .braincacheignore patterns
- * @returns true if the file should trigger re-indexing, false otherwise
- */
 export function shouldProcess(relativeFilename: string, ig: ReturnType<typeof ignore>): boolean {
-  if (!relativeFilename) return false;
-
-  // Extension check — naturally excludes .brain-cache/ writes (.json, .lock extensions)
-  const ext = extname(relativeFilename);
-  if (!SOURCE_EXTENSIONS.has(ext)) return false;
-
-  // Path prefix check — excludes node_modules/**.ts and similar
-  for (const prefix of EXCLUDED_PREFIXES) {
-    if (relativeFilename.startsWith(prefix)) return false;
-  }
-
-  // .braincacheignore check — wrap in try/catch since ignore throws for paths starting with ../
-  try {
-    if (ig.ignores(relativeFilename)) return false;
-  } catch {
-    // Defensive: if ignore throws, default to processing the file
-    return true;
-  }
-
-  return true;
+  return isEligibleSourcePath(relativeFilename, ig);
 }
 
 /**
@@ -63,26 +32,12 @@ export function buildSummary(lines: string[], elapsed: string): string {
 }
 
 /**
- * Schedules a re-index with a 500ms debounce window (D-03).
- * Rapid calls within the window collapse into a single runIndex invocation.
- *
- * @internal
- */
-function scheduleReindex(rootDir: string): void {
-  if (debounceTimer !== null) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(async () => {
-    debounceTimer = null;
-    await triggerReindex(rootDir);
-  }, 500);
-}
-
-/**
  * Executes a single re-index cycle, suppressing runIndex stderr output and
  * emitting a compact summary line (D-06, D-07, D-08).
  *
  * @internal
  */
-async function triggerReindex(rootDir: string): Promise<void> {
+async function triggerReindex(rootDir: string): Promise<boolean> {
   const captured: string[] = [];
   const start = Date.now();
   try {
@@ -93,38 +48,46 @@ async function triggerReindex(rootDir: string): Promise<void> {
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
     const summary = buildSummary(captured, elapsed);
     process.stderr.write(`${summary}\n`);
+    return true;
   } catch (err) {
-    if (err instanceof Error && err.message.includes('Try again later')) {
-      // D-07/D-08: lock held by concurrent indexer — skip and log
-      process.stderr.write('brain-cache: Index in progress, skipping (will retry on next change)\n');
-      return;
+    if (err instanceof IndexLockedError) {
+      // Keep the pending change until the other writer releases its lock.
+      process.stderr.write('brain-cache: Index in progress, retrying shortly\n');
+      return false;
     }
     log.error({ err }, 'Re-index failed');
+    return true;
   }
 }
 
-/**
- * Runs the brain-cache file watcher.
- *
- * Monitors `targetPath` (or cwd) with Node.js `fs.watch` (recursive mode),
- * debounces file changes at 500ms, filters by SOURCE_EXTENSIONS + excluded
- * path prefixes + .braincacheignore, calls `runIndex()` on debounce fire,
- * catches lock contention to skip-and-log, suppresses runIndex stderr output
- * and prints compact summaries, and handles graceful shutdown via SIGINT/SIGTERM.
- *
- * @param targetPath - Directory to watch (defaults to current directory)
- */
 export async function runWatch(targetPath?: string): Promise<void> {
   const rootDir = resolve(targetPath ?? '.');
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let running = false;
+  let pending = false;
+  let stopped = false;
 
-  // Load .braincacheignore once at startup (D-04)
-  const ig = ignore();
-  try {
-    const ignoreContent = await readFile(join(rootDir, '.braincacheignore'), 'utf-8');
-    ig.add(ignoreContent);
-  } catch {
-    // No .braincacheignore — skip
+  function scheduleReindex(): void {
+    if (stopped) return;
+    pending = true;
+    if (running) return;
+    if (debounceTimer !== null) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      debounceTimer = null;
+      if (stopped) return;
+      pending = false;
+      running = true;
+      try {
+        if (!await triggerReindex(rootDir)) pending = true;
+      } finally {
+        running = false;
+        if (pending && !stopped) scheduleReindex();
+      }
+    }, 500);
   }
+
+
+  let ig = await loadSourceIgnore(rootDir);
 
   // Startup banner (D-05)
   process.stderr.write(
@@ -133,16 +96,24 @@ export async function runWatch(targetPath?: string): Promise<void> {
     `  extensions: ${[...SOURCE_EXTENSIONS].join(', ')}\n`
   );
 
-  const watcher = watch(rootDir, { recursive: true, persistent: true }, (eventType, filename) => {
+  const watcher = watch(rootDir, { recursive: true, persistent: true }, (_eventType, filename) => {
     if (!filename) return;
+    if (IGNORE_FILENAMES.includes(filename)) {
+      void loadSourceIgnore(rootDir).then(next => {
+        ig = next;
+        scheduleReindex();
+      }).catch(err => log.error({ err }, 'Could not reload ignore rules'));
+      return;
+    }
     if (!shouldProcess(filename, ig)) return;
-    scheduleReindex(rootDir);
+    scheduleReindex();
   });
 
   watcher.on('error', (err) => log.error({ err }, 'watcher error'));
 
   // Graceful shutdown (D-01 — no persistent timers blocking exit)
   const cleanup = (): void => {
+    stopped = true;
     process.stderr.write('\nbrain-cache: stopping watcher\n');
     if (debounceTimer !== null) clearTimeout(debounceTimer);
     watcher.close();

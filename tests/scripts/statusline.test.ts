@@ -147,6 +147,8 @@ describe('statusline', () => {
         tokensSent: 1000,
         estimatedWithoutBraincache: 1000,
         callCount: 1,
+        lastTokensSent: 1000,
+        lastEstimatedWithoutBraincache: 1000,
         lastUpdatedAt: new Date().toISOString(),
       };
       expect(renderOutput(stats)).toBe(IDLE_OUTPUT);
@@ -157,6 +159,8 @@ describe('statusline', () => {
         tokensSent: 1500,
         estimatedWithoutBraincache: 1000,
         callCount: 1,
+        lastTokensSent: 1500,
+        lastEstimatedWithoutBraincache: 1000,
         lastUpdatedAt: new Date().toISOString(),
       };
       expect(renderOutput(stats)).toBe(IDLE_OUTPUT);
@@ -171,7 +175,7 @@ describe('statusline', () => {
         lastTokensSent: 371,
         lastEstimatedWithoutBraincache: 2727,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 2k tokens (86% less) \u00b7 last: 2k\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 2k tokens (86% less) \u00b7 last: 2k\n');
     });
 
     it('returns formatted savings string for tokensSent=500, estimatedWithoutBraincache=1000 (50%)', () => {
@@ -183,7 +187,7 @@ describe('statusline', () => {
         lastTokensSent: 500,
         lastEstimatedWithoutBraincache: 1000,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less) \u00b7 last: 500\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 500 tokens (50% less) \u00b7 last: 500\n');
     });
 
     it('returns formatted savings string for tokensSent=200000, estimatedWithoutBraincache=2000000 (90%)', () => {
@@ -195,7 +199,7 @@ describe('statusline', () => {
         lastTokensSent: 200000,
         lastEstimatedWithoutBraincache: 2000000,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 1.8M tokens (90% less) \u00b7 last: 1.8M\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 1.8M tokens (90% less) \u00b7 last: 1.8M\n');
     });
 
     it('caps displayed percentage at 98% when raw reduction would be 99% or higher', () => {
@@ -207,17 +211,24 @@ describe('statusline', () => {
         lastTokensSent: 100,
         lastEstimatedWithoutBraincache: 10000,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 10k tokens (98% less) \u00b7 last: 10k\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 10k tokens (98% less) \u00b7 last: 10k\n');
     });
 
-    it('omits last-call suffix when lastEstimatedWithoutBraincache is missing (legacy stats)', () => {
+    it('omits last-call suffix when lastEstimatedWithoutBraincache is missing (legacy stats)', async () => {
       const stats = {
         tokensSent: 500,
         estimatedWithoutBraincache: 1000,
         callCount: 1,
         lastUpdatedAt: new Date().toISOString(),
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less)\n');
+      const legacyDir = await mkdtemp(join(tmpdir(), 'statusline-legacy-'));
+      try {
+        const statsPath = join(legacyDir, 'session-stats.json');
+        await writeFile(statsPath, JSON.stringify(stats), 'utf-8');
+        expect(renderOutput(_readStatsFromPath(statsPath))).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 500 tokens (50% less)\n');
+      } finally {
+        await rm(legacyDir, { recursive: true, force: true });
+      }
     });
 
     it('omits last-call suffix when last call had no savings', () => {
@@ -229,7 +240,7 @@ describe('statusline', () => {
         lastTokensSent: 300,
         lastEstimatedWithoutBraincache: 300,
       };
-      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 saved 500 tokens (50% less)\n');
+      expect(renderOutput(stats)).toBe('\ud83e\udde0 brain-cache \u2192 est. saved 500 tokens (50% less)\n');
     });
   });
 });

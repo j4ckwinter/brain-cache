@@ -7,7 +7,7 @@ import type { SavingsDisplayMode } from '../lib/types.js';
 
 const log = childLogger('ask-codebase');
 
-const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_MAX_RESPONSE_TOKENS = 4096;
 
 const SYSTEM_PROMPT = `You are a codebase assistant. Answer questions strictly based on the provided codebase context.
@@ -81,6 +81,12 @@ export async function runAskCodebase(
       },
     ],
   });
+
+  if (response.usage) {
+    process.stderr.write(
+      `API usage (whole request): ${response.usage.input_tokens} input, ${response.usage.output_tokens} output tokens\n`,
+    );
+  }
 
   // 4. Extract text response
   const textBlock = response.content.find((b) => b.type === 'text');

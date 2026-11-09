@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock ollama module before importing embedder
-vi.mock('ollama', () => ({
-  default: {
+vi.mock('ollama', () => {
+  const client = {
     embed: vi.fn(),
-  },
-}));
+  };
+  return { default: client, Ollama: vi.fn(function () { return client; }) };
+});
 
 import ollama from 'ollama';
 import { embedBatch, embedBatchWithRetry } from '../../src/services/embedder.js';
@@ -199,7 +200,8 @@ describe('embedBatchWithRetry binary search fallback', () => {
 
     let callCount = 0;
 
-    mockOllama.embed.mockImplementation(async ({ input }: { input: string[] }) => {
+    mockOllama.embed.mockImplementation(async ({ input }) => {
+      if (!Array.isArray(input)) throw new Error('Expected a batch embedding request');
       callCount++;
       if (input.includes('OVERSIZED')) {
         throw contextLengthError;
@@ -240,7 +242,8 @@ describe('embedBatchWithRetry binary search fallback', () => {
 
     let callCount = 0;
 
-    mockOllama.embed.mockImplementation(async ({ input }: { input: string[] }) => {
+    mockOllama.embed.mockImplementation(async ({ input }) => {
+      if (!Array.isArray(input)) throw new Error('Expected a batch embedding request');
       callCount++;
       if (input.includes('OVERSIZED_2') || input.includes('OVERSIZED_6')) {
         throw contextLengthError;
@@ -271,13 +274,14 @@ describe('embedBatchWithRetry binary search fallback', () => {
     const texts = ['a', 'b', 'c', 'd'];
     const realVecs = texts.map((_, i) => [i * 0.1, i * 0.2, i * 0.3]);
 
-    mockOllama.embed.mockImplementation(async ({ input }: { input: string[] }) => {
+    mockOllama.embed.mockImplementation(async ({ input }) => {
+      if (!Array.isArray(input)) throw new Error('Expected a batch embedding request');
       return makeSuccess(input.map((_, i) => realVecs[i] ?? [0.1, 0.1, 0.1]));
     });
 
     let callCount = 0;
     const origMock = mockOllama.embed.getMockImplementation()!;
-    mockOllama.embed.mockImplementation(async (args: { input: string[] }) => {
+    mockOllama.embed.mockImplementation(async (args) => {
       callCount++;
       return origMock(args);
     });
@@ -293,7 +297,8 @@ describe('embedBatchWithRetry binary search fallback', () => {
   it('Test 4: single chunk that exceeds context — marked as zero vector', async () => {
     const texts = ['OVERSIZED_ONLY'];
 
-    mockOllama.embed.mockImplementation(async ({ input }: { input: string[] }) => {
+    mockOllama.embed.mockImplementation(async ({ input }) => {
+      if (!Array.isArray(input)) throw new Error('Expected a batch embedding request');
       if (input.includes('OVERSIZED_ONLY')) {
         throw contextLengthError;
       }
@@ -322,7 +327,8 @@ describe('embedBatchWithRetry binary search fallback', () => {
   it('Test 6: return type shape unchanged — embeddings array, skipped count, zeroVectorIndices Set', async () => {
     const texts = ['a', 'b', 'OVERSIZED', 'd'];
 
-    mockOllama.embed.mockImplementation(async ({ input }: { input: string[] }) => {
+    mockOllama.embed.mockImplementation(async ({ input }) => {
+      if (!Array.isArray(input)) throw new Error('Expected a batch embedding request');
       if (input.includes('OVERSIZED')) throw contextLengthError;
       return makeSuccess(input.map(() => [0.5, 0.5, 0.5]));
     });

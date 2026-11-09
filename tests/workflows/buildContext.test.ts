@@ -1,3 +1,4 @@
+vi.mock('../../src/services/indexStorage.js', () => ({ withIndexSnapshot: async (root: string, read: (directory: string) => Promise<unknown>) => read(`${root}/.brain-cache`) }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock all service dependencies before importing the workflow
@@ -11,6 +12,8 @@ vi.mock('../../src/services/ollama.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   getConnection: vi.fn(),
+  withIndexConnection: async (root: string, directory: string, operation: (db: import('@lancedb/lancedb').Connection) => Promise<unknown>) =>
+    operation(await getConnection(root, false, directory)),
   readIndexState: vi.fn(),
   readFileHashes: vi.fn(),
 }));
@@ -21,6 +24,7 @@ vi.mock('../../src/services/embedder.js', () => ({
 
 vi.mock('../../src/services/retriever.js', () => ({
   searchChunks: vi.fn(),
+  keywordSearchChunks: vi.fn(),
   deduplicateChunks: vi.fn(),
   classifyRetrievalMode: vi.fn(),
   filterDedupedForNonTestChunks: vi.fn((chunks: unknown[]) => chunks),
@@ -59,6 +63,7 @@ import { getConnection, readIndexState, readFileHashes } from '../../src/service
 import { embedBatchWithRetry } from '../../src/services/embedder.js';
 import {
   searchChunks,
+  keywordSearchChunks,
   deduplicateChunks,
   classifyRetrievalMode,
   expandByEdges,
@@ -73,6 +78,7 @@ const mockReadFileHashes = vi.mocked(readFileHashes);
 const mockReadIndexState = vi.mocked(readIndexState);
 const mockEmbedBatchWithRetry = vi.mocked(embedBatchWithRetry);
 const mockSearchChunks = vi.mocked(searchChunks);
+const mockKeywordSearchChunks = vi.mocked(keywordSearchChunks);
 const mockDeduplicateChunks = vi.mocked(deduplicateChunks);
 const mockClassifyQueryIntent = vi.mocked(classifyRetrievalMode);
 const mockExpandByEdges = vi.mocked(expandByEdges);
@@ -92,12 +98,13 @@ const mockProfile = {
 };
 
 const mockIndexState = {
-  version: 1 as const,
+  version: 2 as const,
   embeddingModel: 'nomic-embed-text',
   dimension: 768,
   indexedAt: '2026-03-31T00:00:00.000Z',
   fileCount: 5,
   chunkCount: 20,
+  totalTokens: 0,
 };
 
 const fakeChunk = (id: string, filePath: string) => ({
@@ -152,12 +159,13 @@ describe('runBuildContext', () => {
     mockReadIndexState.mockResolvedValue({ ...mockIndexState });
     mockGetConnection.mockResolvedValue(mockDb);
     // Return empty tokenCounts by default — exercises the fallback disk-read path
-    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {} });
+    mockReadFileHashes.mockResolvedValue({ hashes: {}, tokenCounts: {}, stats: {} });
     mockDb.tableNames.mockResolvedValue(['chunks']);
     mockDb.openTable.mockResolvedValue(mockTable);
-    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0 });
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [queryVector], skipped: 0, zeroVectorIndices: new Set() });
     mockClassifyQueryIntent.mockReturnValue('explore');
     mockSearchChunks.mockResolvedValue(dedupedChunks);
+    mockKeywordSearchChunks.mockResolvedValue(dedupedChunks);
     mockDeduplicateChunks.mockReturnValue(dedupedChunks);
     mockAssembleContext.mockReturnValue({
       content: 'assembled content',
@@ -257,9 +265,35 @@ describe('runBuildContext', () => {
     await expect(runBuildContext('test query')).rejects.toThrow("brain-cache init");
   });
 
-  it('throws when Ollama is not running', async () => {
+  it('builds keyword context with the selected limit when Ollama is unavailable', async () => {
     mockIsOllamaRunning.mockResolvedValue(false);
-    await expect(runBuildContext('test query')).rejects.toThrow('Ollama is not running');
+    const result = await runBuildContext('test query', { limit: 7 });
+    expect(mockKeywordSearchChunks).toHaveBeenCalledWith(mockTable, 'test query', 7);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    expect(mockSearchChunks).not.toHaveBeenCalled();
+    expect(result.metadata.localTasksPerformed).toEqual(['keyword_search', 'dedup', 'token_budget']);
+    expect(stderrOutput.join('')).toContain('[FALLBACK]');
+    expect(result.content).not.toContain('[FALLBACK]');
+  });
+
+  it('propagates storage failures in keyword mode', async () => {
+    mockIsOllamaRunning.mockResolvedValue(false);
+    mockKeywordSearchChunks.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(runBuildContext('test query')).rejects.toThrow('database unavailable');
+    expect(mockAssembleContext).not.toHaveBeenCalled();
+  });
+
+  it('propagates embedding failures without silently switching to keywords', async () => {
+    mockEmbedBatchWithRetry.mockRejectedValueOnce(new Error('model failure'));
+    await expect(runBuildContext('test query')).rejects.toThrow('model failure');
+    expect(mockKeywordSearchChunks).not.toHaveBeenCalled();
+  });
+
+  it('requires an index even when Ollama is unavailable', async () => {
+    mockIsOllamaRunning.mockResolvedValue(false);
+    mockReadIndexState.mockResolvedValue(null);
+    await expect(runBuildContext('test query')).rejects.toThrow('No index found');
+    expect(mockKeywordSearchChunks).not.toHaveBeenCalled();
   });
 
   it('throws when no index found', async () => {
@@ -284,18 +318,28 @@ describe('runBuildContext', () => {
     };
     mockSearchChunks.mockResolvedValue([sourceChunk, historyChunk]);
     mockDeduplicateChunks.mockReturnValue([sourceChunk, historyChunk]);
-    mockAssembleContext.mockReturnValue({
-      content: '## Source Context\n\nsource body',
-      chunks: [sourceChunk],
-      tokenCount: 120,
-    });
+    const realCounter = await vi.importActual<typeof import('../../src/services/tokenCounter.js')>(
+      '../../src/services/tokenCounter.js',
+    );
+    mockAssembleContext.mockImplementation(realCounter.assembleContext);
+    mockCountChunkTokens.mockImplementation(realCounter.countChunkTokens);
 
     const result = await runBuildContext('why was this changed?');
-    expect(result.content).toContain('## Source Context');
+    expect(result.content).toContain(sourceChunk.content);
     expect(result.content).toContain('## Git History');
-    expect(result.content.indexOf('## Source Context')).toBeLessThan(
+    expect(result.content.indexOf(sourceChunk.content)).toBeLessThan(
       result.content.indexOf('## Git History'),
     );
+    expect(result.chunks.map(chunk => chunk.id)).toEqual(['c1', 'h1']);
+    expect(result.metadata.tokensSent).toBe(realCounter.countChunkTokens(result.content));
+    expect(result.metadata.filesInContext).toBe(1);
+
+    const sourceBudget = realCounter.assembleContext([sourceChunk], { maxTokens: 4096 }).tokenCount;
+    const limited = await runBuildContext('why was this changed?', { maxTokens: sourceBudget });
+    expect(limited.content).not.toContain('## Git History');
+    expect(limited.chunks.map(chunk => chunk.id)).toEqual(['c1']);
+    expect(limited.metadata.tokensSent).toBe(realCounter.countChunkTokens(limited.content));
+    expect(limited.metadata.tokensSent).toBeLessThanOrEqual(sourceBudget);
   });
 
   it('calls expandByEdges when mode is trace and edges table exists', async () => {

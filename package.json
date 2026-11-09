@@ -1,6 +1,6 @@
 {
   "name": "brain-cache",
-  "version": "3.7.0",
+  "version": "4.1.0",
   "description": "Local MCP-first context engine for Claude. Index your codebase, retrieve only what matters, and cut token usage.",
   "license": "MIT",
   "type": "module",
@@ -34,13 +34,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:dist": "node scripts/verify-dist.mjs",
-    "eval:retrieval": "tsx scripts/eval-retrieval.ts"
+    "eval:retrieval": "tsx scripts/eval-retrieval.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "test:distribution": "vitest run --config vitest.distribution.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@lancedb/lancedb": "^0.39.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "apache-arrow": "^18.1.0",
     "commander": "15.0.0",
     "dedent": "^1.7.2",
@@ -51,7 +53,7 @@
     "pino": "^10.3.1",
     "tree-sitter-wasms": "0.1.13",
     "web-tree-sitter": "~0.25.10",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "apache-arrow": "^18.1.0",
@@ -63,7 +65,10 @@
     "express-rate-limit": "8.7.0",
     "ip-address": "10.7.2",
     "body-parser": "2.3.0",
-    "qs": "6.16.0"
+    "qs": "6.16.0",
+    "tsup": {
+      "esbuild": "^0.28.2"
+    }
   },
   "devDependencies": {
     "@types/dedent": "^0.7.2",
@@ -71,9 +76,9 @@
     "cpy-cli": "^7.0.0",
     "pino-pretty": "^11.0.0",
     "tsup": "^8.0.0",
-    "tsx": "4.21.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "keywords": [
     "ai",

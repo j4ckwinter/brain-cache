@@ -5,7 +5,8 @@ import type { RetrievedChunk } from '../lib/types.js';
 const log = childLogger('tokenCounter');
 
 /**
- * Counts tokens in a text string using Anthropic's tokenizer.
+ * Estimates tokens locally using Anthropic's legacy tokenizer.
+ * Modern Claude token counts differ; this is a budget heuristic, not billing usage.
  * Returns 0 for empty strings.
  */
 export function countChunkTokens(text: string): number {
@@ -30,34 +31,42 @@ export interface AssembledContext {
 }
 
 /**
- * Assembles context from chunks using greedy fill.
- * Chunks must already be sorted by similarity descending (caller responsibility).
- * Adds chunks in order until the next chunk would exceed maxTokens.
+ * Fills the estimated token budget with source chunks before git history.
+ * Preserves retrieval order within each group and skips chunks that do not fit.
  */
 export function assembleContext(
   chunks: RetrievedChunk[],
   opts: { maxTokens: number }
 ): AssembledContext {
   const kept: RetrievedChunk[] = [];
+  let content = '';
   let totalTokens = 0;
-  const separator = '\n\n---\n\n';
-  const separatorTokens = countChunkTokens(separator); // compute once (4 tokens)
+  let hasHistory = false;
+  const ordered = [
+    ...chunks.filter(chunk => chunk.sourceKind !== 'history'),
+    ...chunks.filter(chunk => chunk.sourceKind === 'history'),
+  ];
 
-  for (const chunk of chunks) {
-    const formatted = formatChunk(chunk);
-    const chunkTokens = countChunkTokens(formatted);
-    const sepCost = kept.length > 0 ? separatorTokens : 0;
+  for (const chunk of ordered) {
+    const isHistory = chunk.sourceKind === 'history';
+    const separator = content.length === 0 ? '' : isHistory ? '\n\n' : '\n\n---\n\n';
+    const heading = isHistory && !hasHistory ? '## Git History\n\n' : '';
+    const formatted = isHistory
+      ? `### ${chunk.name ?? chunk.id}\n${chunk.content}`
+      : formatChunk(chunk);
+    const candidate = content + separator + heading + formatted;
+    const candidateTokens = countChunkTokens(candidate);
 
-    if (totalTokens + chunkTokens + sepCost > opts.maxTokens) {
-      log.debug({ totalTokens, chunkTokens, maxTokens: opts.maxTokens }, 'Token budget reached');
-      break;
+    if (candidateTokens > opts.maxTokens) {
+      log.debug({ candidateTokens, maxTokens: opts.maxTokens }, 'Skipping chunk that exceeds token budget');
+      continue;
     }
 
     kept.push(chunk);
-    totalTokens += chunkTokens + sepCost;
+    content = candidate;
+    totalTokens = candidateTokens;
+    if (isHistory) hasHistory = true;
   }
-
-  const content = kept.map(formatChunk).join(separator);
 
   return { content, chunks: kept, tokenCount: totalTokens };
 }

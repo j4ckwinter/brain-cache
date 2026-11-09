@@ -1,14 +1,16 @@
 ---
 name: brain-cache
-description: "Local codebase embeddings that save tokens and money. Use brain-cache MCP tools instead of reading files or grepping — they return better results with fewer tokens sent to Claude."
+description: "Retrieve focused codebase context using local embeddings. Use brain-cache MCP tools before reading files or grepping for codebase questions."
 allowed-tools: Bash Read Grep
 ---
 
 ## What brain-cache does
 
-brain-cache indexes your codebase locally using Ollama embeddings — no data leaves your machine. When you need to understand code, it retrieves only the relevant parts and fits them to a token budget before sending anything to Claude. This means Claude sees better, more focused context while you spend fewer tokens per query.
+brain-cache indexes your codebase locally using Ollama embeddings. Search and context assembly run locally; retrieved context is returned to Claude through MCP. The `ask` CLI command sends retrieved context to the Anthropic API.
 
-Use brain-cache tools before reading files or using Grep/Glob for codebase questions. They return better, token-efficient results.
+Context budgets use an offline token estimate, not an exact count for modern Claude models. Savings compare retrieved context with a modeled grep/read baseline; they do not measure billing savings.
+
+Use brain-cache tools before reading files or using Grep/Glob for codebase questions. Use focused queries to retrieve relevant context.
 
 ## Tool routing
 
@@ -29,7 +31,7 @@ Do NOT use for understanding how code works — use `build_context` once you hav
 
 ## build_context (understand behavior)
 
-Call `mcp__brain-cache__build_context` with a focused question about how specific code works. It retrieves semantically relevant code, deduplicates results, and fits them to a token budget.
+Call `mcp__brain-cache__build_context` with a focused question about how specific code works. It retrieves semantically relevant code, deduplicates results, and fits them to an approximate token budget.
 
 Use for: "How does X work?", "What does this function do?", debugging unfamiliar code paths.
 
@@ -49,12 +51,18 @@ Call `mcp__brain-cache__doctor` when any brain-cache tool fails or returns unexp
 
 ## Status line
 
-brain-cache displays cumulative token savings in the Claude Code status bar. After tool calls you will see `brain-cache down-arrow{pct}% {n} saved` — this confirms cost savings are working. If the status bar shows idle, no tools have been called yet in the current session.
+brain-cache displays estimated cumulative token savings in the Claude Code status bar as `brain-cache → est. saved {n} tokens ({pct}% less)`, with last-call savings when available. These estimates are not measured cost savings.
+
+`idle` means there are no usable positive savings to display. It can appear when stats are missing, invalid, or more than two hours old, or when the estimated savings or rounded percentage is nonpositive. It does not prove that no tools have been called.
 
 ## Enforcement hooks
 
 brain-cache installs PreToolUse hooks into `~/.claude/settings.json` via `brain-cache init`. These hooks fire automatically when Claude reaches for one of four tools that brain-cache replaces: `Grep`, `Glob`, `Read`, or `Agent`. When triggered, each hook injects a one-line reminder into Claude's context suggesting the appropriate brain-cache tool to use instead.
 
-The hooks do not block tool calls. They are advisory — a nudge, not a gate. If brain-cache tools are unavailable (index not built, Ollama down), Claude can still fall back to the standard tools.
+The hooks do not block tool calls. They are advisory — a nudge, not a gate. If Ollama is down, retrieval can use keyword fallback against an existing index. If brain-cache tools are unavailable or cannot answer the question, Claude can still use the standard tools.
 
 To install hooks: run `brain-cache init`. Running it multiple times is safe — existing hooks are not duplicated.
+
+## Updating this skill
+
+`brain-cache init` skips an existing `.claude/skills/brain-cache/SKILL.md`. After upgrading, back up this file and compare it with the same path inside the installed brain-cache package. Merge the updated instructions while preserving project-specific changes; re-running `init` alone does not refresh this file.

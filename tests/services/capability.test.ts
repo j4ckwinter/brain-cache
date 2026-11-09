@@ -225,7 +225,7 @@ describe('readProfile', () => {
       ollamaVersion: '0.1.0',
       platform: 'linux',
     };
-    mockReadFile.mockResolvedValue(JSON.stringify(profile) as unknown as Buffer);
+    mockReadFile.mockResolvedValue(JSON.stringify(profile));
 
     const result = await readProfile();
     expect(result).not.toBeNull();
@@ -242,14 +242,14 @@ describe('readProfile', () => {
   });
 
   it('returns null when file contains invalid JSON', async () => {
-    mockReadFile.mockResolvedValue('not valid json' as unknown as Buffer);
+    mockReadFile.mockResolvedValue('not valid json');
 
     const result = await readProfile();
     expect(result).toBeNull();
   });
 
   it('returns null when file fails schema validation', async () => {
-    mockReadFile.mockResolvedValue(JSON.stringify({ invalid: true }) as unknown as Buffer);
+    mockReadFile.mockResolvedValue(JSON.stringify({ invalid: true }));
 
     const result = await readProfile();
     expect(result).toBeNull();

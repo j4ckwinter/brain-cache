@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+vi.mock('node:url', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:url')>();
+  return { ...actual, fileURLToPath: vi.fn(actual.fileURLToPath) };
+});
+const packageRoot = process.cwd();
 
 // Mock node:fs/promises so init.ts file operations don't touch disk
 vi.mock('node:fs/promises', () => ({
@@ -44,11 +51,12 @@ vi.mock('../../src/services/embedder.js', () => ({
   embedBatchWithRetry: vi.fn().mockResolvedValue([[0.1, 0.2]]),
 }));
 
-vi.mock('ollama', () => ({
-  default: {
+vi.mock('ollama', () => {
+  const client = {
     list: vi.fn(),
-  },
-}));
+  };
+  return { default: client, Ollama: vi.fn(function () { return client; }) };
+});
 
 import {
   detectCapabilities,
@@ -92,7 +100,7 @@ const mockCopyFile = vi.mocked(nodeFsMock.copyFile);
 // rejects with ENOENT otherwise — mirrors old existsSync boolean semantics.
 function makeAccessMock(existsFn: (p: string) => boolean): (p: unknown) => Promise<void> {
   return (p: unknown) => {
-    if (existsFn(String(p))) return Promise.resolve();
+    if (String(p) === join(packageRoot, 'package.json') || existsFn(String(p))) return Promise.resolve();
     return Promise.reject(Object.assign(new Error(`ENOENT: no such file or directory`), { code: 'ENOENT' }));
   };
 }
@@ -142,7 +150,7 @@ describe('runInit', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     // Default fs mocks: CLAUDE.md already contains section (idempotent), no .mcp.json
     // statusline.mjs already installed (idempotent), settings.json already has statusLine
@@ -325,7 +333,7 @@ describe('.mcp.json management', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     // CLAUDE.md: already has section (idempotent)
     // statusline.mjs already installed (idempotent), settings.json already has statusLine
@@ -383,10 +391,22 @@ describe('.mcp.json management', () => {
     expect(written).toEqual({
       mcpServers: {
         'brain-cache': {
-          command: 'node',
-          args: ['node_modules/brain-cache/dist/mcp.js'],
+          command: process.execPath,
+          args: [join(packageRoot, 'dist', 'mcp.js')],
         },
       },
+    });
+  });
+
+  it.each(['/opt/npm/brain-cache', '/tmp/my project/node_modules/brain-cache'])(
+    'uses the installed package location %s', async installedRoot => {
+    vi.mocked(fileURLToPath).mockReturnValueOnce(join(installedRoot, 'dist', 'init-chunk.js'));
+    mockAccess.mockImplementation(makeAccessMock(p => p === join(installedRoot, 'package.json')));
+    await runInit();
+    const write = mockWriteFile.mock.calls.find(call => call[0] === '.mcp.json');
+    expect(JSON.parse(String(write?.[1])).mcpServers['brain-cache']).toEqual({
+      command: process.execPath,
+      args: [join(installedRoot, 'dist', 'mcp.js')],
     });
   });
 
@@ -422,8 +442,8 @@ describe('.mcp.json management', () => {
     const written = JSON.parse(writeCall![1] as string);
     expect(written.mcpServers['other-mcp']).toEqual({ command: 'other', args: [] });
     expect(written.mcpServers['brain-cache']).toEqual({
-      command: 'node',
-      args: ['node_modules/brain-cache/dist/mcp.js'],
+      command: process.execPath,
+      args: [join(packageRoot, 'dist', 'mcp.js')],
     });
   });
 
@@ -431,8 +451,8 @@ describe('.mcp.json management', () => {
     const existing = {
       mcpServers: {
         'brain-cache': {
-          command: 'node',
-          args: ['node_modules/brain-cache/dist/mcp.js'],
+          command: process.execPath,
+          args: [join(packageRoot, 'dist', 'mcp.js')],
         },
       },
     };
@@ -518,8 +538,8 @@ describe('.mcp.json management', () => {
     const existing = {
       mcpServers: {
         'brain-cache': {
-          command: 'node',
-          args: ['node_modules/brain-cache/dist/mcp.js'],
+          command: process.execPath,
+          args: [join(packageRoot, 'dist', 'mcp.js')],
         },
       },
     };
@@ -575,7 +595,7 @@ describe('statusline installation', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     mockWriteFile.mockResolvedValue(undefined);
     mockAppendFile.mockResolvedValue(undefined);
@@ -645,6 +665,20 @@ describe('statusline installation', () => {
     expect(combined).toContain('already installed');
   });
 
+  it('updates the unmodified v3.6.2 statusline while preserving custom scripts', async () => {
+    const fs = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');
+    const legacy = (await fs.readFile(new URL('../fixtures/statusline-v3.6.2.mjs', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+    mockReadFile.mockImplementation(async path => {
+      if (String(path).endsWith('statusline.mjs')) return legacy;
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    });
+    await runInit();
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      join(homedir(), '.brain-cache', 'statusline.mjs'),
+      '#!/usr/bin/env node\n// mock statusline content\n', 'utf-8',
+    );
+  });
+
   it('warns and skips when statusline.mjs has custom content', async () => {
     mockAccess.mockImplementation(makeAccessMock((p) => {
       const ps = String(p);
@@ -700,7 +734,7 @@ describe('settings.json management', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     mockWriteFile.mockResolvedValue(undefined);
     mockAppendFile.mockResolvedValue(undefined);
@@ -940,7 +974,7 @@ describe('PreToolUse hook installation', () => {
     mockPullModelIfMissing.mockResolvedValue(undefined);
     mockGetOllamaVersion.mockResolvedValue('ollama version 0.6.3');
     mockWriteProfile.mockResolvedValue(undefined);
-    mockEmbedBatchWithRetry.mockResolvedValue([[0.1, 0.2]]);
+    mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [[0.1, 0.2]], skipped: 0, zeroVectorIndices: new Set() });
 
     mockWriteFile.mockResolvedValue(undefined);
     mockAppendFile.mockResolvedValue(undefined);
@@ -969,7 +1003,7 @@ describe('PreToolUse hook installation', () => {
       const ps = String(p);
       if (ps === 'CLAUDE.md') return Promise.resolve('## Brain-Cache MCP Tools\n');
       if (ps.endsWith('statusline.mjs')) return Promise.resolve('#!/usr/bin/env node\n// mock statusline content\n');
-      if (ps.endsWith('settings.json')) return settingsJson;
+      if (ps.endsWith('settings.json')) return Promise.resolve(settingsJson);
       const err = Object.assign(new Error('ENOENT: ' + String(p)), { code: 'ENOENT' }); return Promise.reject(err);
     });
   }
@@ -1060,6 +1094,28 @@ describe('PreToolUse hook installation', () => {
     expect(bashEntry).toBeDefined();
     // Should also have brain-cache hooks
     expect(entries.length).toBe(5); // 1 Bash + 4 brain-cache
+  });
+
+  it('preserves user commands and entry options when sharing an entry with brain-cache', async () => {
+    const userCommand = { type: 'command', command: 'echo custom', timeout: 12 };
+    mockFsWithSettings(JSON.stringify({
+      statusLine: { type: 'command', command: 'node "~/.brain-cache/statusline.mjs"' },
+      hooks: { PreToolUse: [{
+        matcher: 'Read', customOption: true,
+        hooks: [userCommand, { type: 'command', command: 'echo "brain-cache: old reminder"' }],
+      }] },
+    }));
+    await runInit();
+    const writes = mockWriteFile.mock.calls.filter(c => String(c[0]).endsWith('settings.json'));
+    const written = JSON.parse(writes.at(-1)![1] as string);
+    expect(written.hooks.PreToolUse).toContainEqual({
+      matcher: 'Read', customOption: true, hooks: [userCommand],
+    });
+    expect(written.hooks.PreToolUse).toHaveLength(5);
+    mockWriteFile.mockClear();
+    mockFsWithSettings(JSON.stringify(written));
+    await runInit();
+    expect(mockWriteFile.mock.calls.filter(c => String(c[0]).endsWith('settings.json'))).toHaveLength(0);
   });
 
   it('Test 5 (HOOK-03): when brain-cache hooks already installed with identical content, no settings.json write emitted', async () => {

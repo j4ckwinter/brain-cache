@@ -1,5 +1,11 @@
+vi.mock('../../src/services/indexFreshness.js', () => ({ canReuseIndex: async () => false }));
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { resolve } from 'node:path';
+
+vi.mock('../../src/services/indexStorage.js', () => ({
+  pruneIndexGenerations: async () => {},
+  publishIndexGeneration: async (_root: string, build: (directory: string) => Promise<void>) => build('/staged-index'),
+}));
 
 // Mock all service dependencies before importing the workflow
 vi.mock('../../src/services/capability.js', () => ({
@@ -29,6 +35,9 @@ vi.mock('../../src/services/indexLock.js', () => ({
 
 vi.mock('../../src/services/lancedb.js', () => ({
   getConnection: vi.fn(),
+  withIndexConnection: async (root: string, directory: string, operation: (db: import('@lancedb/lancedb').Connection) => Promise<unknown>) =>
+    operation(await getConnection(root, false, directory)),
+  closeIndexConnection: vi.fn(),
   openOrCreateChunkTable: vi.fn(),
   openOrCreateEdgesTable: vi.fn(),
   insertChunks: vi.fn(),
@@ -191,7 +200,7 @@ describe('runIndex', () => {
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
     // chunkFile now returns { chunks, edges } — provide that shape
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -226,7 +235,7 @@ describe('runIndex', () => {
   it('calls pipeline in correct order: crawl -> chunk -> embed -> store -> writeIndexState', async () => {
     const callOrder: string[] = [];
     mockCrawlSourceFiles.mockImplementation(async () => { callOrder.push('crawl'); return fakeFiles; });
-    mockChunkFile.mockImplementation((fp, _c) => { callOrder.push('chunk'); return { chunks: [fakeChunk(fp, 1)], edges: [] }; });
+    mockChunkFile.mockImplementation(async (fp, _c) => { callOrder.push('chunk'); return { chunks: [fakeChunk(fp, 1)], edges: [] }; });
     mockEmbedBatchWithRetry.mockImplementation(async () => { callOrder.push('embed'); return { embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() }; });
     mockInsertChunks.mockImplementation(async () => { callOrder.push('store'); });
     mockWriteIndexState.mockImplementation(async () => { callOrder.push('writeState'); });
@@ -276,7 +285,7 @@ describe('runIndex', () => {
     const testFilePath = '/project/src/foo.test.ts';
     const sourceFilePath = '/project/src/bar.ts';
     mockCrawlSourceFiles.mockResolvedValue([testFilePath, sourceFilePath]);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockClassifyFileType.mockImplementation((fp: string) => fp.includes('.test.') ? 'test' : 'source');
 
     await runIndex('/project');
@@ -300,7 +309,8 @@ describe('runIndex', () => {
         dimension: 768,
         fileCount: fakeFiles.length,
         chunkCount: fakeFiles.length, // one chunk per file in mock
-      })
+      }),
+      '/staged-index',
     );
   });
 
@@ -343,10 +353,12 @@ describe('runIndex', () => {
     expect(processExitSpy).not.toHaveBeenCalled();
   });
 
-  it('handles zero source files: does not call writeIndexState', async () => {
+  it('records an empty index after a zero-file crawl', async () => {
     mockCrawlSourceFiles.mockResolvedValue([]);
     await runIndex('/project');
-    expect(mockWriteIndexState).not.toHaveBeenCalled();
+    expect(mockWriteIndexState).toHaveBeenCalledWith(resolve('/project'), expect.objectContaining({ fileCount: 0 }),
+      '/staged-index',
+    );
   });
 
   it('defaults to process.cwd() when no path argument provided', async () => {
@@ -378,9 +390,9 @@ describe('runIndex', () => {
   it('prints token savings stats on completion', async () => {
     await runIndex('/project');
     const combined = stderrOutput.join('');
-    expect(combined).toContain('Tokens sent to Claude:');
+    expect(combined).toContain('Estimated chunk tokens:');
     expect(combined).toContain('Estimated without:');
-    expect(combined).toContain('Reduction:');
+    expect(combined).toContain('Estimated reduction:');
   });
 
   it('calls acquireIndexLock with the resolved project path before indexing begins', async () => {
@@ -413,7 +425,7 @@ describe('runIndex', () => {
     const badFile = '/project/src/foo.ts';
     mockCrawlSourceFiles.mockResolvedValue([badFile, goodFile]);
 
-    mockChunkFile.mockImplementation((filePath, _content) => {
+    mockChunkFile.mockImplementation(async (filePath, _content) => {
       if (filePath === badFile) throw new Error('parse failure');
       return { chunks: [fakeChunk(filePath, 1)], edges: [] };
     });
@@ -428,6 +440,55 @@ describe('runIndex', () => {
         expect.objectContaining({ file_path: goodFile }),
       ])
     );
+  });
+
+  it('retries a failed changed file without retaining successful manifest metadata', async () => {
+    const badFile = fakeFiles[0];
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { [badFile]: 'old-hash' },
+      tokenCounts: { [badFile]: 42 },
+      stats: { [badFile]: { size: 1, mtimeMs: 1 } },
+    });
+    mockChunkFile.mockImplementation(async (filePath) => {
+      if (filePath === badFile) throw new Error('transient parser failure');
+      return { chunks: [fakeChunk(filePath, 1)], edges: [] };
+    });
+    await runIndex('/project');
+    const manifest = mockWriteFileHashes.mock.calls.at(-1)![1];
+    expect(manifest.hashes).not.toHaveProperty(badFile);
+    expect(manifest.tokenCounts).not.toHaveProperty(badFile);
+    expect(manifest.stats).not.toHaveProperty(badFile);
+    mockReadFileHashes.mockResolvedValue(manifest);
+    mockChunkFile.mockClear();
+    mockChunkFile.mockImplementation(async (filePath) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    await runIndex('/project');
+    expect(mockChunkFile).toHaveBeenCalledWith(badFile, expect.any(String));
+    expect(mockWriteFileHashes.mock.calls.at(-1)![1].hashes).toHaveProperty(badFile);
+  });
+
+  it('replaces partial new-file chunks when retrying an interrupted run', async () => {
+    const file = fakeFiles[0];
+    mockCrawlSourceFiles.mockResolvedValue([file]);
+    mockChunkFile.mockImplementation(async (filePath) => ({
+      chunks: Array.from({ length: 51 }, (_, i) => fakeChunk(filePath, i)), edges: [],
+    }));
+    let storedRows: { id: string; file_path: string }[] = [];
+    mockInsertChunks.mockImplementation(async (_table, rows) => { storedRows.push(...rows); });
+    mockDeleteChunksByFilePaths.mockImplementation(async (_table, paths) => {
+      storedRows = storedRows.filter(row => !paths.includes(row.file_path));
+    });
+    mockEmbedBatchWithRetry.mockImplementation(async (_model, texts) => ({
+      embeddings: texts.map(() => zeroVector768), skipped: 0, zeroVectorIndices: new Set(),
+    }));
+    mockEmbedBatchWithRetry.mockResolvedValueOnce({
+      embeddings: Array.from({ length: 50 }, () => zeroVector768), skipped: 0, zeroVectorIndices: new Set(),
+    }).mockRejectedValueOnce(new Error('interrupted embedding'));
+    await expect(runIndex('/project')).rejects.toThrow('interrupted embedding');
+    expect(storedRows).toHaveLength(50);
+    expect(mockWriteFileHashes).not.toHaveBeenCalled();
+    await runIndex('/project');
+    expect(storedRows).toHaveLength(51);
+    expect(new Set(storedRows.map(row => row.id)).size).toBe(51);
   });
 
   it('ingests git history after file indexing when git.enabled=true', async () => {
@@ -464,6 +525,21 @@ describe('runIndex', () => {
     expect(callOrder.indexOf('insertFileChunks')).toBeGreaterThan(-1);
     expect(callOrder.indexOf('deleteHistoryChunks')).toBeGreaterThan(callOrder.indexOf('insertFileChunks'));
     expect(callOrder.indexOf('insertHistoryChunks')).toBeGreaterThan(callOrder.indexOf('deleteHistoryChunks'));
+  });
+
+  it('finalizes unchanged files and ingests history exactly once', async () => {
+    await runIndex('/project');
+    mockReadFileHashes.mockResolvedValue(mockWriteFileHashes.mock.calls.at(-1)![1]);
+    mockReadGitConfig.mockResolvedValue({ enabled: true });
+    mockFetchGitCommits.mockClear();
+    mockWriteFileHashes.mockClear();
+    mockWriteIndexState.mockClear();
+    mockEmbedBatchWithRetry.mockClear();
+    await runIndex('/project');
+    expect(mockFetchGitCommits).toHaveBeenCalledExactlyOnceWith(resolve('/project'), 500);
+    expect(mockWriteFileHashes).toHaveBeenCalledTimes(1);
+    expect(mockWriteIndexState).toHaveBeenCalledTimes(1);
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
   });
 
   it('skips history ingestion when git.enabled is false', async () => {
@@ -541,7 +617,7 @@ describe('printSummary', () => {
     expect(out).toContain('indexing complete');
     expect(out).toContain('Files:');
     expect(out).toContain('Chunks:');
-    expect(out).toContain('Tokens sent to Claude:');
+    expect(out).toContain('Estimated chunk tokens:');
   });
 });
 
@@ -563,7 +639,7 @@ describe('incremental re-index file removal', () => {
     mockIsOllamaRunning.mockResolvedValue(true);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -593,7 +669,7 @@ describe('incremental re-index file removal', () => {
       stats: {},
     });
     mockCrawlSourceFiles.mockResolvedValue(['/proj/keep.ts']);
-    mockChunkFile.mockImplementation((fp, _c) => ({ chunks: [fakeChunk(fp, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (fp, _c) => ({ chunks: [fakeChunk(fp, 1)], edges: [] }));
 
     await runIndexLocal('/proj');
 
@@ -691,7 +767,7 @@ describe('runIndex stat fast-path', () => {
     mockReadProfile.mockResolvedValue({ ...mockProfile });
     mockIsOllamaRunning.mockResolvedValue(true);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -738,6 +814,27 @@ describe('runIndex stat fast-path', () => {
     await runIndexLocal('/project');
 
     // readFile should NOT be called because all files are stat-skipped
+    expect(mockReadFile).not.toHaveBeenCalled();
+  });
+
+  it('backfills unchanged-file token counts once without re-embedding', async () => {
+    const file = fakeFiles[0];
+    const content = 'const x = 1;';
+    const { createHash } = await import('node:crypto');
+    mockCrawlSourceFiles.mockResolvedValue([file]);
+    mockReadFile.mockResolvedValue(content);
+    mockReadFileHashes.mockResolvedValue({
+      hashes: { [file]: createHash('sha256').update(content).digest('hex') },
+      tokenCounts: {}, stats: { [file]: { size: 100, mtimeMs: 1000 } },
+    });
+    await runIndexLocal('/project');
+    expect(mockEmbedBatchWithRetry).not.toHaveBeenCalled();
+    const manifest = mockWriteFileHashes.mock.calls.at(-1)![1];
+    expect(manifest.tokenCounts[file]).toBeGreaterThan(0);
+    expect(mockWriteIndexState.mock.calls.at(-1)![1].totalTokens).toBe(manifest.tokenCounts[file]);
+    mockReadFileHashes.mockResolvedValue(manifest);
+    mockReadFile.mockClear();
+    await runIndexLocal('/project');
     expect(mockReadFile).not.toHaveBeenCalled();
   });
 
@@ -812,6 +909,7 @@ describe('runIndex stat fast-path', () => {
           [fakeFiles[0]]: expect.objectContaining({ size: expect.any(Number), mtimeMs: expect.any(Number) }),
         }),
       }),
+      '/staged-index',
     );
   });
 
@@ -842,6 +940,7 @@ describe('runIndex stat fast-path', () => {
           [fakeFiles[0]]: expect.objectContaining({ size: 55, mtimeMs: 9999 }),
         }),
       }),
+      '/staged-index',
     );
   });
 
@@ -868,6 +967,7 @@ describe('runIndex stat fast-path', () => {
     expect(mockWriteIndexState).toHaveBeenCalledWith(
       resolve('/project'),
       expect.objectContaining({ totalTokens: 100 }), // 40 + 60
+      '/staged-index',
     );
   });
 });
@@ -894,7 +994,7 @@ describe('embedding dimension fallback', () => {
     mockCrawlSourceFiles.mockResolvedValue(fakeFiles);
     mockReadFile.mockResolvedValue('const x = 1;' as any);
     mockStat.mockResolvedValue({ size: 100, mtimeMs: 1000 } as any);
-    mockChunkFile.mockImplementation((filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
+    mockChunkFile.mockImplementation(async (filePath, _content) => ({ chunks: [fakeChunk(filePath, 1)], edges: [] }));
     mockEmbedBatchWithRetry.mockResolvedValue({ embeddings: [zeroVector768, zeroVector768], skipped: 0, zeroVectorIndices: new Set() });
     mockGetConnection.mockResolvedValue(mockDb);
     mockOpenOrCreateChunkTable.mockResolvedValue(mockTable);
@@ -926,6 +1026,8 @@ describe('embedding dimension fallback', () => {
       resolve('/project'),
       'unknown-model-xyz',
       768,
+      false,
+      '/staged-index',
     );
     const combined = stderrOutput.join('');
     expect(combined).toContain("Unknown embedding model 'unknown-model-xyz'");

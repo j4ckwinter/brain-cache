@@ -3,6 +3,7 @@ import { dirname, join, extname, resolve } from 'node:path';
 import { Parser, Language, type Node } from 'web-tree-sitter';
 import { childLogger } from './logger.js';
 import type { CodeChunk, CallEdge, ChunkResult } from '../lib/types.js';
+import { resolveLocalCallTargets, type DirectCall } from './localCallTargets.js';
 import { chunkDocFile } from './docChunker.js';
 
 // Captured at module scope — esbuild rewrites import.meta.url inside callbacks.
@@ -120,6 +121,13 @@ export const CHUNK_NODE_TYPES: Record<string, Set<string>> = {
   ]),
 };
 
+const DECLARATION_NODE_TYPES: Record<string, Set<string>> = {
+  typescript: new Set(['interface_declaration', 'type_alias_declaration', 'enum_declaration', 'variable_declarator']),
+  python: new Set(['assignment']),
+  go: new Set(['type_spec', 'type_alias', 'const_spec', 'var_spec']),
+  rust: new Set(['struct_item', 'enum_item', 'type_item', 'const_item', 'static_item', 'trait_item']),
+};
+
 // Maps file extensions to language category keys used in CHUNK_NODE_TYPES.
 function getLanguageCategory(ext: string): string {
   switch (ext) {
@@ -144,8 +152,11 @@ function getLanguageCategory(ext: string): string {
   }
 }
 
-// Reads the name field from a tree-sitter node, or returns null.
 function extractName(node: SyntaxNode): string | null {
+  if (node.type === 'arrow_function' && node.parent?.type === 'variable_declarator') {
+    const binding = node.parent.childForFieldName('name');
+    return binding?.type === 'identifier' ? binding.text : null;
+  }
   return node.childForFieldName?.('name')?.text ?? null;
 }
 
@@ -228,11 +239,15 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   const chunks: CodeChunk[] = [];
   const edges: CallEdge[] = [];
 
-  let currentChunkId: string | null = null;
-  let currentSymbol: string | null = null;
+  const fileChunkId = `${filePath}:file`;
+  // The preorder walk has already registered every extracted ancestor when a
+  // call is visited. Node IDs are local to this tree and never persisted.
+  const chunksByNode = new Map<number, CodeChunk>();
+  const directCalls: DirectCall[] = [];
 
   try {
-    for (const node of walkNodes(tree.rootNode)) {
+    const nodes = [...walkNodes(tree.rootNode)];
+    for (const node of nodes) {
       // Extract call edges from call_expression nodes (runs for ALL nodes)
       if (node.type === 'call_expression') {
         const funcNode = node.childForFieldName('function');
@@ -245,16 +260,23 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
           }
           // Skip dynamic call targets (subscript_expression, etc.) per pitfall 6
           if (toSymbol) {
-            const chunkId = currentChunkId ?? `${filePath}:0`;
-            const symbol = currentSymbol;
-            edges.push({
-              fromChunkId: chunkId,
+            let ancestor = node.parent;
+            let owner: CodeChunk | undefined;
+            while (ancestor) {
+              owner = chunksByNode.get(ancestor.id);
+              if (owner) break;
+              ancestor = ancestor.parent;
+            }
+            const edge: CallEdge = {
+              fromChunkId: owner?.id ?? fileChunkId,
               fromFile: filePath,
-              fromSymbol: symbol,
+              fromSymbol: owner?.name ?? null,
               toSymbol,
-              toFile: null, // Resolved at query time, not index time
+              toFile: null,
               edgeType: 'call',
-            });
+            };
+            edges.push(edge);
+            if (funcNode.type === 'identifier') directCalls.push({ target: funcNode, edge });
           }
         }
       }
@@ -267,7 +289,7 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
           const isRelative = raw.startsWith('./') || raw.startsWith('../');
           const toFile = isRelative ? resolve(dirname(filePath), raw) : null;
           edges.push({
-            fromChunkId: `${filePath}:0`,
+            fromChunkId: fileChunkId,
             fromFile: filePath,
             fromSymbol: null,
             toSymbol: raw,
@@ -308,8 +330,8 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
       const name = extractName(node);
       const scope = extractScope(node);
 
-      chunks.push({
-        id:        `${filePath}:${node.startPosition.row}`,
+      const chunk: CodeChunk = {
+        id:        `${filePath}:${node.startIndex}:${node.endIndex}:${node.type}`,
         filePath,
         chunkType,
         scope,
@@ -317,12 +339,41 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
         content:   content.slice(node.startIndex, node.endIndex),
         startLine: node.startPosition.row + 1,
         endLine:   node.endPosition.row + 1,
-      });
-
-      // Update currentChunkId tracking for associating call_expressions with their enclosing chunk
-      currentChunkId = `${filePath}:${node.startPosition.row}`;
-      currentSymbol = extractName(node);
+      };
+      chunks.push(chunk);
+      chunksByNode.set(node.id, chunk);
     }
+    if (chunks.length > 0) {
+      for (const node of walkNodes(tree.rootNode)) {
+        if (!DECLARATION_NODE_TYPES[category].has(node.type)) continue;
+        let ancestor = node.parent;
+        let alreadyCovered = false;
+        while (ancestor) {
+          if (chunksByNode.has(ancestor.id)) {
+            alreadyCovered = true;
+            break;
+          }
+          ancestor = ancestor.parent;
+        }
+        if (alreadyCovered) continue;
+        const value = node.childForFieldName('value');
+        const nameNode = node.childForFieldName('name') ?? node.childForFieldName('left');
+        if (value && nameNode && chunksByNode.get(value.id)?.name === nameNode.text) continue;
+        const chunk: CodeChunk = {
+          id: `${filePath}:${node.startIndex}:${node.endIndex}:${node.type}`,
+          filePath,
+          chunkType: 'file',
+          scope: null,
+          name: nameNode?.text ?? null,
+          content: content.slice(node.startIndex, node.endIndex),
+          startLine: node.startPosition.row + 1,
+          endLine: node.endPosition.row + 1,
+        };
+        chunks.push(chunk);
+        chunksByNode.set(node.id, chunk);
+      }
+    }
+    if (category === 'typescript') resolveLocalCallTargets(nodes, chunksByNode, directCalls);
   } finally {
     tree.delete();
   }
@@ -330,7 +381,7 @@ export async function chunkFile(filePath: string, content: string): Promise<Chun
   // Fallback: if language was found but no chunks extracted, emit one file-type chunk
   if (chunks.length === 0) {
     chunks.push({
-      id:        `${filePath}:0`,
+      id:        fileChunkId,
       filePath,
       chunkType: 'file',
       scope:     null,

@@ -585,6 +585,45 @@ describe('getConnection TTL and health', () => {
   });
 });
 
+describe('snapshot connection leases', () => {
+  it('evicts idle generations while preserving a leased connection across awaits', async () => {
+    const { withIndexConnection, _setPoolEntryForTest, closeIndexConnection } = await import('../../src/services/lancedb.js');
+    const root = join(tmpdir(), `lease-test-${Date.now()}`);
+    const pinned = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+    _setPoolEntryForTest(root, pinned, Date.now());
+    const idle: Array<{ isOpen: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> }> = [];
+    await withIndexConnection(root, join(root, '.brain-cache'), async connection => {
+      expect(connection).toBe(pinned);
+      for (let i = 0; i < 12; i++) {
+        const key = join(root, String(i));
+        const mock = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() };
+        idle.push(mock);
+        _setPoolEntryForTest(key, mock as any, Date.now());
+        await withIndexConnection(key, join(key, '.brain-cache'), async () => {});
+      }
+      expect(idle.filter(mock => mock.close.mock.calls.length > 0).length).toBeGreaterThanOrEqual(4);
+      expect(pinned.close).not.toHaveBeenCalled();
+    });
+    closeIndexConnection(join(root, '.brain-cache'));
+    expect(pinned.close).toHaveBeenCalledOnce();
+    for (let i = 0; i < 12; i++) closeIndexConnection(join(root, String(i), '.brain-cache'));
+  });
+
+  it('releases a retired connection after a failing operation completes', async () => {
+    const { withIndexConnection, _setPoolEntryForTest, closeIndexConnection } = await import('../../src/services/lancedb.js');
+    const root = join(tmpdir(), `lease-failure-${Date.now()}`);
+    const directory = join(root, '.brain-cache');
+    const connection = { isOpen: vi.fn().mockReturnValue(true), close: vi.fn() } as any;
+    _setPoolEntryForTest(root, connection, Date.now());
+    await expect(withIndexConnection(root, directory, async () => {
+      closeIndexConnection(directory);
+      expect(connection.close).not.toHaveBeenCalled();
+      throw new Error('query failed');
+    })).rejects.toThrow('query failed');
+    expect(connection.close).toHaveBeenCalledOnce();
+  });
+});
+
 describe('withWriteLock', () => {
   it('serializes two concurrent async operations', async () => {
     const { withWriteLock } = await import('../../src/services/lancedb.js');

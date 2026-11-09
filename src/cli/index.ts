@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,14 @@ declare const __BRAIN_CACHE_VERSION__: string | undefined;
 const version = typeof __BRAIN_CACHE_VERSION__ !== "undefined"
   ? __BRAIN_CACHE_VERSION__
   : "dev";
+
+function positiveInteger(value: string): number {
+  const parsed = Number(value);
+  if (!/^[0-9]+$/.test(value) || !Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new InvalidArgumentError("Expected a positive safe decimal integer.");
+  }
+  return parsed;
+}
 
 export const program = new Command();
 
@@ -47,12 +55,12 @@ program
   .command("search")
   .description("Search indexed codebase with a natural language query")
   .argument("<query>", "Natural language query string")
-  .option("-n, --limit <n>", "Maximum number of results", "10")
+  .option("-n, --limit <n>", "Maximum number of results", positiveInteger, 10)
   .option("-p, --path <path>", "Project root directory")
-  .action(async (query: string, opts: { limit: string; path?: string }) => {
+  .action(async (query: string, opts: { limit: number; path?: string }) => {
     const { runSearch } = await import("../workflows/search.js");
     await runSearch(query, {
-      limit: parseInt(opts.limit, 10),
+      limit: opts.limit,
       path: opts.path,
     });
   });
@@ -72,19 +80,19 @@ program
   .command("context")
   .description("Build token-budgeted context from codebase for a query")
   .argument("<query>", "Natural language query string")
-  .option("-n, --limit <n>", "Maximum number of search results", "10")
-  .option("-b, --budget <tokens>", "Token budget for assembled context", "4096")
+  .option("-n, --limit <n>", "Maximum number of search results", positiveInteger, 10)
+  .option("-b, --budget <tokens>", "Token budget for assembled context", positiveInteger, 4096)
   .option("-p, --path <path>", "Project root directory")
   .option("--raw", "Output raw JSON (MCP transport compatible)")
   .action(
     async (
       query: string,
-      opts: { limit: string; budget: string; path?: string; raw?: boolean },
+      opts: { limit: number; budget: number; path?: string; raw?: boolean },
     ) => {
       const { runBuildContext } = await import("../workflows/buildContext.js");
       const result = await runBuildContext(query, {
-        limit: parseInt(opts.limit, 10),
-        maxTokens: parseInt(opts.budget, 10),
+        limit: opts.limit,
+        maxTokens: opts.budget,
         path: opts.path,
       });
       if (opts.raw) {
@@ -117,13 +125,13 @@ program
     "Ask a natural language question about the codebase — retrieves context locally, reasons via Claude",
   )
   .argument("<question>", "Natural language question about the codebase")
-  .option("-b, --budget <tokens>", "Token budget for context retrieval", "4096")
+  .option("-b, --budget <tokens>", "Token budget for context retrieval", positiveInteger, 4096)
   .option("-p, --path <path>", "Project root directory")
-  .action(async (question: string, opts: { budget: string; path?: string }) => {
+  .action(async (question: string, opts: { budget: number; path?: string }) => {
     const { runAskCodebase } = await import("../workflows/askCodebase.js");
     const result = await runAskCodebase(question, {
       path: opts.path,
-      maxContextTokens: parseInt(opts.budget, 10),
+      maxContextTokens: opts.budget,
     });
     process.stderr.write(`\n${result.answer}\n`);
     process.stderr.write(

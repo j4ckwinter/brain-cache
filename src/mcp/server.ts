@@ -1,3 +1,4 @@
+import { withIndexSnapshot } from '../services/indexStorage.js';
 import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -157,10 +158,13 @@ export function createMcpServer(): McpServer {
     const pipeline = formatPipelineLabel(localTasksPerformed);
     const footer = `---\n${savings}\nPipeline: ${pipeline}`;
     const summary = `Context assembled for "${query}".`;
+    const fallbackPrefix = localTasksPerformed.includes("keyword_search")
+      ? "[FALLBACK] Ollama is unavailable. Context is keyword-matched only — semantic search disabled.\n\n"
+      : "";
     return {
       content: [{
         type: "text" as const,
-        text: formatToolResponse(summary, `${formatContext(result)}\n\n${footer}`),
+        text: formatToolResponse(summary, `${fallbackPrefix}${formatContext(result)}\n\n${footer}`),
       }],
     };
   }
@@ -190,18 +194,20 @@ export function createMcpServer(): McpServer {
       async ({ query, limit, path }) => {
         const resolvedPath = resolve(path ?? ".");
         validateIndexPath(resolvedPath);
-        const { chunks, fallback } = await runSearch(query, { limit, path: resolvedPath });
-        const { tokenCounts } = await readFileHashes(resolvedPath);
-        const savings = await computeTokenSavings(chunks, {
-          rootDir: resolvedPath,
-          query,
-          tokenCounts,
+        return withIndexSnapshot(resolvedPath, async (indexDirectory) => {
+          const { chunks, fallback } = await runSearch(query, { limit, path: resolvedPath, indexDirectory });
+          const { tokenCounts } = await readFileHashes(resolvedPath, indexDirectory);
+          const savings = await computeTokenSavings(chunks, {
+            rootDir: resolvedPath,
+            query,
+            tokenCounts,
+          });
+          accumulateStats({
+            tokensSent: savings.tokensSent,
+            estimatedWithoutBraincache: savings.estimatedWithoutBraincache,
+          }).catch((err) => log.warn({ err }, "stats accumulation failed"));
+          return buildSearchResponse(chunks, query, resolvedPath, savings, { fallback });
         });
-        accumulateStats({
-          tokensSent: savings.tokensSent,
-          estimatedWithoutBraincache: savings.estimatedWithoutBraincache,
-        }).catch((err) => log.warn({ err }, "stats accumulation failed"));
-        return buildSearchResponse(chunks, query, resolvedPath, savings, { fallback });
       },
       { autoIndex: true, operationName: "Search", allowOllamaDown: true },
     ),
@@ -221,7 +227,7 @@ export function createMcpServer(): McpServer {
           .min(100)
           .max(100000)
           .optional()
-          .describe("Token budget for assembled context (default 4096)"),
+          .describe("Approximate token budget for assembled context (default 4096)"),
         path: z
           .string()
           .optional()
@@ -239,7 +245,7 @@ export function createMcpServer(): McpServer {
         }).catch((err) => log.warn({ err }, "stats accumulation failed"));
         return buildContextResponse(result, query);
       },
-      { autoIndex: true, operationName: "Context build" },
+      { autoIndex: true, operationName: "Context build", allowOllamaDown: true },
     ),
   );
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import ignore from 'ignore';
 import { resolve } from 'node:path';
+import { IndexLockedError } from '../../src/services/indexLock.js';
 
 // Mock all dependencies before importing the module
 vi.mock('node:fs', () => ({
@@ -15,18 +16,7 @@ vi.mock('../../src/workflows/index.js', () => ({
   runIndex: vi.fn(),
 }));
 
-vi.mock('../../src/services/crawler.js', () => ({
-  SOURCE_EXTENSIONS: new Set([
-    '.ts', '.tsx', '.mts', '.cts',
-    '.js', '.jsx', '.mjs', '.cjs',
-    '.py', '.pyi',
-    '.go',
-    '.rs',
-    '.md',
-    '.txt',
-    '.rst',
-  ]),
-}));
+
 
 vi.mock('../../src/services/logger.js', () => ({
   childLogger: vi.fn().mockReturnValue({
@@ -37,12 +27,17 @@ vi.mock('../../src/services/logger.js', () => ({
   }),
 }));
 
-import { watch } from 'node:fs';
+import { watch, type PathLike, type WatchOptionsWithStringEncoding, type WatchListener, type FSWatcher } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { runIndex } from '../../src/workflows/index.js';
 import { shouldProcess, buildSummary } from '../../src/workflows/watch.js';
 
-const mockWatch = vi.mocked(watch);
+const watchWithOptions: (
+  path: PathLike,
+  options: WatchOptionsWithStringEncoding,
+  listener: WatchListener<string>,
+) => FSWatcher = watch;
+const mockWatch = vi.mocked(watchWithOptions);
 const mockReadFile = vi.mocked(readFile);
 const mockRunIndex = vi.mocked(runIndex);
 
@@ -132,7 +127,7 @@ describe('buildSummary', () => {
  * Returns the watch callback and cleanup functions.
  */
 async function setupWatch(rootDir: string = '/tmp/test-watch'): Promise<{
-  watchCallback: (eventType: string, filename: string) => void;
+  watchCallback: WatchListener<string>;
   mockWatcher: { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
 }> {
   const mockWatcher = {
@@ -151,15 +146,14 @@ async function setupWatch(rootDir: string = '/tmp/test-watch'): Promise<{
   const { runWatch } = await import('../../src/workflows/watch.js');
   runWatch(rootDir);
 
-  // Allow microtasks to settle so watch() is called
-  await Promise.resolve();
+  await vi.waitFor(() => expect(mockWatch).toHaveBeenCalled());
 
   // Restore stderr spy so tests can make assertions on it
   stderrSpy.mockRestore();
   exitSpy.mockRestore();
 
   const lastCall = mockWatch.mock.calls[mockWatch.mock.calls.length - 1];
-  const watchCallback = lastCall[2] as (eventType: string, filename: string) => void;
+  const watchCallback = lastCall[2];
 
   return { watchCallback, mockWatcher };
 }
@@ -194,6 +188,36 @@ describe('debounce coalescing', () => {
     expect(mockRunIndex).toHaveBeenCalledWith(resolve('/tmp/coalesce-1'));
   });
 
+  it('reloads ignore files and reindexes when the policy changes', async () => {
+    const { watchCallback } = await setupWatch('/tmp/policy-change');
+    mockReadFile.mockResolvedValue('src/generated.ts\n');
+    watchCallback('change', '.braincacheignore');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    mockRunIndex.mockClear();
+    watchCallback('change', 'src/generated.ts');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(mockRunIndex).not.toHaveBeenCalled();
+    watchCallback('change', 'src/keep.ts');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues one follow-up pass for edits during a slow index', async () => {
+    let finish!: () => void;
+    mockRunIndex.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const { watchCallback } = await setupWatch('/tmp/slow-index');
+    watchCallback('change', 'src/one.ts');
+    await vi.advanceTimersByTimeAsync(500);
+    watchCallback('change', 'src/two.ts');
+    watchCallback('change', 'src/three.ts');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.advanceTimersByTimeAsync(501);
+    expect(mockRunIndex).toHaveBeenCalledTimes(2);
+  });
+
   it('calls runIndex once after a single event + 500ms', async () => {
     const { watchCallback } = await setupWatch('/tmp/coalesce-2');
 
@@ -222,12 +246,12 @@ describe('debounce coalescing', () => {
   });
 });
 
-describe('lock contention skip', () => {
+describe('lock contention retry', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mockRunIndex.mockRejectedValue(
-      new Error('Another index operation is in progress. Try again later.')
+      new IndexLockedError()
     );
   });
 
@@ -238,7 +262,7 @@ describe('lock contention skip', () => {
     process.removeAllListeners('SIGTERM');
   });
 
-  it('writes skip message and does not crash when runIndex throws lock error', async () => {
+  it('writes retry message and does not crash when runIndex throws lock error', async () => {
     const { watchCallback } = await setupWatch('/tmp/lock-test');
 
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
@@ -249,9 +273,17 @@ describe('lock contention skip', () => {
     const writtenStrings = stderrSpy.mock.calls
       .map(c => (typeof c[0] === 'string' ? c[0] : ''))
       .join('');
-    expect(writtenStrings).toContain('Index in progress, skipping');
+    expect(writtenStrings).toContain('Index in progress, retrying');
 
     stderrSpy.mockRestore();
+  });
+
+  it('retries a busy external indexer without requiring another file edit', async () => {
+    mockRunIndex.mockRejectedValueOnce(new IndexLockedError()).mockResolvedValue(undefined);
+    const { watchCallback } = await setupWatch('/tmp/external-lock');
+    watchCallback('change', 'src/service.ts');
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(mockRunIndex).toHaveBeenCalledTimes(2);
   });
 
   it('does not rethrow the lock contention error', async () => {
@@ -344,6 +376,33 @@ describe('cleanup handler', () => {
     process.removeAllListeners('SIGTERM');
   });
 
+  it('does not queue another pass after shutdown during an active index', async () => {
+    let finish!: () => void;
+    mockRunIndex.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const { watchCallback } = await setupWatch('/tmp/stop-active');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+    watchCallback('change', 'src/one.ts');
+    await vi.advanceTimersByTimeAsync(500);
+    watchCallback('change', 'src/two.ts');
+    process.emit('SIGINT');
+    finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    exitSpy.mockRestore();
+  });
+
+  it('cancels a pending lock retry on shutdown', async () => {
+    mockRunIndex.mockRejectedValueOnce(new IndexLockedError());
+    const { watchCallback } = await setupWatch('/tmp/stop-retry');
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+    watchCallback('change', 'src/one.ts');
+    await vi.advanceTimersByTimeAsync(500);
+    process.emit('SIGINT');
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockRunIndex).toHaveBeenCalledTimes(1);
+    exitSpy.mockRestore();
+  });
+
   it('calls watcher.close() on SIGINT', async () => {
     const mockWatcher = {
       on: vi.fn().mockReturnThis(),
@@ -357,7 +416,7 @@ describe('cleanup handler', () => {
 
     const { runWatch } = await import('../../src/workflows/watch.js');
     runWatch('/tmp/cleanup-test');
-    await Promise.resolve();
+    await vi.waitFor(() => expect(mockWatch).toHaveBeenCalled());
 
     process.emit('SIGINT');
 
@@ -378,10 +437,10 @@ describe('cleanup handler', () => {
 
     const { runWatch } = await import('../../src/workflows/watch.js');
     runWatch('/tmp/cleanup-timer');
-    await Promise.resolve();
+    await vi.waitFor(() => expect(mockWatch).toHaveBeenCalled());
 
     const lastCall = mockWatch.mock.calls[mockWatch.mock.calls.length - 1];
-    const watchCallback = lastCall[2] as (eventType: string, filename: string) => void;
+    const watchCallback = lastCall[2];
 
     // Schedule a debounce (but SIGINT fires before 500ms)
     watchCallback('change', 'src/index.ts');
@@ -408,7 +467,7 @@ describe('cleanup handler', () => {
 
     const { runWatch } = await import('../../src/workflows/watch.js');
     runWatch('/tmp/cleanup-sigterm');
-    await Promise.resolve();
+    await vi.waitFor(() => expect(mockWatch).toHaveBeenCalled());
 
     process.emit('SIGTERM');
 

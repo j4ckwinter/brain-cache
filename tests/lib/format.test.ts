@@ -59,7 +59,7 @@ describe('formatTokenSavings (index embedding)', () => {
       indexEmbeddingMode: true,
     });
     expect(result).toContain('Estimated without:');
-    expect(result).toContain('Reduction: 75%');
+    expect(result).toContain('Estimated reduction: 75%');
     expect(result).not.toContain('grep-style');
   });
 });
@@ -73,10 +73,10 @@ describe('formatTokenSavings (search_codebase)', () => {
       filesInContext: 5,
       savingsDisplayMode: 'full',
     });
-    expect(result).toContain('Tokens sent to Claude: 1,240');
+    expect(result).toContain('Estimated context tokens: 1,240');
     expect(result).toContain('Vs grep-style baseline');
     expect(result).toContain('~18,600');
-    expect(result).toContain('Reduction vs baseline: 93%');
+    expect(result).toContain('Estimated reduction vs baseline: 93%');
     expect(result).toContain('semantic discovery');
   });
 
@@ -88,7 +88,7 @@ describe('formatTokenSavings (search_codebase)', () => {
       filesInContext: 0,
       savingsDisplayMode: 'full',
     });
-    expect(result).toContain('Tokens sent to Claude: 0');
+    expect(result).toContain('Estimated context tokens: 0');
     expect(result).toContain('~300');
   });
 
@@ -127,7 +127,7 @@ describe('formatTokenSavings (build_context)', () => {
       filteringPct: 92,
       savingsDisplayMode: 'full',
     });
-    expect(result).toContain('Tokens sent to Claude: 3,757');
+    expect(result).toContain('Estimated context tokens: 3,757');
     expect(result).toContain('~48,000');
     expect(result).toContain('92% filtered by budget');
     expect(result).toContain('Vs grep-style baseline');

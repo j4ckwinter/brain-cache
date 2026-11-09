@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import ollama from 'ollama';
+import { getOllamaClient } from '../services/ollamaClient.js';
 import {
   detectCapabilities,
 } from '../services/capability.js';
@@ -37,7 +37,7 @@ export async function runDoctor(targetPath?: string): Promise<void> {
   // Step 4: Check model presence in Ollama
   let modelPresent = false;
   if (running) {
-    const list = await ollama.list();
+    const list = await getOllamaClient().list();
     modelPresent = list.models.some((m: { name: string }) =>
       modelMatches(m.name, saved.embeddingModel)
     );

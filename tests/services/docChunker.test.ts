@@ -80,3 +80,31 @@ describe('chunkDocFile dispatch', () => {
     expect(txtChunks.length).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe('source locations', () => {
+  it.each([
+    ['.md', '## Hello\n\nWorld\n\n## Bye\n\nLater\n'],
+    ['.md', '---\ntitle: Doc\n---\n## Hello\n\nWorld\n'],
+    ['.md', '---\r\ntitle: Doc\r\n---\r\n\r\n## Hello\r\n\r\nWorld\r\n'],
+    ['.md', '\n\n## Hello\n\n\nWorld\n\n## Hello\nLater\n'],
+    ['.md', '```md\n## Example\n\n```\n\n## Example\n\nActual body\n'],
+    ['.md', '## Hello\n\n[label]: https://example.com\n\nBody with [label]\n'],
+    ['.txt', '\n\nFirst\n\n\nSecond\n\nThird\n'],
+    ['.rst', '\r\nFirst\r\n\r\nSecond\r\n'],
+  ])('maps %s content back to its exact source lines (%j)', (ext, source) => {
+    const chunks = chunkDocFile(`doc${ext}`, source, ext);
+    expect(chunks.length).toBeGreaterThan(0);
+    for (const chunk of chunks) {
+      expect(source.split(/\r?\n/).slice(chunk.startLine - 1, chunk.endLine).join('\n').trim())
+        .toBe(chunk.content.replace(/\r\n/g, '\n'));
+    }
+  });
+
+  it('preserves source locations across large section paragraph splits', () => {
+    vi.spyOn(tokenCounter, 'countChunkTokens').mockImplementation(text => text.includes('FIRST') && text.includes('SECOND') ? 2000 : 800);
+    const source = '## Big\n\nFIRST\nline two\n\n\nSECOND\nline four\n';
+    const chunks = chunkDocFile('doc.md', source, '.md');
+    expect(chunks).toHaveLength(2);
+    expect(chunks.map(chunk => [chunk.startLine, chunk.endLine])).toEqual([[3, 4], [7, 8]]);
+  });
+});

@@ -26,7 +26,7 @@ export function renderOutput(stats: SessionStats | null): string {
   const saved = stats.estimatedWithoutBraincache - stats.tokensSent;
   const pct = Math.min(98, Math.round((1 - stats.tokensSent / stats.estimatedWithoutBraincache) * 100));
   if (pct <= 0 || saved <= 0) return IDLE_OUTPUT;
-  let line = `🧠 brain-cache → saved ${formatTokenCount(saved)} tokens (${pct}% less)`;
+  let line = `🧠 brain-cache → est. saved ${formatTokenCount(saved)} tokens (${pct}% less)`;
   if (stats.lastEstimatedWithoutBraincache > 0 && stats.lastTokensSent >= 0) {
     const lastSaved = stats.lastEstimatedWithoutBraincache - stats.lastTokensSent;
     if (lastSaved > 0) line += ` · last: ${formatTokenCount(lastSaved)}`;

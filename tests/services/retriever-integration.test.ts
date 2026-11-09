@@ -1,11 +1,12 @@
+import { Schema } from 'apache-arrow';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChunkRow } from '../../src/services/lancedb.js';
-import { insertChunks, openDatabase, openOrCreateChunkTable } from '../../src/services/lancedb.js';
-import { keywordSearchChunks } from '../../src/services/retriever.js';
+import { chunkSchema, insertChunks, openDatabase, openOrCreateChunkTable } from '../../src/services/lancedb.js';
+import { keywordSearchChunks, searchChunks } from '../../src/services/retriever.js';
 
 const mockReadProfile = vi.fn();
 
@@ -102,6 +103,86 @@ describe('keyword fallback integration - real LanceDB', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([['source_kind'], ['source_kind', 'file_type']])('reads legacy indexes missing %j without migration', async (...missing) => {
+    const db = await openDatabase(testDir);
+    const schema = new Schema(chunkSchema(768).fields.filter(field => !missing.includes(field.name)));
+    const row = { ...makeChunkRow(0), name: 'findNeedle', content: 'needle details', vector: [1, ...new Array(767).fill(0)] };
+    const legacyRow = Object.fromEntries(Object.entries(row).filter(([key]) => !missing.includes(key)));
+    const table = await db.createTable('chunks', [legacyRow], { schema });
+    for (const query of ['findNeedle', 'needle details']) {
+      for (const results of [
+        await searchChunks(table, row.vector, { limit: 5, distanceThreshold: 0.4 }, query),
+        await keywordSearchChunks(table, query, 5),
+      ]) {
+        expect(results).toHaveLength(1);
+        expect(results[0]).toMatchObject({ id: row.id, sourceKind: 'file', fileType: 'source' });
+      }
+    }
+    expect((await table.schema()).fields.map(field => field.name)).not.toContain('source_kind');
+  });
+
+  it.each([0.1, 1])('recovers exact symbols outside the vector shortlist at distance %s', async (distance) => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    const vector = (x: number, y: number) => [x, y, ...new Array(766).fill(0)];
+    const exact = { ...makeChunkRow(99), name: 'findNeedle', vector: vector(1 - distance, Math.sqrt(1 - (1 - distance) ** 2)) };
+    await insertChunks(table, [...Array.from({ length: 5 }, (_, i) => ({ ...makeChunkRow(i), vector: vector(1, 0) })), exact]);
+    const results = await searchChunks(table, vector(1, 0), { limit: 5, distanceThreshold: 0.4 }, 'FINDNEEDLE');
+    expect(results[0]?.id).toBe(exact.id);
+    expect(results[0]?.similarity).toBe(0);
+    expect(results).toHaveLength(5);
+  });
+
+  it('prioritizes exact names beyond 500 body matches and substring wrappers', async () => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    await insertChunks(table, [
+      { ...makeChunkRow(0), name: 'findNeedleWrapper' },
+      ...Array.from({ length: 501 }, (_, i) => ({ ...makeChunkRow(i + 1), content: 'findNeedle()' })),
+      { ...makeChunkRow(999), name: 'findNeedle' },
+    ]);
+    const results = await keywordSearchChunks(table, 'FINDNEEDLE', 50);
+    expect(results[0]?.id).toBe('chunk-999');
+    expect(results).toHaveLength(50);
+    expect(new Set(results.map(chunk => chunk.id)).size).toBe(results.length);
+  });
+
+  it('retains measured similarity when an exact candidate is also a vector hit beyond the threshold', async () => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    const vector = [0.6, 0.8, ...new Array(766).fill(0)];
+    await insertChunks(table, [{ ...makeChunkRow(0), name: 'findNeedle', vector }]);
+    const results = await searchChunks(table, [1, ...new Array(767).fill(0)], { limit: 5, distanceThreshold: 0.2 }, 'findNeedle');
+    expect(results).toHaveLength(1);
+    expect(results[0].similarity).toBeCloseTo(0.6);
+  });
+
+  it.each(['f', 'db', '`db`', '`findNeedle`'])('retrieves standalone identifier %s even with zero vectors', async (query) => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    const name = query.replaceAll('`', '');
+    await insertChunks(table, [{ ...makeChunkRow(0), name }]);
+    const options = { limit: 1, distanceThreshold: 0.2 };
+    for (const results of [
+      await searchChunks(table, [1, ...new Array(767).fill(0)], options, query),
+      await keywordSearchChunks(table, query, 1),
+    ]) {
+      expect(results).toHaveLength(1);
+      expect(results[0].name).toBe(name);
+      expect(results[0].similarity).toBe(0);
+    }
+  });
+
+  it('uses stable IDs to break duplicate-name score ties', async () => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    await insertChunks(table, [
+      { ...makeChunkRow(2), name: 'findNeedle', content: 'findNeedle' },
+      { ...makeChunkRow(1), name: 'findNeedle', content: 'findNeedle' },
+    ]);
+    expect((await keywordSearchChunks(table, 'findNeedle', 1)).map(chunk => chunk.id)).toEqual(['chunk-1']);
+  });
+
   it('keywordSearchChunks returns matching chunks from real table', async () => {
     const db = await openDatabase(testDir);
     const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
@@ -114,6 +195,35 @@ describe('keyword fallback integration - real LanceDB', () => {
 
     expect(results.length).toBeGreaterThanOrEqual(1);
     expect(results[0]?.name).toBe('uniqueneedle');
+  });
+
+  it('matches mixed-case symbols, paths, and body-only text', async () => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    const rows = [
+      { ...makeChunkRow(0), name: 'CamelTarget', content: 'unrelated' },
+      { ...makeChunkRow(1), file_path: 'src/CamelTarget/index.ts', content: 'unrelated' },
+      { ...makeChunkRow(2), content: 'CAMELTARGET appears only in this body' },
+    ];
+    await insertChunks(table, rows);
+    const results = await keywordSearchChunks(table, 'CamelTarget', 10);
+    expect(results.map(chunk => chunk.id)).toEqual(['chunk-0', 'chunk-1', 'chunk-2']);
+  });
+
+  it.each([
+    ["owner's", 'owners'],
+    ['value%part', 'valueXpart'],
+    ['value_part', 'valueXpart'],
+    [String.raw`value\part`, 'valuepart'],
+  ])('treats %s as literal text in fallback predicates', async (needle, decoy) => {
+    const db = await openDatabase(testDir);
+    const table = await openOrCreateChunkTable(db, testDir, 'nomic-embed-text', 768);
+    await insertChunks(table, [
+      { ...makeChunkRow(0), content: needle },
+      { ...makeChunkRow(1), content: decoy },
+    ]);
+    const results = await keywordSearchChunks(table, needle, 10);
+    expect(results.map(chunk => chunk.id)).toEqual(['chunk-0']);
   });
 
   it('keywordSearchChunks returns empty for non-matching query', async () => {

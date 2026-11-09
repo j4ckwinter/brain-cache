@@ -39,6 +39,7 @@ function mockContextResult(): ContextResult {
         id: '1',
         filePath: 'test.ts',
         chunkType: 'function',
+        sourceKind: 'file',
         scope: null,
         name: 'hello',
         content: 'function hello() {}',
@@ -143,6 +144,13 @@ describe('runAskCodebase', () => {
     expect(result.answer).toBe('The hello function returns "world".');
   });
 
+  it('reports actual whole-request usage separately from estimated context tokens', async () => {
+    const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
+    await runAskCodebase('how does hello work');
+    expect(stderrOutput.join('')).toContain('Estimated context tokens: 50');
+    expect(stderrOutput.join('')).toContain('API usage (whole request): 60 input, 20 output tokens');
+  });
+
   it('uses BRAIN_CACHE_CLAUDE_MODEL env var when set', async () => {
     process.env.BRAIN_CACHE_CLAUDE_MODEL = 'claude-opus-4-5';
     const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
@@ -174,7 +182,7 @@ describe('runAskCodebase', () => {
     const { runAskCodebase } = await import('../../src/workflows/askCodebase.js');
     await runAskCodebase('how does hello work');
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ model: expect.stringContaining('claude') })
+      expect.objectContaining({ model: 'claude-sonnet-4-6' })
     );
   });
 

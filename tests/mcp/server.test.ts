@@ -107,12 +107,13 @@ const mockProfile = {
 };
 
 const mockIndexState = {
-  version: 1 as const,
+  version: 2 as const,
   embeddingModel: 'nomic-embed-text',
   dimension: 768,
   indexedAt: '2026-03-31T00:00:00.000Z',
   fileCount: 5,
   chunkCount: 42,
+  totalTokens: 0,
 };
 
 const mockCapabilities = {
@@ -130,6 +131,7 @@ const fakeChunk = (id: string) => ({
   id,
   filePath: `src/test_${id}.ts`,
   chunkType: 'function',
+  sourceKind: 'file' as const,
   scope: null,
   name: `fn_${id}`,
   content: `function fn_${id}() {}`,
@@ -286,7 +288,7 @@ describe('MCP tool handlers', () => {
       const { handler } = registeredTools.get('search_codebase')!;
       await handler({ query: 'test query', limit: 20, path: '/my/project' });
 
-      expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: resolve('/my/project') });
+      expect(mockRunSearch).toHaveBeenCalledWith('test query', { limit: 20, path: resolve('/my/project'), indexDirectory: resolve('/my/project/.brain-cache') });
     });
 
     it('returns isError when path points to a sensitive system directory', async () => {
@@ -345,15 +347,32 @@ describe('MCP tool handlers', () => {
       expect(result.content[0].text).toContain("brain-cache init");
     });
 
-    it('returns isError when Ollama is not running', async () => {
+    it('returns keyword context and a warning when Ollama is unavailable', async () => {
       mockReadProfile.mockResolvedValue({ ...mockProfile });
       mockIsOllamaRunning.mockResolvedValue(false);
-
+      mockRunBuildContext.mockResolvedValue({
+        ...fakeContextResult,
+        metadata: { ...fakeContextResult.metadata, localTasksPerformed: ['keyword_search', 'dedup', 'token_budget'] },
+      });
       const { handler } = registeredTools.get('build_context')!;
       const result = await handler({ query: 'how does auth work' });
+      expect(result.isError).toBeUndefined();
+      expect(mockRunBuildContext).toHaveBeenCalledOnce();
+      expect(result.content[0].text).toContain('[FALLBACK]');
+      expect(result.content[0].text).toContain('assembled context here');
+    });
 
+    it('returns an error envelope when offline auto-indexing fails', async () => {
+      mockReadProfile.mockResolvedValue({ ...mockProfile });
+      mockIsOllamaRunning.mockResolvedValue(false);
+      mockRunBuildContext.mockRejectedValue(new NoIndexError('/some/project'));
+      mockRunIndex.mockRejectedValue(new Error('Ollama is not running'));
+      const { handler } = registeredTools.get('build_context')!;
+      const result = await handler({ query: 'auth', path: '/some/project' });
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Ollama is not running');
+      expect(mockRunBuildContext).toHaveBeenCalledOnce();
+      expect(mockRunIndex).toHaveBeenCalledOnce();
     });
 
     it('returns formatted context text with metadata footer on success', async () => {
@@ -371,7 +390,8 @@ describe('MCP tool handlers', () => {
       expect(text).toContain('Context assembled for');
       expect(text).toContain('how does auth work');
       expect(text).toContain('assembled context here');
-      expect(text).toContain('Tokens sent to Claude:');
+      expect(text).toContain('Estimated context tokens:');
+      expect(text).not.toContain('[FALLBACK]');
     });
 
     it('auto-indexes and retries build_context when no index found', async () => {

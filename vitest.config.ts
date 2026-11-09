@@ -10,6 +10,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
+      'tests/distribution/**',
     ],
   },
 });

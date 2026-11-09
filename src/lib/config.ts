@@ -12,6 +12,7 @@ export const GLOBAL_CONFIG_DIR = join(homedir(), ".brain-cache");
 export const PROFILE_PATH = join(GLOBAL_CONFIG_DIR, "profile.json");
 export const CONFIG_PATH = join(GLOBAL_CONFIG_DIR, "config.json");
 export const PROJECT_DATA_DIR = ".brain-cache";
+export const CHUNK_FORMAT_VERSION = 4;
 export const SESSION_STATS_FILENAME = "session-stats.json";
 
 // ── Embedding ──────────────────────────────────────────────────────────────
@@ -65,5 +66,5 @@ export const HIGH_RELEVANCE_SIMILARITY_THRESHOLD = 0.85;
 export const COMPRESSION_HARD_LIMIT = 800;
 
 // ── Connection Pool ───────────────────────────────────────────────────────
-/** TTL for cached LanceDB connections (30 minutes). Evicted lazily on next getConnection call. */
+/** TTL for idle LanceDB connections (30 minutes). Active leases are preserved during eviction. */
 export const CONNECTION_POOL_TTL_MS = 30 * 60 * 1000;

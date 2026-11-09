@@ -1,18 +1,12 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import ollama from 'ollama';
+import { getOllamaClient, getOllamaHost } from './ollamaClient.js';
+export { getOllamaHost } from './ollamaClient.js';
 import { childLogger } from './logger.js';
 
 const execFileAsync = promisify(execFile);
 const log = childLogger('ollama');
-
-/**
- * Returns the configured Ollama host URL.
- * Defaults to 'http://localhost:11434' when OLLAMA_HOST is not set.
- */
-export function getOllamaHost(): string {
-  return process.env.OLLAMA_HOST ?? 'http://localhost:11434';
-}
+const HEALTH_CHECK_TIMEOUT_MS = 2000;
 
 /**
  * Checks whether the Ollama binary is installed on this machine.
@@ -31,19 +25,25 @@ export async function isOllamaInstalled(): Promise<boolean> {
 /**
  * Checks whether the Ollama server is currently running.
  * Uses OLLAMA_HOST env var when set, falls back to http://localhost:11434.
+ * Returns false if the server does not respond within two seconds.
  */
 export async function isOllamaRunning(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT_MS);
   try {
-    const res = await fetch(getOllamaHost());
+    const res = await fetch(getOllamaHost(), { signal: controller.signal });
     return res.ok;
   } catch {
     return false;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
 }
 
 /**
  * Spawns 'ollama serve' as a detached background process, then polls
- * for readiness every 500ms for up to 5 seconds (10 attempts).
+ * for readiness up to 10 times, with a 500ms delay before each bounded health check.
  * Returns true if Ollama becomes ready, false if timeout is reached.
  */
 export async function startOllama(): Promise<boolean> {
@@ -146,6 +146,7 @@ export async function pullModelIfMissing(
   model: string,
   onProgress?: (status: string) => void
 ): Promise<void> {
+  const ollama = getOllamaClient();
   const list = await ollama.list();
   const alreadyExists = list.models.some((m) => modelMatches(m.name, model));
 

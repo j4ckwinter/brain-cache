@@ -27,12 +27,13 @@ const mockProfile = {
 };
 
 const mockIndexState = {
-  version: 1 as const,
+  version: 2 as const,
   embeddingModel: 'mxbai-embed-large',
   dimension: 1024,
   indexedAt: '2026-03-31T12:00:00.000Z',
   fileCount: 42,
   chunkCount: 350,
+  totalTokens: 0,
 };
 
 let runStatus: (targetPath?: string) => Promise<void>;
