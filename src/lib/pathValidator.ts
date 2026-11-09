@@ -58,14 +58,24 @@ export function validateIndexPath(rawPath: string): void {
   validateResolvedPath(resolved);
   // Junctions and symlinks (including Windows' built-in `C:\Documents and Settings`) reach protected
   // directories under other names. UNC paths are skipped because resolving them can block on the network.
-  if (resolved.startsWith('\\\\')) return;
-  let real: string;
+  const real = realPath(resolved);
+  if (real !== null && comparable(real) !== comparable(resolved)) validateResolvedPath(real);
+}
+
+function realPath(path: string): string | null {
+  if (path.startsWith('\\\\')) return null;
   try {
-    real = realpathSync.native(resolved);
+    return realpathSync.native(path);
   } catch {
-    return;
+    return null;
   }
-  if (comparable(real) !== comparable(resolved)) validateResolvedPath(real);
+}
+
+// Protected locations can themselves be links, such as macOS `/etc` -> `/private/etc`, so match both forms.
+function withCanonical(path: string): string[] {
+  const resolved = resolve(path);
+  const real = realPath(resolved);
+  return real !== null && comparable(real) !== comparable(resolved) ? [resolved, real] : [resolved];
 }
 
 function validateResolvedPath(resolved: string): void {
@@ -77,18 +87,17 @@ function validateResolvedPath(resolved: string): void {
     );
   }
   // Reject home directory root — prevents accidental wipe of entire home dir
-  const home = homedir();
-  if (relativeTo(home, resolved) === '') {
+  if (withCanonical(homedir()).some(home => relativeTo(home, resolved) === '')) {
     throw new Error(
       `Path '${resolved}' is the home directory root. Access denied.`
     );
   }
   // macOS stores user temp dirs under /var/folders — not the same threat model as /var/log, /var/db, etc.
-  if (process.platform === 'darwin' && isSameOrChild(resolved, '/var/folders')) {
+  if (process.platform === 'darwin' && withCanonical('/var/folders').some(temp => isSameOrChild(resolved, temp))) {
     return;
   }
 
-  for (const sensitive of SENSITIVE_DIRS) {
+  for (const sensitive of SENSITIVE_DIRS.flatMap(withCanonical)) {
     if (isSameOrChild(resolved, sensitive)) {
       throw new Error(
         `Path '${resolved}' points to a sensitive system directory. Access denied.`

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { homedir } from 'node:os';
 import { join, parse } from 'node:path';
-import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { validateIndexPath } from '../../src/lib/pathValidator.js';
 
@@ -188,6 +188,23 @@ describe('validateIndexPath', () => {
 
     it('rejects a sensitive home directory in a different letter case', () => {
       expect(() => validateIndexPath(join(homedir(), '.SSH', 'keys'))).toThrow('sensitive system directory');
+    });
+
+    it.each(['/private/etc', '/private/etc/ssh', '/private/var', '/private/var/log'])(
+      'rejects the canonical system path %s',
+      path => {
+        expect(() => validateIndexPath(path)).toThrow('sensitive system directory');
+      },
+    );
+
+    it('allows a project in the canonical temp directory', () => {
+      const dir = realpathSync(mkdtempSync(join(tmpdir(), 'project-')));
+      try {
+        expect(dir.startsWith('/private/var/folders/')).toBe(true);
+        expect(() => validateIndexPath(dir)).not.toThrow();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 
