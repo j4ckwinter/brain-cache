@@ -115,6 +115,42 @@ describe('validateIndexPath', () => {
     it('rejects the Windows system directory', () => {
       expect(() => validateIndexPath(process.env.SystemRoot!)).toThrow('sensitive system directory');
     });
+
+    it('rejects the home directory in a different letter case', () => {
+      expect(() => validateIndexPath(homedir().toLowerCase())).toThrow('home directory root');
+      expect(() => validateIndexPath(homedir().toUpperCase())).toThrow('home directory root');
+    });
+
+    it.each([
+      ['\\\\?\\', `${process.env.SystemRoot}\\System32`],
+      ['\\\\.\\', process.env.SystemRoot!],
+      ['\\\\?\\', homedir()],
+      ['\\\\?\\', join(homedir(), '.ssh')],
+      ['//?/', process.env.SystemRoot!],
+    ])('rejects namespace prefix %s on %s', (prefix, target) => {
+      expect(() => validateIndexPath(prefix + target)).toThrow('namespace prefix');
+    });
+
+    it.each(['\\\\localhost\\C$\\Windows', '\\\\127.0.0.1\\c$', '\\\\server\\ADMIN$\\System32'])(
+      'rejects administrative share %s',
+      path => {
+        expect(() => validateIndexPath(path)).toThrow('administrative share');
+      },
+    );
+
+    it('allows a project on an ordinary UNC share', () => {
+      expect(() => validateIndexPath('\\\\server\\projects\\app')).not.toThrow();
+    });
+  });
+
+  describe.runIf(process.platform === 'darwin')('handles case-insensitive macOS paths', () => {
+    it('rejects the home directory in a different letter case', () => {
+      expect(() => validateIndexPath(homedir().toUpperCase())).toThrow('home directory root');
+    });
+
+    it('rejects a sensitive home directory in a different letter case', () => {
+      expect(() => validateIndexPath(join(homedir(), '.SSH', 'keys'))).toThrow('sensitive system directory');
+    });
   });
 
   describe.runIf(process.platform !== 'win32')('handles POSIX path traversal attacks', () => {

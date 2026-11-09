@@ -16,9 +16,31 @@ export const SENSITIVE_DIRS: string[] = [
   join(homedir(), '.config'),
 ];
 
+// Default Windows and macOS filesystems ignore case, so `c:\users\me` and `/Users/ME` name the home directory.
+const caseInsensitive = process.platform === 'win32' || process.platform === 'darwin';
+
+function comparable(path: string): string {
+  return caseInsensitive ? path.toLowerCase() : path;
+}
+
+function relativeTo(parent: string, candidate: string): string {
+  return relative(comparable(resolve(parent)), comparable(candidate));
+}
+
 function isSameOrChild(candidate: string, parent: string): boolean {
-  const rel = relative(resolve(parent), candidate);
+  const rel = relativeTo(parent, candidate);
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+function rejectWindowsAliases(resolved: string): void {
+  // `\\?\` and `\\.\` paths reach drives and devices but do not compare equal to their drive-letter forms.
+  if (/^\\\\[?.]\\/.test(resolved)) {
+    throw new Error(`Path '${resolved}' uses a Windows namespace prefix. Access denied.`);
+  }
+  // Shares such as `\\localhost\C$` and `\\host\ADMIN$` expose whole drives and the Windows directory.
+  if (/^\\\\[^\\]+\\[^\\]+\$(\\|$)/.test(resolved)) {
+    throw new Error(`Path '${resolved}' is an administrative share. Access denied.`);
+  }
 }
 
 /**
@@ -31,6 +53,7 @@ function isSameOrChild(candidate: string, parent: string): boolean {
  */
 export function validateIndexPath(rawPath: string): void {
   const resolved = resolve(rawPath);
+  if (process.platform === 'win32') rejectWindowsAliases(resolved);
   // Reject filesystem root — never a valid project path
   if (resolved === parse(resolved).root) {
     throw new Error(
@@ -39,7 +62,7 @@ export function validateIndexPath(rawPath: string): void {
   }
   // Reject home directory root — prevents accidental wipe of entire home dir
   const home = homedir();
-  if (resolved === resolve(home)) {
+  if (relativeTo(home, resolved) === '') {
     throw new Error(
       `Path '${resolved}' is the home directory root. Access denied.`
     );
