@@ -163,7 +163,7 @@ describe('validateIndexPath', () => {
   describe.runIf(process.platform === 'win32')('handles Windows aliases of protected directories', () => {
     it.each([
       [join(homedir(), '.SSH', 'keys'), 'sensitive system directory'],
-      [join(process.env.ProgramData!.toLowerCase(), 'app'), 'sensitive system directory'],
+      [join((process.env.ProgramData ?? 'C:\\ProgramData').toLowerCase(), 'app'), 'sensitive system directory'],
       ['C:\\Users\\All Users', 'sensitive system directory'],
     ])('rejects %s', (path, message) => {
       expect(() => validateIndexPath(path)).toThrow(message);
