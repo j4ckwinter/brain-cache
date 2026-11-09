@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.1.1 — 2026-11-09
+
+- Fix indexing in global installs. Since 4.0, brain-cache overrode `apache-arrow` to 21, outside the `<=18.1.0` range LanceDB supports. Global installs apply that override to LanceDB, so `brain-cache index` failed with "Failed to read IPC file". Local installs keep LanceDB on its own compatible Arrow copy.
+- Distribution checks now write and search a LanceDB table from local and global tarball installs, and can be run on Windows.
+
+Reinstall with `npm install -g brain-cache@4.1.1`. Source and the index format are unchanged.
+
 ## 4.1.0 — 2026-11-06
 
 - Publish complete index generations atomically, leaving the previous index available when a refresh fails.
