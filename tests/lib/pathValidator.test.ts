@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { homedir } from 'node:os';
 import { join, parse } from 'node:path';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { validateIndexPath } from '../../src/lib/pathValidator.js';
 
@@ -138,8 +138,46 @@ describe('validateIndexPath', () => {
       },
     );
 
-    it('allows a project on an ordinary UNC share', () => {
-      expect(() => validateIndexPath('\\\\server\\projects\\app')).not.toThrow();
+    it.each(['\\\\server\\projects\\app', '\\\\fileserver\\users$\\jdoe\\app', '\\\\wsl$\\Ubuntu\\home\\me\\app'])(
+      'allows a project on the share %s',
+      path => {
+        expect(() => validateIndexPath(path)).not.toThrow();
+      },
+    );
+
+    it.each([
+      [homedir(), 'home directory root'],
+      [process.env.SystemRoot!, 'sensitive system directory'],
+    ])('rejects a junction that points at %s', (target, message) => {
+      const dir = mkdtempSync(join(tmpdir(), 'junction-'));
+      try {
+        symlinkSync(target, join(dir, 'link'), 'junction');
+        expect(() => validateIndexPath(join(dir, 'link'))).toThrow(message);
+      } finally {
+        rmSync(join(dir, 'link'), { force: true });
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe.runIf(process.platform !== 'win32')('handles POSIX symlinks', () => {
+    it('rejects a symlink that points at /etc', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'symlink-'));
+      try {
+        symlinkSync('/etc', join(dir, 'link'));
+        expect(() => validateIndexPath(join(dir, 'link'))).toThrow('sensitive system directory');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('allows a project in the temp directory', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'project-'));
+      try {
+        expect(() => validateIndexPath(dir)).not.toThrow();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 

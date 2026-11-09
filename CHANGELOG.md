@@ -4,6 +4,7 @@
 
 - Support Windows. CI now runs typecheck, tests, distribution checks, and audits on Windows, macOS, and Linux with Node 22.12 and 24.
 - Path protection now covers Windows. Drive roots, `%SystemRoot%`, and `%ProgramData%` are rejected there, and `.ssh`, `.aws`, `.gnupg`, and `.config` under the home directory are rejected on every platform, including subdirectories. `brain-cache index` now applies the same check as the MCP tools and `clean`.
+- Path checks are case-insensitive on Windows and macOS and follow junctions and symlinks for existing local paths. On Windows, `\\?\` and `\\.\` paths and the `C$`, `ADMIN$`, `IPC$`, and `PRINT$` shares are rejected; other hidden shares such as `\\server\users$` remain allowed.
 - The status line renders on Windows. Re-running `brain-cache init` now replaces any unmodified status-line script from an earlier version; customized scripts are still preserved.
 - Update LanceDB to 0.39, the Anthropic SDK to 0.128, Commander to 15, Marked to 18, and Pino to 10. Move security overrides to patched releases.
 - Replace shell-dependent WASM copying with a portable Node script. Add `npm run verify:dist` and `npm run eval:retrieval` maintainer checks.

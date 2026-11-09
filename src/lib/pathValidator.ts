@@ -1,5 +1,6 @@
 import { resolve, join, parse, relative, isAbsolute, sep } from 'node:path';
 import { homedir } from 'node:os';
+import { realpathSync } from 'node:fs';
 
 /**
  * Blocklist of sensitive system directories that must not be used as index paths.
@@ -38,7 +39,8 @@ function rejectWindowsAliases(resolved: string): void {
     throw new Error(`Path '${resolved}' uses a Windows namespace prefix. Access denied.`);
   }
   // Shares such as `\\localhost\C$` and `\\host\ADMIN$` expose whole drives and the Windows directory.
-  if (/^\\\\[^\\]+\\[^\\]+\$(\\|$)/.test(resolved)) {
+  // Other hidden shares (`\\server\users$`) are ordinary project locations.
+  if (/^\\\\[^\\]+\\([a-z]|admin|ipc|print)\$(\\|$)/i.test(resolved)) {
     throw new Error(`Path '${resolved}' is an administrative share. Access denied.`);
   }
 }
@@ -53,6 +55,20 @@ function rejectWindowsAliases(resolved: string): void {
  */
 export function validateIndexPath(rawPath: string): void {
   const resolved = resolve(rawPath);
+  validateResolvedPath(resolved);
+  // Junctions and symlinks (including Windows' built-in `C:\Documents and Settings`) reach protected
+  // directories under other names. UNC paths are skipped because resolving them can block on the network.
+  if (resolved.startsWith('\\\\')) return;
+  let real: string;
+  try {
+    real = realpathSync.native(resolved);
+  } catch {
+    return;
+  }
+  if (comparable(real) !== comparable(resolved)) validateResolvedPath(real);
+}
+
+function validateResolvedPath(resolved: string): void {
   if (process.platform === 'win32') rejectWindowsAliases(resolved);
   // Reject filesystem root — never a valid project path
   if (resolved === parse(resolved).root) {
