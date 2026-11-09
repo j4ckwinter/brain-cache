@@ -116,5 +116,26 @@ describe('published package', () => {
       '--input-type=module', '-e', probe, join(installed, 'dist', 'wasm'),
     ], { cwd: installed, timeout: 15_000 });
     expect(result.stdout.trim()).toBe('5 grammars passed');
+
+    // Global installs apply the package's own overrides, so this catches an
+    // apache-arrow override outside LanceDB's supported peer range.
+    const lancedbProbe = `
+      import * as lancedb from '@lancedb/lancedb';
+      import { Schema, Field, Utf8, Float32, FixedSizeList } from 'apache-arrow';
+      const db = await lancedb.connect(process.argv[1]);
+      const schema = new Schema([
+        new Field('id', new Utf8(), false),
+        new Field('vector', new FixedSizeList(2, new Field('item', new Float32(), true)), false),
+      ]);
+      const table = await db.createTable('chunks', lancedb.makeArrowTable([], { schema }));
+      await table.add([{ id: 'a', vector: [1, 0] }]);
+      const [hit] = await table.vectorSearch([1, 0]).limit(1).toArray();
+      if ((await table.countRows()) !== 1 || hit?.id !== 'a') throw new Error('LanceDB round trip failed');
+      console.log('lancedb round trip passed');
+    `;
+    const lancedbResult = await exec(process.execPath, [
+      '--input-type=module', '-e', lancedbProbe, join(prefix, 'lancedb probe'),
+    ], { cwd: installed, timeout: 30_000 });
+    expect(lancedbResult.stdout.trim()).toBe('lancedb round trip passed');
   }, 150_000);
 });
